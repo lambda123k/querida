@@ -1,0 +1,10 @@
+{
+  "name": "Querida",
+  "short_name": "Querida",
+  "start_url": "./?pour=romane-98ef57",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#FBF5EF",
+  "theme_color": "#FBF5EF",
+  "icons": [{ "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }]
+}

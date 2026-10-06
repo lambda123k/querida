@@ -1,0 +1,1169 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head><body>
+<title>Querida</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Querida">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#FBF5EF">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="apple-touch-icon" href="icon.png">
+<link id="manifest" rel="manifest" href="manifest.json">
+<style>
+/* Layout : appli iOS — grands titres, listes groupées, fiches qui montent, barre d'onglets. Palette Azulejo. */
+:root{
+  /* Identité Querida — orange sanguine, règle 60/30/10
+     60 % fond « zeste » crème + cartes blanches · 30 % pêche douce et brun encre · 10 % sanguine (actions, chiffres clés, cachet).
+     Signature : le cachet de cire sanguine à l'initiale de Romane, et les titres en serif italique comme une lettre. */
+  --bg:#FBF5EF; --card:#FFFFFF; --label:#3B1F17; --label2:#7A5A4C; --label3:rgba(90,50,35,.38);
+  --sep:rgba(90,50,35,.12); --fill:rgba(204,63,39,.07); --fill2:rgba(204,63,39,.14);
+  --accent:#CC3F27; --on-accent:#FFFFFF; --deep:#9E3320; --rind:#F2873B; --soft:#FBE3D3;
+  --blue:#F2873B; --peach:#FBE3D3; --peach2:#F6C9AE; --danger:#B8341F;
+  --sun:#F2873B; --red:#9E3320; --saff-soft:#FBE3D3;
+  --ease:cubic-bezier(.2,.8,.2,1); --dur:.35s;
+  --bar:rgba(251,245,239,.86);
+  --f:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  --f-letter:ui-serif,"New York",Georgia,"Times New Roman",serif;
+  --f-display:"Instrument Serif",ui-serif,"New York",Georgia,serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#17100D; --card:#241915; --label:#FBEFE8; --label2:#C9AFA3; --label3:rgba(251,239,232,.36);
+  --sep:rgba(255,255,255,.12); --fill:rgba(255,106,77,.10); --fill2:rgba(255,106,77,.17);
+  --accent:#FF6A4D; --on-accent:#1A0B06; --deep:#E0573D; --rind:#F59A55; --soft:#3A211A;
+  --blue:#F59A55; --peach:#3A211A; --peach2:#55302A; --danger:#FF6A4D;
+  --sun:#F59A55; --red:#E0573D; --saff-soft:#3A211A;
+  --bar:rgba(23,16,13,.86); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#17100D; --card:#241915; --label:#FBEFE8; --label2:#C9AFA3; --label3:rgba(251,239,232,.36);
+  --sep:rgba(255,255,255,.12); --fill:rgba(255,106,77,.10); --fill2:rgba(255,106,77,.17);
+  --accent:#FF6A4D; --on-accent:#1A0B06; --deep:#E0573D; --rind:#F59A55; --soft:#3A211A;
+  --blue:#F59A55; --peach:#3A211A; --peach2:#55302A; --danger:#FF6A4D;
+  --sun:#F59A55; --red:#E0573D; --saff-soft:#3A211A;
+  --bar:rgba(23,16,13,.86); color-scheme:dark}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{min-height:100%}
+body{margin:0;background:var(--bg);color:var(--label);font-family:var(--f);font-size:17px;line-height:1.35;-webkit-font-smoothing:antialiased}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0;padding:0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+p{margin:0}
+[hidden]{display:none!important}
+
+.screen{max-width:600px;margin:0 auto;padding-inline:16px;padding-block:8px calc(96px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:22px}
+.eyebrow{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--label2)}
+.ltitle{font-family:var(--f-display);font-style:italic;font-size:42px;font-weight:400;letter-spacing:-.01em;line-height:1.02;margin:0;text-wrap:balance}
+.head{display:flex;flex-direction:column;gap:2px;padding-top:12px}
+.headrow{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.sub{color:var(--label2);font-size:15px}
+.foot{color:var(--label2);font-size:13px;padding-inline:16px}
+
+/* Groupes iOS */
+.ghead{font-size:13px;text-transform:uppercase;letter-spacing:.03em;color:var(--label2);padding:0 16px 6px}
+.group{background:var(--card);border-radius:12px;overflow:hidden}
+.rowi{display:flex;align-items:center;gap:12px;padding:11px 16px;min-height:48px;width:100%;text-align:left;position:relative}
+.rowi + .rowi::before{content:"";position:absolute;top:0;left:56px;right:0;height:1px;background:var(--sep);transform:scaleY(.5)}
+.group.plain .rowi + .rowi::before{left:16px}
+.rowi .t{flex:1;min-width:0}
+.rowi .t b{font-weight:400;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rowi .t small{display:block;color:var(--label2);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rowi .v{color:var(--label2);font-size:17px;display:flex;align-items:center;gap:6px}
+.chev{width:8px;height:13px;color:var(--label3);flex:none}
+.sq{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex:none;color:#fff}
+.sq svg{width:18px;height:18px}
+.sq.photo{background:#CC3F27}.sq.video{background:#9E3320}.sq.audio{background:#E0703A}.sq.text{background:#7A5A4C}.sq.song{background:#B5502E}
+.check{color:var(--accent);width:20px;height:20px}
+
+/* Boutons */
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;height:50px;border-radius:14px;background:var(--accent);color:var(--on-accent);font-weight:600;font-size:17px;width:100%}
+.btn.tinted{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
+.btn.gray{background:var(--fill);color:var(--label)}
+.btn svg{width:20px;height:20px}
+.btn:disabled{opacity:.45}
+.tbtn{color:var(--accent);font-size:17px;padding:8px 0;min-height:44px}
+.tbtn.bold{font-weight:600}
+.tbtn:disabled{color:var(--label3)}
+.danger{color:var(--danger)}
+.pillbtn{display:inline-flex;align-items:center;gap:6px;background:var(--fill);border-radius:999px;padding:7px 14px;font-size:15px;font-weight:600;color:var(--accent)}
+.pillbtn svg{width:16px;height:16px}
+
+/* Champs */
+.field{width:100%;border:0;background:transparent;padding:12px 16px;font-size:17px;outline:none}
+textarea.field{min-height:130px;resize:none;line-height:1.4}
+.field::placeholder{color:var(--label3)}
+.seg{display:flex;background:var(--fill);border-radius:9px;padding:2px;gap:2px}
+.seg button{flex:1;padding:7px 4px;border-radius:7px;font-size:14px;font-weight:500}
+.seg button[aria-pressed="true"]{background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.12);font-weight:600}
+.switch{position:relative;width:51px;height:31px;flex:none}
+.switch input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.switch span{position:absolute;inset:0;border-radius:999px;background:var(--fill2);transition:background .2s}
+.switch span::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.2);transition:transform .2s}
+.switch input:checked + span{background:#34C759}
+.switch input:checked + span::after{transform:translateX(20px)}
+.err{color:var(--danger);font-size:14px;padding-inline:16px}
+
+/* Carte héro */
+.hero{background:var(--card);border-radius:20px;padding:22px 20px;display:flex;flex-direction:column;gap:16px;align-items:center;text-align:center}
+.hero h2{font-family:var(--f-display);font-size:28px;font-weight:400;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.envelope{position:relative;width:180px;aspect-ratio:1.5;border-radius:12px;background:var(--peach);overflow:hidden}
+.envelope .flap{position:absolute;inset:0 0 42% 0;background:var(--peach2);clip-path:polygon(0 0,100% 0,50% 100%);transform-origin:top;transition:transform .7s cubic-bezier(.3,.7,.2,1)}
+.envelope .seal{position:absolute;left:50%;top:58%;width:38px;height:38px;margin:-19px 0 0 -19px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font-family:var(--f-display);font-style:italic;font-size:24px;box-shadow:inset 0 0 0 3px rgba(255,255,255,.18),0 2px 6px rgba(120,30,15,.35);transition:opacity .25s}
+.envelope.open .flap{transform:rotateX(180deg)}
+.envelope.open .seal{opacity:0}
+.hero.sun{background:var(--accent);color:var(--on-accent)}
+.hero.sun .sub,.hero.sun .eyebrow{color:rgba(255,255,255,.88)}
+.hero.sun .big-num{color:#fff}
+.hero.sun .btn{background:#fff;color:var(--accent)}
+.hero.sun .envelope{background:var(--soft)}
+.hero.sun .envelope .flap{background:var(--peach2)}
+.hero.sun .envelope .seal{background:var(--deep);color:#fff}
+.hero.saff{background:var(--soft)}
+.hero.saff .big-num{color:var(--accent)}
+.hero.saff .chips span{background:var(--card)}
+.big-num{font-family:var(--f-display);font-size:64px;font-weight:400;letter-spacing:-.01em;line-height:1;color:var(--accent);font-variant-numeric:tabular-nums}
+.progress{height:6px;border-radius:999px;background:var(--fill);overflow:hidden;width:100%}
+.progress i{display:block;height:100%;background:linear-gradient(90deg,var(--rind),var(--accent));border-radius:999px}
+
+/* Notification */
+.notif{background:var(--card);border-radius:12px;padding:14px 16px;display:flex;gap:12px;align-items:flex-start}
+.notif .sq{background:var(--accent)}
+.notif .t{flex:1;display:flex;flex-direction:column;gap:6px}
+.notif b{font-weight:600}
+.notif p{font-size:14px;color:var(--label2)}
+
+/* Barre d'onglets */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--bar);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-top:.5px solid var(--sep);display:flex;justify-content:center;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px))}
+.tabbar .in{display:flex;width:100%;max-width:520px}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;font-weight:500;color:var(--label3);padding:4px 0}
+.tab svg{width:26px;height:26px}
+.tab[aria-current="page"]{color:var(--accent)}
+
+/* Fiches */
+.backdrop{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.32);animation:fade .25s ease both}
+.sheet{position:fixed;left:0;right:0;bottom:0;top:calc(env(safe-area-inset-top,0px) + 10px);z-index:41;background:var(--bg);border-radius:12px 12px 0 0;display:flex;flex-direction:column;animation:up .35s var(--ease) both;max-width:640px;margin:0 auto}
+.sheet.full{top:0;border-radius:0;max-width:none}
+.navbar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:6px 16px;min-height:52px;border-bottom:.5px solid var(--sep)}
+.navbar .ttl{font-weight:600;font-size:17px;text-align:center;white-space:nowrap}
+.navbar .r{justify-self:end}
+.navbar .l{justify-self:start}
+.sbody{flex:1;overflow-y:auto;padding:16px 16px calc(32px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:22px;-webkit-overflow-scrolling:touch}
+.grabber{width:36px;height:5px;border-radius:3px;background:var(--fill2);margin:6px auto 0}
+.asheet{position:fixed;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom,0px));z-index:41;display:flex;flex-direction:column;gap:8px;animation:up .3s var(--ease) both;max-width:520px;margin:0 auto}
+.asheet .group{border-radius:14px}
+.asheet .rowi{justify-content:flex-start;min-height:56px}
+@keyframes up{from{transform:translateY(100%)}to{transform:none}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+
+/* Média */
+.media{border-radius:12px;overflow:hidden;background:#000}
+.media img,.media video{display:block;width:100%;max-height:62vh;object-fit:contain}
+audio{width:100%}
+.letter{font-family:var(--f-letter);font-size:20px;line-height:1.5;white-space:pre-wrap}
+.from{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--accent)}
+.song{display:flex;gap:12px;align-items:center;background:var(--card);border-radius:12px;padding:10px;width:100%;text-align:left}
+.song img,.song .art{width:52px;height:52px;border-radius:8px;object-fit:cover;flex:none;background:var(--fill);display:grid;place-items:center;color:var(--label3)}
+.song .t{min-width:0;flex:1}
+.song .t b,.song .t span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.song .t b{font-weight:600}
+.song .t span{color:var(--label2);font-size:14px}
+.rec{display:flex;flex-direction:column;gap:12px;align-items:center}
+.rec video{width:100%;border-radius:12px;background:#000;max-height:50vh}
+.recdot{width:12px;height:12px;border-radius:50%;background:var(--danger);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.25}}
+.mono{font-variant-numeric:tabular-nums;font-weight:600}
+.thumbs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.thumbs .th{aspect-ratio:1;border-radius:10px;overflow:hidden;position:relative;background:var(--fill)}
+.thumbs .th img{width:100%;height:100%;object-fit:cover}
+.thumbs .th button{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;display:grid;place-items:center}
+.thumbs .th button svg{width:12px;height:12px}
+.thumbs .add{display:grid;place-items:center;color:var(--accent);background:var(--card)}
+.thumbs .add svg{width:28px;height:28px}
+.scroller{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;margin-inline:-16px;padding-inline:16px}
+.scroller img{flex:none;width:86%;max-height:60vh;object-fit:cover;border-radius:12px;scroll-snap-align:center}
+
+/* Calendrier */
+.cal{background:var(--card);border-radius:16px;padding:14px 12px}
+.calhead{display:flex;justify-content:space-between;align-items:center;padding:0 4px 10px}
+.calhead b{font-size:17px;font-weight:600;text-transform:capitalize}
+.calhead button{width:36px;height:36px;display:grid;place-items:center;color:var(--accent);border-radius:50%}
+.calhead button:disabled{color:var(--label3)}
+.calhead svg{width:10px;height:16px}
+.calgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.dow{text-align:center;font-size:11px;font-weight:600;color:var(--label3);padding-bottom:4px}
+.day{aspect-ratio:.8;border-radius:9px;position:relative;overflow:hidden;display:flex;align-items:flex-end;justify-content:center;padding-bottom:4px;font-size:13px;font-weight:500;color:var(--label2);background:transparent}
+.day.has{background:var(--fill);color:var(--label)}
+.day img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.day.has.img span{position:relative;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);font-weight:700}
+.day .dots{position:absolute;top:5px;left:0;right:0;display:flex;justify-content:center;gap:3px}
+.day .dots i{width:5px;height:5px;border-radius:50%;background:var(--accent)}
+.day .dots i.j{background:var(--rind)}
+.day.today{box-shadow:inset 0 0 0 2px var(--accent)}
+.day.out{visibility:hidden}
+.legend{display:flex;gap:16px;justify-content:center;font-size:13px;color:var(--label2);padding-top:10px}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:6px}
+.legend i.j{background:var(--rind)}
+
+/* Carnet */
+.entry{background:var(--card);border-radius:16px;overflow:hidden;width:100%;text-align:left;display:flex;flex-direction:column}
+.entry .cover{aspect-ratio:16/10;background:var(--peach);position:relative;overflow:hidden}
+.entry .cover img{width:100%;height:100%;object-fit:cover;display:block}
+.entry .cover .play{position:absolute;inset:0;display:grid;place-items:center}
+.entry .cover .play span{width:56px;height:56px;border-radius:50%;background:rgba(0,0,0,.45);display:grid;place-items:center;color:#fff;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.entry .cover .play svg{width:24px;height:24px;margin-left:3px}
+.entry .meta{padding:12px 14px 14px;display:flex;flex-direction:column;gap:4px}
+.entry .meta b{font-size:17px;font-weight:600}
+.entry .meta p{color:var(--label2);font-size:15px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--label2)}
+.tag.on{color:var(--accent)}
+.tag svg{width:13px;height:13px}
+.empty{text-align:center;color:var(--label2);padding:36px 24px;display:flex;flex-direction:column;gap:8px;align-items:center}
+.empty svg{width:44px;height:44px;color:var(--label3)}
+.empty b{color:var(--label);font-size:20px;font-weight:600}
+
+/* Montage */
+.player{position:fixed;inset:0;z-index:60;background:#000;color:#fff;display:flex;flex-direction:column}
+.player .bars{display:flex;gap:3px;padding:calc(env(safe-area-inset-top,0px) + 10px) 10px 0}
+.player .bars i{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.3);overflow:hidden}
+.player .bars i b{display:block;height:100%;width:0;background:#fff}
+.player .top{position:relative;z-index:3;display:flex;justify-content:space-between;align-items:center;padding:10px 14px;font-size:14px;font-weight:600}
+.player .top button{color:#fff;width:36px;height:36px;display:grid;place-items:center}
+.player .top svg{width:22px;height:22px}
+.player .stage{flex:1;position:relative;overflow:hidden}
+.slide{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;animation:fade .5s ease both}
+.slide img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;animation:kb 6s ease-out both}
+.slide .cap{position:absolute;left:16px;right:16px;bottom:calc(24px + env(safe-area-inset-bottom,0px));font-size:15px;font-weight:600;text-shadow:0 1px 6px rgba(0,0,0,.6)}
+.slide.txt{background:#CC3F27;padding:32px}
+.slide.txt.b{background:#FBE3D3;color:#3B1F17}
+.slide.txt.r{background:#9E3320}
+.slide.txt p{font-family:var(--f-display);font-style:italic;font-size:32px;line-height:1.35;text-align:center;text-wrap:balance}
+.slide.txt small{position:absolute;bottom:calc(28px + env(safe-area-inset-bottom,0px));left:0;right:0;text-align:center;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;opacity:.85}
+.slide.end{background:#FBF5EF;color:#3B1F17;flex-direction:column;gap:10px;text-align:center;padding:32px}
+.slide.end b{font-family:var(--f-display);font-style:italic;font-weight:400;font-size:38px}
+@keyframes kb{from{transform:scale(1.12)}to{transform:scale(1)}}
+.player .tapl,.player .tapr{position:absolute;top:0;bottom:0;width:35%;z-index:2}
+.player .tapl{left:0}.player .tapr{right:0}
+.nowplaying{position:relative;z-index:3;display:flex;align-items:center;gap:6px;font-size:13px;opacity:.9;padding:0 14px 8px}
+.nowplaying svg{width:14px;height:14px}
+
+/* Démo */
+.demo{position:sticky;top:env(safe-area-inset-top,0px);z-index:35;background:var(--label);color:var(--bg);font-size:12px;padding:6px 12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:center}
+.demo button{color:var(--bg);border:1px solid color-mix(in srgb,var(--bg) 40%,transparent);border-radius:999px;padding:3px 10px;font-size:12px}
+.demo button[aria-pressed="true"]{background:var(--bg);color:var(--label)}
+
+.topbar{display:flex;justify-content:flex-end;padding-top:8px;margin-bottom:-14px}
+.helpbtn{display:inline-flex;align-items:center;gap:6px;background:var(--card);border-radius:999px;padding:6px 12px 6px 6px;font-size:14px;font-weight:600;color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.helpbtn i{width:22px;height:22px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-style:normal;font-weight:700;font-size:13px}
+.steps .rowi{align-items:flex-start;padding-block:14px}
+.steps .rowi .t b{white-space:normal;font-weight:600}
+.steps .rowi .t small{white-space:normal;font-size:15px;line-height:1.4;margin-top:2px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.chips span{background:var(--fill);border-radius:999px;padding:5px 11px;font-size:14px}
+.logo{width:64px;height:64px;border-radius:15px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.10)}
+.logo svg{width:100%;height:100%;display:block}
+.center{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px}
+.reveal{animation:rise .5s ease both}
+@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.qr img{width:100%;max-width:260px;height:auto;background:#fff;padding:12px;border-radius:12px;display:block;margin:0 auto}
+.code{font-size:13px;word-break:break-all;color:var(--label2);padding:12px 16px}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div id="app"></div>
+
+<script>
+/* =========================================================
+   CONFIGURATION — à remplir (voir LISEZMOI.md)
+   ========================================================= */
+const CONFIG = {
+  SUPABASE_URL: "https://hslnyzbpuhmqekjbusrl.supabase.co",
+  SUPABASE_KEY: "sb_publishable_TQSglO05NtQHZ1TVF8xpdQ_l66-kAJI",
+  VAPID_PUBLIC: "BHN9slVICkSmEegmAkJoOCMFDsOX0DoBgwlAcpKSETCSmNAEjdipdjJBm04aJiAiiUWG8x8HiWW6YarbEkJwVgo",
+  PRENOM: "Romane",
+  CODE_ROMANE: "romane-98ef57",   // mot secret du lien de Romane (QR code)
+  DEPART: "2026-10-15",
+  RETOUR: "2027-07-15"
+};
+/* ========================================================= */
+
+const APP = "Querida";
+const DEMO = !CONFIG.SUPABASE_URL;
+const DAY = 86400000;
+const qs = new URLSearchParams(location.search);
+const $app = document.getElementById("app");
+const MAX_VIDEO_MB = 50, MAX_VIDEO_SEC = 75, MAX_AUDIO_SEC = 180, MAX_PHOTOS = 8;
+const P = () => esc(CONFIG.PRENOM);
+
+const ls = {
+  get(k, d = null){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const INI = esc(CONFIG.PRENOM.charAt(0).toUpperCase());
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : "id-" + Date.now() + "-" + Math.random().toString(16).slice(2));
+const parseDay = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d).getTime(); };
+const dayKey = t => { const d = new Date(t); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); };
+const fmt = (t, o) => new Date(t).toLocaleDateString("fr-FR", o);
+const fmtDate = t => fmt(t, { day:"numeric", month:"long" });
+let demoOffset = 0;
+const now = () => Date.now() + demoOffset * DAY;
+
+/* ---------------- Icônes (traits fins, façon SF Symbols) ---------------- */
+const I = (d, extra = "") => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${d}</svg>`;
+const IC = {
+  photo: I('<rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3.5"/><path d="M8.5 6l1.5-2h4l1.5 2"/>'),
+  video: I('<rect x="2.5" y="6" width="13.5" height="12" rx="3"/><path d="M16 10.5l5.5-3v9l-5.5-3z"/>'),
+  audio: I('<rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3.5"/>'),
+  text: I('<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3.5 7l8.5 6 8.5-6"/>'),
+  song: I('<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>'),
+  plus: I('<path d="M12 5v14M5 12h14"/>', 'stroke-width="2.2"'),
+  sun: I('<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/>'),
+  cal: I('<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>'),
+  book: I('<path d="M4 5.5A2.5 2.5 0 016.5 3H20v15H6.5A2.5 2.5 0 004 20.5z"/><path d="M4 20.5A2.5 2.5 0 016.5 18H20v3H6.5"/>'),
+  env: I('<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3.5 7l8.5 6 8.5-6"/>'),
+  heart: I('<path d="M12 20s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.5-7 10-7 10z"/>'),
+  lock: I('<rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 018 0v3"/>'),
+  bell: I('<path d="M6 16V11a6 6 0 0112 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 004 0"/>'),
+  play: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg>',
+  x: I('<path d="M6 6l12 12M18 6L6 18"/>', 'stroke-width="2.2"'),
+  people: I('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><circle cx="17" cy="9" r="2.8"/><path d="M16 14.2a5.5 5.5 0 015.5 5.8"/>'),
+  eyeoff: I('<path d="M3 3l18 18M10.6 6.1A9.7 9.7 0 0112 6c5 0 9 6 9 6a16 16 0 01-3.1 3.6M6.6 6.6C4.3 8.1 3 12 3 12s4 6 9 6a8.6 8.6 0 004.4-1.2"/>'),
+  sparkles: I('<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>'),
+  pin: I('<path d="M12 21s7-6.2 7-11.5A7 7 0 005 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>'),
+  check: I('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 'stroke-width="2.4"'),
+  chev: '<svg class="chev" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5l5 5-5 5"/></svg>',
+  chevl: '<svg viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 1.5L2 8l6.5 6.5"/></svg>',
+  chevr: '<svg viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5L8 8l-6.5 6.5"/></svg>',
+  music: I('<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>')
+};
+/* Logo : soleil sur la mer */
+const LOGO = '<svg viewBox="0 0 72 72" aria-hidden="true"><rect width="72" height="72" fill="#FBF5EF"/><path d="M16 44a20 20 0 0 1 40 0z" fill="#CC3F27"/><rect x="12" y="46" width="48" height="5" rx="2.5" fill="#1E4E9C"/><rect x="20" y="54" width="32" height="4" rx="2" fill="#1E4E9C" fill-opacity=".5"/></svg>';
+
+const TYPES = {
+  photo:{ label:"Photo", title:"Une photo souvenir" },
+  video:{ label:"Vidéo", title:"Une vidéo pour elle" },
+  audio:{ label:"Vocal", title:"Un vocal pour elle" },
+  text:{ label:"Message", title:"Un message pour elle" },
+  song:{ label:"Chanson", title:"Une chanson pour elle" }
+};
+const MOMENTS = {
+  voyage:{ label:"Pendant le voyage", hint:"Elle la découvrira lors d'une ouverture de la semaine." },
+  avant:{ label:"Avant son départ", hint:"Elle pourra l'ouvrir tout de suite, dès la fête." },
+  cafard:{ label:"Quand elle a besoin d'un sourire", hint:"Gardée en réserve : elle pourra l'ouvrir quand elle veut, pour un petit sourire." },
+  retour:{ label:"À son retour", hint:"Bloquée jusqu'au jour du retour." }
+};
+const RELATIONS = ["Ami·e", "Famille", "Collègue", "Autre"];
+const sq = t => `<span class="sq ${t}">${IC[t]}</span>`;
+
+/* ---------------- Stockage ---------------- */
+const Store = {
+  caps: [], journal: [], client: null, ready: false, blobs: {},
+  async init(){
+    if (DEMO){ const s = demoSeed(); this.caps = s.caps; this.journal = s.journal; this.ready = true; return; }
+    await loadScript("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js");
+    this.client = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+    await this.refresh(); this.ready = true;
+  },
+  async refresh(){
+    if (DEMO) return;
+    const [a, b] = await Promise.all([
+      this.client.from("capsules").select("*").order("created_at"),
+      this.client.from("journal").select("*").order("date", { ascending:false })
+    ]);
+    if (a.error) throw a.error; if (b.error) throw b.error;
+    this.caps = a.data || []; this.journal = b.data || [];
+  },
+  url(path){
+    if (!path) return null;
+    if (this.blobs[path]) return this.blobs[path];
+    if (DEMO) return null;
+    return this.client.storage.from("capsules").getPublicUrl(path).data.publicUrl;
+  },
+  async upload(path, blob){
+    if (DEMO){ this.blobs[path] = URL.createObjectURL(blob); return; }
+    const r = await this.client.storage.from("capsules").upload(path, blob, { contentType: blob.type || "application/octet-stream", upsert:false });
+    if (r.error) throw r.error;
+  },
+  async addCapsule(c, blob){
+    if (blob){ c.media_path = `${c.id}.${extFor(blob.type)}`; c.media_type = blob.type; await this.upload(c.media_path, blob); }
+    if (DEMO){ c.created_at = new Date(now()).toISOString(); this.caps.push(c); return; }
+    const { error } = await this.client.from("capsules").insert(c); if (error) throw error;
+    await this.refresh();
+  },
+  async removeCapsule(c){
+    if (DEMO){ this.caps = this.caps.filter(x => x.id !== c.id); return; }
+    if (c.media_path) await this.client.storage.from("capsules").remove([c.media_path]);
+    const { error } = await this.client.from("capsules").delete().eq("id", c.id); if (error) throw error;
+    await this.refresh();
+  },
+  async openCapsule(c){
+    const t = new Date(now()).toISOString();
+    if (!DEMO){ const { error } = await this.client.from("capsules").update({ opened_at:t }).eq("id", c.id); if (error) throw error; }
+    c.opened_at = t;
+  },
+  async addEntry(e, photos = []){
+    e.photos = [];
+    for (let i = 0; i < photos.length; i++){ const p = `journal/${e.id}-${i}.jpg`; await this.upload(p, photos[i]); e.photos.push(p); }
+    if (DEMO){ e.created_at = new Date(now()).toISOString(); this.journal.unshift(e); return; }
+    const { error } = await this.client.from("journal").insert(e); if (error) throw error;
+    await this.refresh();
+  },
+  async updateEntry(e, patch){
+    if (!DEMO){ const { error } = await this.client.from("journal").update(patch).eq("id", e.id); if (error) throw error; }
+    Object.assign(e, patch);
+  },
+  async removeEntry(e){
+    if (!DEMO){
+      if (e.photos && e.photos.length) await this.client.storage.from("capsules").remove(e.photos);
+      const { error } = await this.client.from("journal").delete().eq("id", e.id); if (error) throw error;
+    }
+    this.journal = this.journal.filter(x => x.id !== e.id);
+  }
+};
+function extFor(type = ""){
+  if (type.includes("jpeg")) return "jpg"; if (type.includes("png")) return "png"; if (type.includes("webp")) return "webp";
+  if (type.includes("quicktime")) return "mov"; if (type.includes("mp4")) return type.startsWith("audio") ? "m4a" : "mp4";
+  if (type.includes("webm")) return "webm"; if (type.includes("mpeg")) return "mp3"; if (type.includes("ogg")) return "ogg";
+  return "bin";
+}
+function loadScript(src){ return new Promise((ok, ko) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => ko(new Error("Chargement impossible : " + src)); document.head.appendChild(s); }); }
+
+/* ---------------- Notifications ---------------- */
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const Push = {
+  supported(){ return !DEMO && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; },
+  needsInstall(){ return !DEMO && isIOS && !standalone; },
+  on(){ return this.supported() && Notification.permission === "granted" && ls.get("hp_push_ok", false); },
+  async enable(){
+    const reg = await navigator.serviceWorker.register("sw.js");
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") throw new Error("refus");
+    const key = Uint8Array.from(atob(CONFIG.VAPID_PUBLIC.replace(/-/g, "+").replace(/_/g, "/") + "==".slice(0, (4 - CONFIG.VAPID_PUBLIC.length % 4) % 4)), c => c.charCodeAt(0));
+    const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:key });
+    const json = sub.toJSON();
+    const { error } = await Store.client.from("push_subs").upsert({ endpoint: json.endpoint, sub: json, role, name: role === "romane" ? CONFIG.PRENOM : (me && me.name) }, { onConflict:"endpoint" });
+    if (error) throw error;
+    ls.set("hp_push_ok", true);
+  },
+  async send(type, title, body){
+    if (DEMO) return;
+    try{
+      await fetch(CONFIG.SUPABASE_URL + "/functions/v1/notify", { method:"POST", headers: Object.assign({ "Content-Type":"application/json", "apikey":CONFIG.SUPABASE_KEY }, CONFIG.SUPABASE_KEY.startsWith("sb_") ? {} : { "Authorization":"Bearer " + CONFIG.SUPABASE_KEY }), body: JSON.stringify({ type, title, body }) });
+    }catch(e){}
+  }
+};
+function notifCard(){
+  if (DEMO || Push.on()) return "";
+  const what = role === "romane" ? "Sois prévenue dès qu'une nouvelle capsule t'attend." : `Sois prévenu·e quand ${P()} partage une page de son carnet.`;
+  if (Push.needsInstall()) return `<div class="notif">${`<span class="sq">${IC.bell}</span>`}<div class="t"><b>Active les notifications</b><p>${what} Ajoute d'abord ${APP} à ton écran d'accueil : bouton Partager de Safari, puis « Sur l'écran d'accueil ». Ouvre ensuite ${APP} depuis l'icône.</p></div></div>`;
+  if (!Push.supported()) return "";
+  return `<div class="notif"><span class="sq">${IC.bell}</span><div class="t"><b>Active les notifications</b><p>${what}</p><button class="pillbtn" data-act="push-on" style="align-self:flex-start">Activer</button></div></div>`;
+}
+
+/* ---------------- Planning des ouvertures ---------------- */
+function phased(n, W){
+  const gaps = n - 1, deficit = (W - 1) - gaps;
+  let k4 = Math.floor(deficit / 2 / 3), k2 = deficit - 3 * k4;
+  while (k2 + k4 > gaps && k2 >= 3){ k2 -= 3; k4 += 1; }
+  if (k2 + k4 > gaps) return null;
+  const g = [...Array(gaps - k2 - k4).fill(1), ...Array(k2).fill(2), ...Array(k4).fill(4)];
+  const w = [1]; g.forEach(x => w.push(w[w.length - 1] + x)); return w;
+}
+function schedule(n){
+  const start = parseDay(CONFIG.DEPART), end = parseDay(CONFIG.RETOUR);
+  const W = Math.max(1, Math.floor((end - start) / DAY / 7));
+  if (n <= 0) return [];
+  let weeks = [];
+  if (n >= W){ for (let k = 1; k <= n; k++) weeks.push(Math.ceil(k * W / n)); }
+  else if (n === 1) weeks = [1];
+  else if (phased(n, W)) weeks = phased(n, W);
+  else { const p = Math.log(W) / Math.log(n); let prev = 0; for (let k = 1; k <= n; k++){ let w = Math.round(W * Math.pow(k / n, p)); w = Math.max(prev + 1, w); w = Math.min(w, W - (n - k)); weeks.push(w); prev = w; } }
+  const s0 = new Date(start);
+  return weeks.map(w => new Date(s0.getFullYear(), s0.getMonth(), s0.getDate() + 7 * (w - 1)).getTime());
+}
+function hash(s){ let h = 2166136261; for (let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function state(){
+  const all = Store.caps, t = now();
+  const regular = all.filter(c => (c.moment || "voyage") === "voyage").sort((a, b) => hash(a.id) - hash(b.id));
+  const dates = schedule(regular.length);
+  const unlocked = dates.filter(d => d <= t).length;
+  const opened = regular.filter(c => c.opened_at).length;
+  const start = parseDay(CONFIG.DEPART), end = parseDay(CONFIG.RETOUR);
+  const total = Math.round((end - start) / DAY);
+  return {
+    available: Math.max(0, unlocked - opened),
+    next: regular.find(c => !c.opened_at) || null,
+    nextDate: dates[unlocked] ?? null,
+    waiting: regular.filter(c => !c.opened_at).length,
+    cafard: all.filter(c => c.moment === "cafard" && !c.opened_at),
+    avant: all.filter(c => c.moment === "avant" && !c.opened_at),
+    authors: [...new Map(all.map(c => [c.author_id, c])).values()],
+    retour: all.filter(c => c.moment === "retour" && !c.opened_at),
+    started: t >= start, back: t >= end,
+    dayN: Math.min(total, Math.floor((t - start) / DAY) + 1), total,
+    toStart: Math.max(0, Math.ceil((start - t) / DAY)),
+    opened: all.filter(c => c.opened_at)
+  };
+}
+
+/* ---------------- Rôle & navigation ---------------- */
+let role = ls.get("hp_role", "ami");
+if (qs.get("pour") && qs.get("pour") === CONFIG.CODE_ROMANE){ role = "romane"; ls.set("hp_role", "romane"); }
+let me = ls.get("hp_me");
+let tab = role === "romane" ? "today" : "depot";
+if (role === "romane") document.getElementById("manifest").href = "manifest-romane.json";
+
+const layers = [];
+function pushLayer(el){ layers.push(el); document.body.appendChild(el); document.body.style.overflow = "hidden"; }
+function popLayer(){ const el = layers.pop(); if (el) el.remove(); if (!layers.length) document.body.style.overflow = ""; }
+function clearLayers(){ while (layers.length) popLayer(); }
+function sheet({ title = "", left = "", right = "", body = "", full = false, id = "" }){
+  const wrap = document.createElement("div");
+  wrap.innerHTML = `<div class="backdrop" data-act="${full ? "" : "close"}"></div><div class="sheet ${full ? "full" : ""}" role="dialog" aria-modal="true" aria-label="${esc(title)}" ${id ? `id="${id}"` : ""}>
+    ${full ? "" : '<div class="grabber"></div>'}
+    <div class="navbar"><div class="l">${left}</div><div class="ttl">${esc(title)}</div><div class="r">${right}</div></div>
+    <div class="sbody">${body}</div></div>`;
+  pushLayer(wrap); return wrap;
+}
+function actionSheet(rows){
+  const wrap = document.createElement("div");
+  wrap.innerHTML = `<div class="backdrop" data-act="close"></div><div class="asheet"><div class="group">${rows}</div><div class="group"><button class="rowi" data-act="close" style="justify-content:center;font-weight:600;color:var(--accent)">Annuler</button></div></div>`;
+  pushLayer(wrap);
+}
+
+/* ---------------- Rendu principal ---------------- */
+function demoBar(){
+  if (!DEMO) return "";
+  return `<div class="demo"><span>Démo, rien n'est enregistré</span>
+    <button data-act="demo-role" data-v="ami" aria-pressed="${role === "ami"}">Côté amis</button>
+    <button data-act="demo-role" data-v="romane" aria-pressed="${role === "romane"}">Côté ${P()}</button>
+    ${role === "romane" ? `<button data-act="demo-time" data-v="7">+1 semaine</button><button data-act="demo-time" data-v="0">Aujourd'hui</button>` : ""}</div>`;
+}
+function tabbar(){
+  const tabs = role === "romane"
+    ? [["today","Aujourd'hui",IC.sun],["souvenirs","Souvenirs",IC.cal],["carnet","Carnet",IC.book]]
+    : [["depot","Capsules",IC.env],["carnet","Carnet",IC.book]];
+  return `<nav class="tabbar" aria-label="Onglets"><div class="in">${tabs.map(([k, l, ic]) => `<button class="tab" data-act="tab" data-v="${k}" ${tab === k ? 'aria-current="page"' : ""}>${ic}<span>${l}</span></button>`).join("")}</div></nav>`;
+}
+function render(){
+  if (qs.get("qr") && qs.get("qr") === CONFIG.CODE_ROMANE) return renderQR();
+  if (!Store.ready){ $app.innerHTML = `<div class="screen"><div class="center" style="padding-top:30vh"><div class="logo">${LOGO}</div></div></div>`; return; }
+  if (role === "ami" && !me) return renderWelcome();
+  let html = "";
+  if (role === "romane") html = tab === "souvenirs" ? viewSouvenirs() : tab === "carnet" ? viewCarnetRomane() : viewToday();
+  else html = tab === "carnet" ? viewCarnetAmis() : viewDepot();
+  $app.innerHTML = demoBar() + `<main class="screen"><div class="topbar"><button class="helpbtn" data-act="help"><i>?</i>Comment ça marche</button></div>${html}</main>` + tabbar();
+  if (!ls.get("hp_help_" + role) && !layers.length){ ls.set("hp_help_" + role, true); setTimeout(helpSheet, 400); }
+}
+function helpSheet(){
+  const step = (color, icon, title, text) => `<div class="rowi"><span class="sq" style="background:${color}">${icon}</span><span class="t"><b>${title}</b><small>${text}</small></span></div>`;
+  const rows = role === "romane" ? [
+    step("#CC3F27", IC.env, "Une capsule par semaine", `La bande t'a préparé des photos, vidéos, vocaux, messages et chansons. Chaque semaine, une nouvelle capsule se débloque dans l'onglet Aujourd'hui : touche l'enveloppe pour l'ouvrir.`),
+    step("#CC3F27", IC.sun, "Avant ton départ", "Certaines capsules s'ouvrent tout de suite. Les autres attendent le jour J."),
+    step("#9E3320", IC.heart, "Un sourire de la bande", "Des mots doux gardés en réserve, à ouvrir quand tu en as envie."),
+    step("#E0703A", IC.cal, "Souvenirs", "Le calendrier garde tout ce que tu as ouvert ou écrit, jour par jour. Touche un jour pour le revoir."),
+    step("#B5502E", IC.book, "Ton carnet", "Écris tes journées avec des photos. Tout est privé, sauf ce que tu choisis de partager avec la bande. Le bouton Montage fait un petit film de tes souvenirs en musique."),
+    step("#7A5A4C", IC.bell, "Les notifications", `Ajoute ${APP} à ton écran d'accueil (Safari, bouton Partager, « Sur l'écran d'accueil »), ouvre-la depuis l'icône, puis touche « Activer ».`)
+  ] : [
+    step("#CC3F27", IC.plus, "Dépose une capsule", "Touche « Nouvelle capsule » et choisis : photo, vidéo, vocal, message ou chanson. Tu peux en déposer autant que tu veux."),
+    step("#E0703A", IC.cal, "Choisis quand elle l'ouvre", "Avant son départ, pendant le voyage (une capsule se débloque chaque semaine), quand elle a besoin d'un sourire, ou à son retour."),
+    step("#7A5A4C", IC.lock, "C'est secret", `${P()} ne voit rien avant le bon moment. Toi, tu retrouves tes capsules dans la liste et tu peux les supprimer.`),
+    step("#B5502E", IC.book, "Suis son voyage", `Dans l'onglet Carnet, tu vois les pages et les montages que ${P()} partage.`),
+    step("#9E3320", IC.bell, "Les notifications", `Ajoute ${APP} à ton écran d'accueil (Safari, bouton Partager, « Sur l'écran d'accueil »), ouvre-la depuis l'icône, puis touche « Activer ».`)
+  ];
+  sheet({ title:"Comment ça marche", right:`<button class="tbtn bold" data-act="close">OK</button>`, body:`
+    <div class="center" style="gap:8px"><div class="logo">${LOGO}</div><h2 style="margin:0;font-size:22px">${role === "romane" ? `Querida ${P()}` : `${APP} en 30 secondes`}</h2>
+    ${role === "romane" ? `<p class="letter" style="font-size:18px;max-width:32ch">Cette appli est à toi. Toute la bande y a glissé des souvenirs pour t'accompagner pendant ces 9 mois. Voilà comment ça marche.</p>` : ""}</div>
+    <div class="group steps">${rows.join("")}</div>
+    <button class="btn" data-act="close">C'est compris</button>` });
+}
+
+/* ===== Amis : bienvenue ===== */
+let obRel = null, obName = "";
+function knownHtml(name){
+  const known = name ? [...new Map(Store.caps.filter(c => c.author_name && c.author_name.toLowerCase() === name.toLowerCase()).map(c => [c.author_id, c])).values()] : [];
+  return known.length ? `<div class="ghead">Tu as déjà déposé des capsules ?</div><div class="group">${known.map(c => `<button type="button" class="rowi" data-act="ob-reclaim" data-v="${esc(c.author_id)}"><span class="t"><b>Oui, c'est moi : ${esc(c.author_name)}</b><small>${esc(c.relation || "")}</small></span>${IC.chev}</button>`).join("")}</div>` : "";
+}
+function drawRelations(){
+  const z = document.getElementById("ob-rels"); if (!z) return;
+  z.innerHTML = RELATIONS.map(r => `<button type="button" class="rowi" data-act="ob-rel" data-v="${r}"><span class="t"><b>${r}</b></span>${obRel === r ? `<span class="check">${IC.check}</span>` : ""}</button>`).join("");
+}
+function renderWelcome(){
+  $app.innerHTML = demoBar() + `<main class="screen" style="padding-bottom:40px">
+    <div class="center reveal" style="padding-top:36px;gap:14px"><div class="logo">${LOGO}</div>
+      <span class="eyebrow">Une appli rien que pour elle</span>
+      <h1 class="ltitle">Querida ${P()}</h1>
+      <p class="sub" style="max-width:32ch">${P()} part 9 mois en Espagne. Glisse-lui des souvenirs : elle en ouvrira un chaque semaine, loin de nous.</p></div>
+    <form id="ob" novalidate style="display:flex;flex-direction:column;gap:22px">
+      <div><div class="ghead">Ton prénom</div><div class="group"><input class="field" id="ob-name" autocomplete="given-name" placeholder="Prénom" maxlength="40" value="${esc(obName)}"></div></div>
+      <div id="ob-known">${knownHtml(obName)}</div>
+      <div><div class="ghead">Tu es qui pour ${P()} ?</div><div class="group plain" id="ob-rels"></div></div>
+      <p class="err" id="ob-err" hidden></p>
+      <button class="btn" type="submit">Continuer</button>
+      <button type="button" class="tbtn" data-act="help" style="align-self:center">Comment ça marche ?</button>
+    </form></main>`;
+  const inp = document.getElementById("ob-name");
+  drawRelations();
+  inp.addEventListener("input", () => { obName = inp.value.trim(); document.getElementById("ob-known").innerHTML = knownHtml(obName); });
+  document.getElementById("ob").addEventListener("submit", e => {
+    e.preventDefault(); obName = inp.value.trim();
+    const err = document.getElementById("ob-err");
+    if (!obName){ err.textContent = `Écris ton prénom pour que ${CONFIG.PRENOM} sache de qui ça vient.`; err.hidden = false; return; }
+    if (!obRel){ err.textContent = `Choisis qui tu es pour ${CONFIG.PRENOM}.`; err.hidden = false; return; }
+    me = { id: uid(), name: obName, relation: obRel }; ls.set("hp_me", me); tab = "depot"; render();
+  });
+}
+
+/* ===== Amis : capsules ===== */
+function viewDepot(){
+  const mine = Store.caps.filter(c => c.author_id === me.id).slice().reverse();
+  const total = Store.caps.length;
+  return `<div class="head"><span class="eyebrow">Salut ${esc(me.name)}</span><h1 class="ltitle">Pour ${P()}</h1><p class="sub">Qu'est-ce que tu veux lui glisser aujourd'hui ?</p></div>
+    ${(() => { const st = state(); return `<div class="hero saff" style="flex-direction:row;justify-content:space-around;padding:18px 12px;gap:8px">
+      <div><div class="big-num" style="font-size:40px">${st.started ? st.dayN : st.toStart}</div><span class="eyebrow">${st.started ? "jours en Espagne" : "jours avant le départ"}</span></div>
+      <div><div class="big-num" style="font-size:40px">${total}</div><span class="eyebrow">capsule${total > 1 ? "s" : ""} de la bande</span></div></div>`; })()}
+    <button class="btn" data-act="new-capsule">${IC.plus} Nouvelle capsule</button>
+    <div><div class="ghead">Tes capsules</div>
+      ${mine.length ? `<div class="group">${mine.map(c => `<button class="rowi" data-act="my-capsule" data-v="${c.id}">${sq(c.kind)}<span class="t"><b>${esc(summary(c))}</b><small>${esc(MOMENTS[c.moment || "voyage"].label)}${c.opened_at ? " · ouverte" : ""}</small></span>${IC.chev}</button>`).join("")}</div>`
+        : `<div class="group"><div class="empty">${IC.env}<b>Ta première capsule</b><p>Une photo, une vidéo, un vocal, un mot ou une chanson. ${P()} la découvrira pendant son voyage.</p></div></div>`}
+      <p class="foot" style="padding-top:8px">Ce que tu déposes reste secret jusqu'à son ouverture.</p></div>
+    ${notifCard()}`;
+}
+function summary(c){ if (c.kind === "song" && c.song) return `${c.song.title} · ${c.song.artist}`; return c.text || TYPES[c.kind].title; }
+
+/* ===== Carnet (amis) ===== */
+function viewCarnetAmis(){
+  const shared = Store.journal.filter(e => e.shared).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  return `<div class="head"><span class="eyebrow">Nouvelles d'Espagne</span><h1 class="ltitle">Carnet de ${P()}</h1></div>
+    ${notifCard()}
+    ${shared.length ? shared.map(entryCard).join("") : `<div class="group"><div class="empty">${IC.book}<b>Rien pour l'instant</b><p>Quand ${P()} partagera une page de son carnet ou un montage, il apparaîtra ici.</p></div></div>`}`;
+}
+function entryCover(e){
+  if (e.kind === "montage"){
+    const it = montageItems(e.montage || {}).find(x => x.img);
+    return `<div class="cover">${it ? `<img src="${esc(it.img)}" alt="" loading="lazy">` : ""}<div class="play"><span>${IC.play}</span></div></div>`;
+  }
+  const u = e.photos && e.photos.length ? Store.url(e.photos[0]) : null;
+  return u ? `<div class="cover"><img src="${esc(u)}" alt="" loading="lazy"></div>` : "";
+}
+function entryCard(e){
+  const title = e.kind === "montage" ? (e.title || "Montage") : (e.place || fmtDate(parseDay(e.date)));
+  return `<button class="entry" data-act="entry" data-v="${e.id}">${entryCover(e)}
+    <div class="meta"><span class="eyebrow" style="font-size:12px">${fmt(parseDay(e.date), { weekday:"long", day:"numeric", month:"long" })}</span><b>${esc(title)}</b>${e.text ? `<p>${esc(e.text)}</p>` : ""}
+    ${role === "romane" ? `<span class="tag ${e.shared ? "on" : ""}">${e.shared ? IC.people + " Partagé avec la bande" : IC.lock + " Privé"}</span>` : ""}</div></button>`;
+}
+
+/* ===== Romane : aujourd'hui ===== */
+function viewToday(){
+  const s = state();
+  let hero;
+  if (!s.started){
+    hero = `<div class="hero reveal"><span class="eyebrow">Départ dans</span><div class="big-num">${s.toStart} j</div>
+      <p class="sub">${s.avant.length ? `${s.avant.length} capsule${s.avant.length > 1 ? "s" : ""} à ouvrir dès maintenant, juste en dessous. ` : ""}Les capsules du voyage commencent le jour de ton départ, le ${fmtDate(parseDay(CONFIG.DEPART))}.</p></div>`;
+  } else if (s.available > 0 && s.next){
+    hero = `<div class="hero sun reveal"><button class="envelope" data-act="open-next" aria-label="Ouvrir ma capsule"><div class="flap"></div><div class="seal">${INI}</div></button>
+      <h2>Une capsule t'attend</h2>${s.available > 1 ? `<p class="sub">Et ${s.available - 1} autre${s.available > 2 ? "s" : ""} déjà débloquée${s.available > 2 ? "s" : ""}</p>` : ""}
+      <button class="btn" data-act="open-next">Ouvrir</button></div>`;
+  } else if (s.nextDate){
+    const d = Math.max(1, Math.ceil((s.nextDate - now()) / DAY));
+    hero = `<div class="hero reveal"><span class="eyebrow">Prochaine capsule</span><div class="big-num">${d} j</div><p class="sub">Le ${fmt(s.nextDate, { weekday:"long", day:"numeric", month:"long" })}. ${s.waiting} capsule${s.waiting > 1 ? "s" : ""} t'attend${s.waiting > 1 ? "ent" : ""} encore.</p></div>`;
+  } else {
+    hero = `<div class="hero reveal"><h2>${s.back ? "Bon retour à la maison" : "Tu as tout ouvert"}</h2><p class="sub">${s.back ? "Les capsules du retour t'attendent juste en dessous." : "Retrouve toutes tes capsules dans Souvenirs."}</p></div>`;
+  }
+  const pct = s.started ? Math.min(100, Math.round(s.dayN / s.total * 100)) : 0;
+  return `<div class="head"><span class="eyebrow">${fmt(now(), { weekday:"long", day:"numeric", month:"long" })}</span><h1 class="ltitle">Querida ${P()}</h1></div>
+    ${hero}
+    <div class="group">
+      ${s.avant.length || !s.started ? `<button class="rowi" data-act="open-avant" ${s.avant.length ? "" : "disabled"}><span class="sq" style="background:var(--accent)">${IC.env}</span><span class="t"><b>Avant ton départ</b><small>${s.avant.length ? "À ouvrir dès maintenant" : "Rien pour l'instant"}</small></span><span class="v">${s.avant.length}${s.avant.length ? IC.chev : ""}</span></button>` : ""}
+      <button class="rowi" data-act="open-cafard" ${s.cafard.length && s.started ? "" : "disabled"}><span class="sq" style="background:var(--red)">${IC.heart}</span><span class="t"><b>Un sourire de la bande</b><small>${s.cafard.length ? (s.started ? "Un mot doux à ouvrir quand tu veux" : "Disponible dès ton départ") : "Bientôt de nouveaux sourires"}</small></span><span class="v">${s.cafard.length}${s.cafard.length && s.started ? IC.chev : ""}</span></button>
+      <button class="rowi" data-act="open-retour" ${s.retour.length && s.back ? "" : "disabled"}><span class="sq" style="background:#7A5A4C">${IC.lock}</span><span class="t"><b>À ton retour</b><small>${s.back ? "C'est le moment" : "Le " + fmtDate(parseDay(CONFIG.RETOUR))}</small></span><span class="v">${s.retour.length}${s.retour.length && s.back ? IC.chev : ""}</span></button>
+    </div>
+    ${!s.started && s.authors.length ? `<div class="hero saff"><span class="eyebrow">La bande</span><h2>${s.authors.length} personne${s.authors.length > 1 ? "s" : ""} t'ont préparé des souvenirs</h2><div class="chips">${s.authors.map(c => `<span>${esc(c.author_name)}</span>`).join("")}</div></div>` : ""}
+    ${s.started ? `<div class="group" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between;font-size:15px"><span>Jour ${s.dayN}</span><span class="sub">${s.total - s.dayN} jours restants</span></div><div class="progress"><i style="width:${pct}%"></i></div></div>` : ""}
+    ${notifCard()}`;
+}
+
+/* ===== Romane : souvenirs (calendrier) ===== */
+let calMonth = null;
+function itemsByDay(){
+  const map = {};
+  const add = (k, it) => (map[k] = map[k] || []).push(it);
+  Store.caps.filter(c => c.opened_at).forEach(c => add(dayKey(new Date(c.opened_at).getTime()), { type:"cap", c, img: capThumb(c) }));
+  Store.journal.filter(e => e.kind !== "montage").forEach(e => add(e.date, { type:"entry", e, img: e.photos && e.photos.length ? Store.url(e.photos[0]) : null }));
+  return map;
+}
+function capThumb(c){ if (c.kind === "photo") return Store.url(c.media_path); if (c.kind === "song" && c.song && c.song.artwork) return c.song.artwork; return null; }
+function viewSouvenirs(){
+  const start = new Date(parseDay(CONFIG.DEPART)), end = new Date(parseDay(CONFIG.RETOUR));
+  const minM = new Date(start.getFullYear(), start.getMonth(), 1), maxM = new Date(end.getFullYear(), end.getMonth(), 1);
+  if (!calMonth){ const n = new Date(now()); calMonth = new Date(n.getFullYear(), n.getMonth(), 1); if (calMonth < minM) calMonth = minM; if (calMonth > maxM) calMonth = maxM; }
+  const map = itemsByDay();
+  const y = calMonth.getFullYear(), m = calMonth.getMonth();
+  const first = (new Date(y, m, 1).getDay() + 6) % 7, days = new Date(y, m + 1, 0).getDate();
+  const todayK = dayKey(now());
+  let cells = "";
+  for (let i = 0; i < first; i++) cells += `<div class="day out"></div>`;
+  for (let d = 1; d <= days; d++){
+    const k = dayKey(new Date(y, m, d).getTime()), its = map[k] || [];
+    const img = (its.find(x => x.img) || {}).img;
+    const dots = its.length ? `<span class="dots">${its.some(x => x.type === "cap") ? "<i></i>" : ""}${its.some(x => x.type === "entry") ? '<i class="j"></i>' : ""}</span>` : "";
+    const cls = `day ${its.length ? "has" : ""} ${img ? "img" : ""} ${k === todayK ? "today" : ""}`;
+    cells += its.length ? `<button class="${cls}" data-act="day" data-v="${k}" aria-label="${d} ${fmt(calMonth, { month:"long" })}, ${its.length} souvenir${its.length > 1 ? "s" : ""}">${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : ""}${img ? "" : dots}<span>${d}</span></button>` : `<div class="${cls}"><span>${d}</span></div>`;
+  }
+  const s = state();
+  return `<div class="head"><span class="eyebrow">${s.opened.length} capsule${s.opened.length > 1 ? "s" : ""} ouverte${s.opened.length > 1 ? "s" : ""}</span><h1 class="ltitle">Souvenirs</h1></div>
+    <div class="cal"><div class="calhead"><button data-act="cal-prev" aria-label="Mois précédent" ${calMonth <= minM ? "disabled" : ""}>${IC.chevl}</button><b>${fmt(calMonth, { month:"long", year:"numeric" })}</b><button data-act="cal-next" aria-label="Mois suivant" ${calMonth >= maxM ? "disabled" : ""}>${IC.chevr}</button></div>
+      <div class="calgrid">${["L","M","M","J","V","S","D"].map(x => `<div class="dow">${x}</div>`).join("")}${cells}</div>
+      <div class="legend"><span><i></i>Capsule</span><span><i class="j"></i>Carnet</span></div></div>
+    ${s.opened.length ? `<p class="foot">Touche un jour pour revoir ce que tu as ouvert ou écrit.</p>` : `<p class="foot">Chaque capsule que tu ouvres s'ajoute ici, au jour où tu l'as découverte.</p>`}`;
+}
+function openDay(k){
+  const its = itemsByDay()[k] || [];
+  if (its.length === 1){ const it = its[0]; return it.type === "cap" ? viewCapsule(it.c) : openEntry(it.e); }
+  sheet({ title: fmt(parseDay(k), { weekday:"long", day:"numeric", month:"long" }), right:`<button class="tbtn bold" data-act="close">OK</button>`,
+    body:`<div class="group">${its.map(it => it.type === "cap"
+      ? `<button class="rowi" data-act="view-cap" data-v="${it.c.id}">${sq(it.c.kind)}<span class="t"><b>${esc(it.c.author_name)}</b><small>${TYPES[it.c.kind].label}</small></span>${IC.chev}</button>`
+      : `<button class="rowi" data-act="entry" data-v="${it.e.id}"><span class="sq" style="background:var(--rind)">${IC.book}</span><span class="t"><b>${esc(it.e.place || "Page de carnet")}</b><small>Ton carnet</small></span>${IC.chev}</button>`).join("")}</div>` });
+}
+
+/* ===== Romane : carnet ===== */
+function viewCarnetRomane(){
+  const list = Store.journal.slice().sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.created_at || "").localeCompare(a.created_at || ""));
+  return `<div class="head"><div class="headrow"><h1 class="ltitle">Carnet</h1><button class="pillbtn" data-act="new-montage">${IC.sparkles} Montage</button></div><p class="sub">Ton journal de voyage. Privé, sauf ce que tu choisis de partager.</p></div>
+    <button class="btn" data-act="new-entry">${IC.plus} Nouvelle page</button>
+    ${list.length ? list.map(entryCard).join("") : `<div class="group"><div class="empty">${IC.book}<b>Ta première page</b><p>Des photos, quelques lignes, l'endroit où tu es. Tu décides ensuite si la bande peut la voir.</p></div></div>`}`;
+}
+let draftEntry = null;
+function newEntrySheet(){
+  draftEntry = { photos: [], text:"", place:"", date: dayKey(now()), shared:false, busy:false };
+  const el = sheet({ title:"Nouvelle page", left:`<button class="tbtn" data-act="close">Annuler</button>`, right:`<button class="tbtn bold" data-act="save-entry">Enregistrer</button>`, body:`
+    <div><div class="ghead">Photos</div><div class="thumbs" id="e-thumbs"></div><input type="file" id="e-pick" accept="image/*" multiple hidden></div>
+    <div class="group"><textarea class="field" id="e-text" placeholder="Raconte ta journée…" maxlength="6000"></textarea></div>
+    <div class="group plain">
+      <label class="rowi"><span class="sq" style="background:#7A5A4C">${IC.pin}</span><input class="field" id="e-place" placeholder="Lieu (ex : Séville)" maxlength="80" style="padding:0"></label>
+      <label class="rowi"><span class="sq" style="background:#B5502E">${IC.people}</span><span class="t"><b>Partager avec la bande</b></span><span class="switch"><input type="checkbox" id="e-share"><span></span></span></label>
+    </div>
+    <p class="foot" style="margin-top:-14px">Si tu partages, tout le monde reçoit une notification et peut voir cette page.</p>
+    <p class="err" id="e-err" hidden></p>` });
+  drawThumbs();
+  el.querySelector("#e-pick").addEventListener("change", async ev => {
+    const files = [...ev.target.files].slice(0, MAX_PHOTOS - draftEntry.photos.length);
+    for (const f of files){ const b = await compressImage(f); draftEntry.photos.push({ blob:b, url:URL.createObjectURL(b) }); }
+    ev.target.value = ""; drawThumbs();
+  });
+}
+function drawThumbs(){
+  const z = document.getElementById("e-thumbs"); if (!z) return;
+  z.innerHTML = draftEntry.photos.map((p, i) => `<div class="th"><img src="${p.url}" alt=""><button data-act="e-rm" data-v="${i}" aria-label="Retirer la photo">${IC.x}</button></div>`).join("")
+    + (draftEntry.photos.length < MAX_PHOTOS ? `<label class="th add" for="e-pick" aria-label="Ajouter des photos">${IC.plus}</label>` : "");
+}
+async function saveEntry(){
+  const d = draftEntry; if (d.busy) return;
+  d.text = document.getElementById("e-text").value.trim(); d.place = document.getElementById("e-place").value.trim(); d.shared = document.getElementById("e-share").checked;
+  const err = document.getElementById("e-err");
+  if (!d.text && !d.photos.length){ err.textContent = "Ajoute au moins une photo ou quelques lignes."; err.hidden = false; return; }
+  d.busy = true; const b = document.querySelector('[data-act="save-entry"]'); b.disabled = true; b.textContent = "Envoi…";
+  try{
+    const e = { id: uid(), kind:"page", date: d.date, text: d.text || null, place: d.place || null, shared: d.shared };
+    await Store.addEntry(e, d.photos.map(p => p.blob));
+    if (d.shared) Push.send("shared", `${CONFIG.PRENOM} a partagé une page`, d.place ? `Nouvelles de ${d.place}` : "Va voir son carnet");
+    popLayer(); tab = "carnet"; render();
+  }catch(ex){ d.busy = false; b.disabled = false; b.textContent = "Enregistrer"; err.textContent = "L'envoi a échoué. Vérifie ta connexion et réessaie."; err.hidden = false; }
+}
+function openEntry(e){
+  if (e.kind === "montage") return role === "romane" ? montageSheet(e) : playMontage(e);
+  const photos = (e.photos || []).map(p => Store.url(p)).filter(Boolean);
+  const own = role === "romane";
+  sheet({ title: fmt(parseDay(e.date), { day:"numeric", month:"long" }), left: own ? "" : "", right:`<button class="tbtn bold" data-act="close">OK</button>`, body:`
+    ${photos.length ? `<div class="scroller">${photos.map(u => `<img src="${esc(u)}" alt="">`).join("")}</div>` : ""}
+    ${e.place ? `<span class="from">${esc(e.place)}</span>` : ""}
+    ${e.text ? `<p class="letter">${esc(e.text)}</p>` : ""}
+    ${own ? shareControls(e) : `<p class="foot" style="padding:0">Partagé par ${P()}</p>`}` });
+}
+function shareControls(e){
+  return `<div class="group plain"><label class="rowi"><span class="sq" style="background:#B5502E">${IC.people}</span><span class="t"><b>Partager avec la bande</b></span><span class="switch"><input type="checkbox" data-act="toggle-share" data-v="${e.id}" ${e.shared ? "checked" : ""}><span></span></span></label></div>
+    <div class="group plain"><button class="rowi danger" data-act="del-entry" data-v="${e.id}" style="justify-content:center">Supprimer</button></div>`;
+}
+
+/* ===== Montage automatique ===== */
+function montageItems(cfg){
+  const from = cfg.from ? parseDay(cfg.from) : 0, to = cfg.to ? parseDay(cfg.to) + DAY : Infinity;
+  const inR = t => t >= from && t < to;
+  const out = [];
+  Store.caps.filter(c => c.opened_at && inR(new Date(c.opened_at).getTime())).forEach(c => {
+    const t = new Date(c.opened_at).getTime();
+    if (c.kind === "photo" && Store.url(c.media_path)) out.push({ t, img: Store.url(c.media_path), cap: `De ${c.author_name}` });
+    else if (c.text) out.push({ t, text: c.text, cap: c.author_name });
+  });
+  Store.journal.filter(e => e.kind !== "montage" && inR(parseDay(e.date))).forEach(e => {
+    const t = parseDay(e.date);
+    (e.photos || []).forEach(p => { const u = Store.url(p); if (u) out.push({ t, img:u, cap: e.place || fmtDate(t) }); });
+    if (e.text && !(e.photos || []).length) out.push({ t, text: e.text.slice(0, 220), cap: e.place || "Mon carnet", own:true });
+  });
+  return out.sort((a, b) => a.t - b.t).slice(0, 40);
+}
+function friendSongs(){
+  const seen = new Set();
+  return Store.caps.filter(c => c.kind === "song" && c.song && c.opened_at).sort((a, b) => b.opened_at.localeCompare(a.opened_at))
+    .map(c => ({ ...c.song, by: c.author_name })).filter(s => { const k = s.title + s.artist; if (seen.has(k)) return false; seen.add(k); return true; });
+}
+let draftM = null;
+function newMontageSheet(){
+  const songs = friendSongs();
+  const n = new Date(now());
+  draftM = { period:"month", song: songs.find(s => s.preview) || songs[0] || null, extra: [], searching:false };
+  sheet({ title:"Nouveau montage", left:`<button class="tbtn" data-act="close">Annuler</button>`, right:`<button class="tbtn bold" data-act="make-montage">Créer</button>`, body:`<div id="m-body"></div>` });
+  drawMontageForm();
+}
+function montageRange(){
+  const n = new Date(now());
+  if (draftM.period === "month") return { from: dayKey(new Date(n.getFullYear(), n.getMonth(), 1).getTime()), to: dayKey(now()), title: "Mon mois de " + fmt(n, { month:"long" }) };
+  return { from: CONFIG.DEPART, to: dayKey(now()), title: "Mon voyage" };
+}
+function drawMontageForm(){
+  const z = document.getElementById("m-body"); if (!z) return;
+  const r = montageRange(), count = montageItems(r).length;
+  const songs = [...friendSongs(), ...draftM.extra];
+  const isSel = s => draftM.song && s && draftM.song.title === s.title && draftM.song.artist === s.artist;
+  z.innerHTML = `
+    <div class="seg" role="group" aria-label="Période"><button data-act="m-period" data-v="month" aria-pressed="${draftM.period === "month"}">Ce mois-ci</button><button data-act="m-period" data-v="all" aria-pressed="${draftM.period === "all"}">Tout le voyage</button></div>
+    <p class="foot" style="margin-top:-12px">${count} souvenir${count > 1 ? "s" : ""} : les capsules ouvertes et les pages de ton carnet sur cette période.</p>
+    <div><div class="ghead">Musique</div><div class="group plain">
+      ${songs.map((s, i) => `<button class="rowi" data-act="m-song" data-v="${i}">${s.artwork ? `<img src="${esc(s.artwork)}" alt="" style="width:36px;height:36px;border-radius:6px;object-fit:cover">` : `<span class="sq song">${IC.music}</span>`}<span class="t"><b>${esc(s.title)}</b><small>${s.by ? "Envoyée par " + esc(s.by) : esc(s.artist)}${s.preview ? "" : " · pas d'extrait"}</small></span>${isSel(s) ? `<span class="check">${IC.check}</span>` : ""}</button>`).join("")}
+      <button class="rowi" data-act="m-song" data-v="-1"><span class="sq text">${IC.x}</span><span class="t"><b>Sans musique</b></span>${!draftM.song ? `<span class="check">${IC.check}</span>` : ""}</button>
+    </div>${songs.length ? `<p class="foot" style="padding-top:6px">Les chansons de la bande passent en premier.</p>` : ""}</div>
+    <div><div class="ghead">Choisir ma musique</div><div class="group"><form id="m-search" style="display:flex;align-items:center;padding-right:8px"><input class="field" id="m-q" placeholder="Titre ou artiste" enterkeyhint="search"><button class="tbtn bold" type="submit">${draftM.searching ? "…" : "Chercher"}</button></form></div><div id="m-res" class="group plain" style="margin-top:8px" hidden></div></div>
+    <p class="err" id="m-err" hidden></p>`;
+  document.getElementById("m-search").addEventListener("submit", e => {
+    e.preventDefault(); const q = document.getElementById("m-q").value.trim(); if (!q) return;
+    searchSongs(q, res => {
+      const box = document.getElementById("m-res"); if (!box) return;
+      if (!res){ const er = document.getElementById("m-err"); er.textContent = "La recherche n'est pas disponible ici."; er.hidden = false; return; }
+      box.hidden = !res.length;
+      box.innerHTML = res.map((s, i) => `<button class="rowi" data-act="m-pick" data-v="${i}">${s.artwork ? `<img src="${esc(s.artwork)}" alt="" style="width:36px;height:36px;border-radius:6px;object-fit:cover">` : ""}<span class="t"><b>${esc(s.title)}</b><small>${esc(s.artist)}</small></span></button>`).join("");
+      draftM.results = res;
+    });
+  });
+}
+async function makeMontage(){
+  const r = montageRange();
+  if (!montageItems(r).length){ const er = document.getElementById("m-err"); er.textContent = "Pas encore de souvenirs sur cette période. Ouvre des capsules ou écris dans ton carnet."; er.hidden = false; return; }
+  const e = { id: uid(), kind:"montage", date: dayKey(now()), title: r.title, text:null, place:null, shared:false, montage:{ from:r.from, to:r.to, song: draftM.song } };
+  try{ await Store.addEntry(e, []); }catch(ex){ const er = document.getElementById("m-err"); er.textContent = "L'enregistrement a échoué. Vérifie ta connexion."; er.hidden = false; return; }
+  popLayer(); tab = "carnet"; render(); playMontage(e);
+}
+function montageSheet(e){
+  const n = montageItems(e.montage || {}).length;
+  sheet({ title: e.title || "Montage", right:`<button class="tbtn bold" data-act="close">OK</button>`, body:`
+    <button class="entry" data-act="play" data-v="${e.id}">${entryCover(e)}<div class="meta"><b>${esc(e.title || "Montage")}</b><p>${n} souvenir${n > 1 ? "s" : ""}${e.montage && e.montage.song ? " · " + esc(e.montage.song.title) : ""}</p></div></button>
+    ${shareControls(e)}` });
+}
+let player = null;
+function playMontage(e){
+  const items = montageItems(e.montage || {});
+  const song = e.montage && e.montage.song;
+  const slides = [...items, { end:true }];
+  const el = document.createElement("div"); el.className = "player"; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", e.title || "Montage");
+  el.innerHTML = `<div class="bars">${slides.map(() => "<i><b></b></i>").join("")}</div>
+    <div class="top"><span>${esc(e.title || "Montage")}</span><button data-act="player-close" aria-label="Fermer">${IC.x}</button></div>
+    ${song ? `<div class="nowplaying">${IC.music}<span>${esc(song.title)} · ${esc(song.artist)}</span></div>` : ""}
+    <div class="stage" id="stage"></div><button class="tapl" data-act="player-prev" aria-label="Précédent"></button><button class="tapr" data-act="player-next" aria-label="Suivant"></button>`;
+  pushLayer(el);
+  const audio = song && song.preview ? new Audio(song.preview) : null;
+  if (audio){ audio.loop = true; audio.volume = .9; audio.play().catch(() => {}); }
+  player = { el, slides, i: -1, audio, timer:null, dur: 4500 };
+  showSlide(0);
+}
+function showSlide(i){
+  const p = player; if (!p) return;
+  if (i < 0) i = 0;
+  if (i >= p.slides.length) return closePlayer();
+  p.i = i; clearTimeout(p.timer);
+  const s = p.slides[i], stage = p.el.querySelector("#stage");
+  let html;
+  if (s.end) html = `<div class="slide end"><div class="logo">${LOGO}</div><b>Querida ${P()}</b><p>Avec tout l'amour de la bande</p></div>`;
+  else if (s.img) html = `<div class="slide"><img src="${esc(s.img)}" alt=""><div class="cap">${esc(s.cap || "")}</div></div>`;
+  else html = `<div class="slide txt ${s.own ? "b" : (i % 2 ? "r" : "")}"><p>${esc(s.text)}</p><small>${esc(s.cap || "")}</small></div>`;
+  stage.innerHTML = html;
+  p.el.querySelectorAll(".bars i b").forEach((b, k) => { b.style.transition = "none"; b.style.width = k < i ? "100%" : "0"; });
+  const cur = p.el.querySelectorAll(".bars i b")[i];
+  requestAnimationFrame(() => requestAnimationFrame(() => { cur.style.transition = `width ${p.dur}ms linear`; cur.style.width = "100%"; }));
+  p.timer = setTimeout(() => showSlide(i + 1), s.end ? 3500 : p.dur);
+}
+function closePlayer(){ if (!player) return; clearTimeout(player.timer); if (player.audio){ player.audio.pause(); } const el = player.el; player = null; const k = layers.indexOf(el); if (k >= 0){ layers.splice(k, 1); el.remove(); } if (!layers.length) document.body.style.overflow = ""; }
+
+/* ===== Capsules : ouverture et lecture ===== */
+function capsuleBody(c){
+  const url = Store.url(c.media_path);
+  let media = "";
+  if (c.kind === "photo" && url) media = `<div class="media"><img src="${esc(url)}" alt="Photo de ${esc(c.author_name)}"></div>`;
+  if (c.kind === "video" && url) media = `<div class="media"><video src="${esc(url)}" controls playsinline preload="metadata"></video></div>`;
+  if (c.kind === "audio" && url) media = `<audio src="${esc(url)}" controls preload="metadata"></audio>`;
+  if (c.kind === "song" && c.song) media = songCard(c.song) + (c.song.preview ? `<audio src="${esc(c.song.preview)}" controls preload="none"></audio>` : "") + songLinks(c.song);
+  if (["photo","video","audio"].includes(c.kind) && !url) media = `<p class="foot" style="padding:0">Le fichier n'est pas disponible en démo.</p>`;
+  return `<div class="reveal" style="display:flex;flex-direction:column;gap:18px"><span class="from">De la part de ${esc(c.author_name)}${c.relation ? " · " + esc(c.relation) : ""}</span><p class="letter" style="font-family:var(--f-display);font-style:italic;font-size:30px;color:var(--accent)">Querida ${P()},</p>${media}${c.text ? `<p class="letter">${esc(c.text)}</p>` : ""}
+    ${c.opened_at ? `<p class="foot" style="padding:0">Ouverte le ${fmt(new Date(c.opened_at).getTime(), { day:"numeric", month:"long", year:"numeric" })}</p>` : ""}</div>`;
+}
+function viewCapsule(c){ sheet({ title: TYPES[c.kind].label, right:`<button class="tbtn bold" data-act="close">OK</button>`, body: capsuleBody(c) }); }
+async function openCapsule(c){
+  const el = sheet({ title:"", full:true, right:`<button class="tbtn bold" data-act="close-render">OK</button>`, body:`<div class="center" style="padding-top:18vh;gap:18px"><div class="envelope" id="env" style="width:220px"><div class="flap"></div><div class="seal">${INI}</div></div><span class="from">De la part de ${esc(c.author_name)}</span></div>` });
+  const body = el.querySelector(".sbody");
+  try{ await Store.openCapsule(c); }catch(e){ body.innerHTML = `<p class="err" style="padding:0">La capsule n'a pas pu s'ouvrir. Vérifie ta connexion et réessaie.</p>`; return; }
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  setTimeout(() => document.getElementById("env")?.classList.add("open"), 250);
+  setTimeout(() => { body.innerHTML = capsuleBody(c); }, reduce ? 0 : 1300);
+}
+
+/* ===== Amis : composer une capsule ===== */
+let draft = null, rec = null, songRes = [], songManual = false;
+function chooseType(){
+  actionSheet(Object.keys(TYPES).map(t => `<button class="rowi" data-act="compose" data-v="${t}">${sq(t)}<span class="t"><b>${TYPES[t].label}</b></span></button>`).join(""));
+}
+function composeSheet(kind){
+  draft = { kind, blob:null, blobUrl:null, moment:"voyage", song:null, busy:false };
+  songRes = []; songManual = false;
+  sheet({ title: TYPES[kind].label, left:`<button class="tbtn" data-act="close-compose">Annuler</button>`, right:`<button class="tbtn bold" data-act="send">Déposer</button>`, body:`
+    <h2 style="margin:0;font-size:22px;font-weight:700">${TYPES[kind].title}</h2>
+    <div id="media-zone" style="display:flex;flex-direction:column;gap:10px"></div>
+    <div><div class="ghead">${kind === "text" ? "Ton message" : "Un petit mot (facultatif)"}</div><div class="group"><textarea class="field" id="c-text" maxlength="4000" placeholder="${kind === "song" ? "Notre son de l'été 2024 à la plage" : kind === "text" ? "Écris-lui ce que tu veux…" : "Raconte le souvenir"}"></textarea></div></div>
+    <div><div class="ghead">Quand doit-elle l'ouvrir ?</div><div class="group plain" id="moments"></div><p class="foot" style="padding-top:6px" id="m-hint"></p></div>
+    <p class="err" id="c-err" hidden></p>` });
+  drawMoments(); drawMedia();
+}
+function drawMoments(){
+  document.getElementById("moments").innerHTML = Object.keys(MOMENTS).map(m => `<button class="rowi" data-act="moment" data-v="${m}"><span class="t"><b>${MOMENTS[m].label}</b></span>${draft.moment === m ? `<span class="check">${IC.check}</span>` : ""}</button>`).join("");
+  document.getElementById("m-hint").textContent = MOMENTS[draft.moment].hint;
+}
+function setErr(m){ const e = document.getElementById("c-err"); if (e){ e.textContent = m; e.hidden = !m; } }
+const canRecord = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder) && window.isSecureContext;
+function drawMedia(){
+  const z = document.getElementById("media-zone"); if (!z) return;
+  const d = draft;
+  if (d.kind === "text"){ z.hidden = true; return; }
+  if (d.kind === "song") return drawSongZone(z);
+  if (rec && rec.active){
+    z.innerHTML = `<div class="rec">${rec.video ? `<video id="rec-prev" autoplay muted playsinline></video>` : `<span class="sq audio" style="width:64px;height:64px;border-radius:18px">${IC.audio}</span>`}
+      <div style="display:flex;gap:8px;align-items:center"><span class="recdot"></span><span class="mono" id="rec-time">0:00 / ${clock(rec.max)}</span></div>
+      <button class="btn" data-act="rec-stop" style="background:var(--danger);color:#fff">Arrêter</button></div>`;
+    const v = document.getElementById("rec-prev"); if (v) v.srcObject = rec.stream; return;
+  }
+  if (d.blob){
+    const tag = d.kind === "photo" ? `<img src="${d.blobUrl}" alt="Aperçu">` : d.kind === "video" ? `<video src="${d.blobUrl}" controls playsinline></video>` : "";
+    z.innerHTML = (tag ? `<div class="media">${tag}</div>` : `<audio src="${d.blobUrl}" controls></audio>`) + `<button class="tbtn" data-act="media-reset" style="align-self:flex-start">Changer</button>`;
+    return;
+  }
+  const accept = { photo:"image/*", video:"video/*", audio:"audio/*" }[d.kind];
+  const recBtn = canRecord() && d.kind === "video" ? `<button class="btn" data-act="rec-start" data-v="video">${IC.video} Filmer (1 min max)</button>`
+               : canRecord() && d.kind === "audio" ? `<button class="btn" data-act="rec-start" data-v="audio">${IC.audio} Enregistrer un vocal</button>` : "";
+  const label = d.kind === "photo" ? "Prendre ou choisir une photo" : d.kind === "video" ? "Choisir dans ma galerie" : "Choisir un fichier audio";
+  z.innerHTML = `${recBtn}<label class="btn ${recBtn ? "tinted" : ""}" for="pick">${d.kind === "photo" ? IC.photo : ""}${label}</label><input type="file" id="pick" accept="${accept}" hidden>
+    ${d.kind === "video" ? `<p class="foot" style="padding:0">1 minute et ${MAX_VIDEO_MB} Mo maximum. Une vidéo filmée ici est plus légère.</p>` : ""}`;
+  document.getElementById("pick").addEventListener("change", onPick);
+}
+async function onPick(e){
+  const f = e.target.files && e.target.files[0]; if (!f) return; setErr("");
+  try{
+    let blob = f;
+    if (draft.kind === "photo") blob = await compressImage(f);
+    if (draft.kind === "video"){
+      if (f.size > MAX_VIDEO_MB * 1048576) return setErr(`Cette vidéo pèse ${Math.round(f.size / 1048576)} Mo, la limite est de ${MAX_VIDEO_MB} Mo. Raccourcis-la ou filme-la ici.`);
+      const dur = await mediaDuration(f); if (dur && dur > MAX_VIDEO_SEC) return setErr(`Cette vidéo dure ${Math.round(dur)} secondes. Garde-la sous la minute.`);
+    }
+    if (draft.kind === "audio" && f.size > 30 * 1048576) return setErr("Ce fichier audio est trop lourd (30 Mo maximum).");
+    setBlob(blob);
+  }catch(err){ setErr("Impossible de lire ce fichier. Essaie avec un autre."); }
+}
+function setBlob(b){ if (draft.blobUrl) URL.revokeObjectURL(draft.blobUrl); draft.blob = b; draft.blobUrl = URL.createObjectURL(b); drawMedia(); }
+function mediaDuration(file){ return new Promise(res => { const v = document.createElement("video"); v.preload = "metadata"; v.onloadedmetadata = () => { res(isFinite(v.duration) ? v.duration : 0); URL.revokeObjectURL(v.src); }; v.onerror = () => res(0); v.src = URL.createObjectURL(file); }); }
+async function compressImage(file){
+  try{
+    const img = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = URL.createObjectURL(file); });
+    const s = Math.min(1, 1800 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(img.src);
+    return (await new Promise(ok => c.toBlob(ok, "image/jpeg", .85))) || file;
+  }catch(e){ return file; }
+}
+function pickMime(video){
+  const list = video ? ["video/mp4;codecs=avc1,mp4a","video/mp4","video/webm;codecs=vp9,opus","video/webm"] : ["audio/mp4","audio/webm;codecs=opus","audio/webm"];
+  return list.find(m => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) || "";
+}
+async function startRec(video){
+  setErr("");
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia(video ? { video:{ facingMode:"user", width:{ ideal:1280 }, height:{ ideal:720 } }, audio:true } : { audio:true });
+    const mime = pickMime(video), opts = mime ? { mimeType:mime } : {};
+    if (video) opts.videoBitsPerSecond = 2500000; opts.audioBitsPerSecond = 96000;
+    const mr = new MediaRecorder(stream, opts), chunks = [];
+    rec = { active:true, video, stream, mr, t0:Date.now(), max: video ? 60 : MAX_AUDIO_SEC };
+    mr.ondataavailable = e => e.data && e.data.size && chunks.push(e.data);
+    mr.onstop = () => { stream.getTracks().forEach(t => t.stop()); clearInterval(rec.tick); const blob = new Blob(chunks, { type:(mr.mimeType || mime || (video ? "video/mp4" : "audio/mp4")).split(";")[0] }); rec = null; if (draft) setBlob(blob); };
+    mr.start(1000);
+    rec.tick = setInterval(() => { const s = Math.floor((Date.now() - rec.t0) / 1000); const el = document.getElementById("rec-time"); if (el) el.textContent = clock(s) + " / " + clock(rec.max); if (s >= rec.max) stopRec(); }, 250);
+    drawMedia();
+  }catch(err){ rec = null; setErr(video ? "Impossible d'accéder à la caméra. Autorise-la dans les réglages, ou choisis une vidéo de ta galerie." : "Impossible d'accéder au micro. Autorise-le dans les réglages."); drawMedia(); }
+}
+function stopRec(){ if (rec && rec.mr.state !== "inactive"){ rec.active = false; rec.mr.stop(); } }
+const clock = s => Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+
+/* Chansons : catalogue iTunes, extraits de 30 secondes */
+function searchSongs(q, cb){
+  const name = "itcb" + Date.now(), s = document.createElement("script");
+  const done = () => { delete window[name]; s.remove(); clearTimeout(to); };
+  const to = setTimeout(() => { done(); cb(null); }, 8000);
+  window[name] = data => { done(); cb((data.results || []).map(r => ({ title:r.trackName, artist:r.artistName, artwork:(r.artworkUrl100 || "").replace("100x100","300x300"), preview:r.previewUrl || null, link:r.trackViewUrl || null }))); };
+  s.onerror = () => { done(); cb(null); };
+  s.src = `https://itunes.apple.com/search?term=${encodeURIComponent(q)}&entity=song&limit=8&country=FR&callback=${name}`;
+  document.head.appendChild(s);
+}
+function drawSongZone(z){
+  if (draft.song){ z.innerHTML = songCard(draft.song) + `<button class="tbtn" data-act="song-reset" style="align-self:flex-start">Choisir une autre chanson</button>`; return; }
+  if (songManual){
+    z.innerHTML = `<div class="group plain"><input class="field" id="s-title" placeholder="Titre"><input class="field" id="s-artist" placeholder="Artiste" style="border-top:.5px solid var(--sep)"></div><button class="btn tinted" data-act="song-manual-ok">Valider</button>`; return;
+  }
+  z.innerHTML = `<div class="group"><form id="s-form" style="display:flex;align-items:center;padding-right:8px"><input class="field" id="s-q" placeholder="Titre ou artiste" enterkeyhint="search"><button class="tbtn bold" type="submit">Chercher</button></form></div>
+    ${songRes.length ? `<div class="group plain">${songRes.map((s, i) => `<button class="rowi" data-act="song-pick" data-v="${i}">${s.artwork ? `<img src="${esc(s.artwork)}" alt="" style="width:40px;height:40px;border-radius:6px;object-fit:cover">` : ""}<span class="t"><b>${esc(s.title)}</b><small>${esc(s.artist)}</small></span></button>`).join("")}</div>` : ""}
+    <button class="tbtn" data-act="song-manual" style="align-self:flex-start">L'écrire moi-même</button>`;
+  document.getElementById("s-form").addEventListener("submit", e => {
+    e.preventDefault(); const q = document.getElementById("s-q").value.trim(); if (!q) return; setErr("");
+    searchSongs(q, res => { if (!res){ setErr("La recherche n'est pas disponible ici. Écris le titre toi-même."); songManual = true; return drawMedia(); } songRes = res; if (!res.length) setErr("Aucun résultat. Essaie d'autres mots."); drawMedia(); const i = document.getElementById("s-q"); if (i) i.value = q; });
+  });
+}
+function songCard(s){ return `<div class="song">${s.artwork ? `<img src="${esc(s.artwork)}" alt="">` : `<span class="art">${IC.music}</span>`}<span class="t"><b>${esc(s.title)}</b><span>${esc(s.artist || "")}</span></span></div>`; }
+function songLinks(s){ const q = encodeURIComponent(s.title + " " + (s.artist || "")); return `<div style="display:flex;gap:16px;flex-wrap:wrap"><a class="tbtn" href="https://open.spotify.com/search/${q}" target="_blank" rel="noopener">Spotify</a><a class="tbtn" href="https://www.deezer.com/search/${q}" target="_blank" rel="noopener">Deezer</a>${s.link ? `<a class="tbtn" href="${esc(s.link)}" target="_blank" rel="noopener">Apple Music</a>` : ""}</div>`; }
+
+async function send(){
+  const d = draft; if (!d || d.busy) return;
+  const text = (document.getElementById("c-text").value || "").trim();
+  if (d.kind === "text" && !text) return setErr("Écris ton message avant de le déposer.");
+  if (["photo","video","audio"].includes(d.kind) && !d.blob) return setErr(rec ? "Arrête d'abord l'enregistrement." : d.kind === "audio" ? "Enregistre d'abord ton vocal." : `Ajoute d'abord ta ${TYPES[d.kind].label.toLowerCase()}.`);
+  if (d.kind === "song" && !d.song) return setErr("Choisis une chanson.");
+  d.busy = true; setErr("");
+  const b = document.querySelector('[data-act="send"]'); if (b){ b.disabled = true; b.textContent = "Envoi…"; }
+  const c = { id: uid(), author_id: me.id, author_name: me.name, relation: me.relation, kind: d.kind, text: text || null, moment: d.moment, song: d.song || null };
+  try{
+    await Store.addCapsule(c, d.blob);
+    const body = document.querySelector(".sheet:last-of-type .sbody") || layers[layers.length - 1].querySelector(".sbody");
+    layers[layers.length - 1].querySelector(".navbar").innerHTML = `<div></div><div class="ttl">Déposée</div><div class="r"><button class="tbtn bold" data-act="close-render">OK</button></div>`;
+    layers[layers.length - 1].querySelector(".sbody").innerHTML = `<div class="center reveal" style="padding-top:12vh;gap:16px"><div class="envelope open"><div class="flap"></div><div class="seal">${INI}</div></div><h2 style="margin:0;font-size:24px">Capsule déposée</h2>
+      <p class="sub" style="max-width:30ch">${P()} la découvrira ${d.moment === "retour" ? "à son retour" : d.moment === "cafard" ? "un jour où elle aura besoin d'un sourire" : d.moment === "avant" ? "avant son départ" : "pendant son voyage"}.</p>
+      <button class="btn tinted" data-act="again" style="max-width:320px">En déposer une autre</button></div>`;
+  }catch(err){ d.busy = false; if (b){ b.disabled = false; b.textContent = "Déposer"; } setErr("L'envoi a échoué. Vérifie ta connexion et réessaie."); }
+}
+function myCapsuleSheet(c){
+  sheet({ title: TYPES[c.kind].label, right:`<button class="tbtn bold" data-act="close">OK</button>`, body:`<div class="group"><div class="rowi">${sq(c.kind)}<span class="t"><b>${esc(summary(c))}</b><small>${esc(MOMENTS[c.moment || "voyage"].label)}</small></span></div></div>
+    <p class="foot">${c.opened_at ? `${P()} l'a ouverte le ${fmtDate(new Date(c.opened_at).getTime())}.` : `${P()} ne l'a pas encore ouverte.`}</p>
+    <div class="group plain" id="del-zone"><button class="rowi danger" data-act="del-cap-ask" data-v="${c.id}" style="justify-content:center">Supprimer la capsule</button></div>` });
+}
+
+/* ===== QR codes (?qr=CODE) ===== */
+async function renderQR(){
+  const base = location.origin + location.pathname, linkR = base + "?pour=" + encodeURIComponent(CONFIG.CODE_ROMANE);
+  $app.innerHTML = `<main class="screen"><div class="head"><h1 class="ltitle">QR codes</h1></div>
+    <div><div class="ghead">Pour ${P()}</div><div class="group qr" style="padding:16px"><div id="qr-r"></div><p class="code">${esc(linkR)}</p></div></div>
+    <div><div class="ghead">Pour les amis</div><div class="group qr" style="padding:16px"><div id="qr-a"></div><p class="code">${esc(base)}</p></div></div></main>`;
+  try{
+    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js");
+    const draw = (id, t) => { const q = qrcode(0, "M"); q.addData(t); q.make(); document.getElementById(id).innerHTML = q.createImgTag(8, 8, "QR code"); };
+    draw("qr-r", linkR); draw("qr-a", base);
+  }catch(e){ document.getElementById("qr-r").textContent = "Impossible de générer le QR code ici."; }
+}
+
+/* ---------------- Actions ---------------- */
+document.addEventListener("click", async ev => {
+  const b = ev.target.closest("[data-act]"); if (!b || b.disabled) return;
+  const a = b.dataset.act, v = b.dataset.v;
+  switch (a){
+    case "close": popLayer(); break;
+    case "close-render": clearLayers(); render(); break;
+    case "close-compose": if (rec) stopRec(); draft = null; popLayer(); break;
+    case "tab": tab = v; clearLayers(); render(); window.scrollTo(0, 0); break;
+    case "ob-rel": obRel = v; drawRelations(); document.getElementById("ob-err").hidden = true; break;
+    case "ob-reclaim": { const c = Store.caps.find(x => x.author_id === v); me = { id:v, name:c.author_name, relation:c.relation }; ls.set("hp_me", me); render(); break; }
+    case "new-capsule": chooseType(); break;
+    case "compose": popLayer(); composeSheet(v); break;
+    case "again": clearLayers(); render(); chooseType(); break;
+    case "moment": draft.moment = v; drawMoments(); break;
+    case "media-reset": draft.blob = null; drawMedia(); break;
+    case "rec-start": startRec(v === "video"); break;
+    case "rec-stop": stopRec(); break;
+    case "song-pick": draft.song = songRes[+v]; drawMedia(); break;
+    case "song-reset": draft.song = null; drawMedia(); break;
+    case "song-manual": songManual = true; drawMedia(); break;
+    case "song-manual-ok": { const t = document.getElementById("s-title").value.trim(), ar = document.getElementById("s-artist").value.trim(); if (!t) return setErr("Écris au moins le titre."); setErr(""); draft.song = { title:t, artist:ar, artwork:null, preview:null, link:null }; songManual = false; drawMedia(); break; }
+    case "send": send(); break;
+    case "my-capsule": { const c = Store.caps.find(x => x.id === v); if (c) myCapsuleSheet(c); break; }
+    case "del-cap-ask": document.getElementById("del-zone").innerHTML = `<button class="rowi danger" data-act="del-cap" data-v="${v}" style="justify-content:center;font-weight:600">Confirmer la suppression</button><button class="rowi" data-act="close" style="justify-content:center">Garder</button>`; break;
+    case "del-cap": { const c = Store.caps.find(x => x.id === v); try{ if (c) await Store.removeCapsule(c); }catch(e){} clearLayers(); render(); break; }
+    case "open-next": { const s = state(); if (s.available > 0 && s.next) openCapsule(s.next); break; }
+    case "open-avant": { const s = state(); if (s.avant.length) openCapsule(s.avant[0]); break; }
+    case "open-cafard": { const s = state(); if (s.cafard.length) openCapsule(s.cafard[Math.floor(Math.random() * s.cafard.length)]); break; }
+    case "open-retour": { const s = state(); if (s.retour.length && s.back) openCapsule(s.retour[0]); break; }
+    case "view-cap": { const c = Store.caps.find(x => x.id === v); if (c) viewCapsule(c); break; }
+    case "cal-prev": calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1); render(); break;
+    case "cal-next": calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1); render(); break;
+    case "day": openDay(v); break;
+    case "new-entry": newEntrySheet(); break;
+    case "e-rm": draftEntry.photos.splice(+v, 1); drawThumbs(); break;
+    case "save-entry": saveEntry(); break;
+    case "entry": { const e = Store.journal.find(x => x.id === v); if (e) openEntry(e); break; }
+    case "del-entry": b.outerHTML = `<button class="rowi danger" data-act="del-entry-yes" data-v="${v}" style="justify-content:center;font-weight:600">Confirmer la suppression</button>`; break;
+    case "del-entry-yes": { const e = Store.journal.find(x => x.id === v); try{ if (e) await Store.removeEntry(e); }catch(x){} clearLayers(); render(); break; }
+    case "new-montage": newMontageSheet(); break;
+    case "m-period": draftM.period = v; drawMontageForm(); break;
+    case "m-song": { const list = [...friendSongs(), ...draftM.extra]; draftM.song = +v < 0 ? null : list[+v]; drawMontageForm(); break; }
+    case "m-pick": { const s = draftM.results[+v]; draftM.extra = [s, ...draftM.extra.filter(x => x.title !== s.title)]; draftM.song = s; drawMontageForm(); break; }
+    case "make-montage": makeMontage(); break;
+    case "play": { const e = Store.journal.find(x => x.id === v); if (e) playMontage(e); break; }
+    case "player-close": closePlayer(); break;
+    case "player-next": if (player) showSlide(player.i + 1); break;
+    case "player-prev": if (player) showSlide(player.i - 1); break;
+    case "help": helpSheet(); break;
+    case "push-on": b.textContent = "…"; try{ await Push.enable(); render(); }catch(e){ b.textContent = "Réessayer"; } break;
+    case "demo-role": role = v; tab = v === "romane" ? "today" : "depot"; clearLayers(); render(); break;
+    case "demo-time": demoOffset = v === "0" ? 0 : Math.max(demoOffset, Math.ceil((parseDay(CONFIG.DEPART) - Date.now()) / DAY) - 7) + 7; render(); break;
+  }
+});
+document.addEventListener("change", async ev => {
+  const t = ev.target;
+  if (t.dataset && t.dataset.act === "toggle-share"){
+    const e = Store.journal.find(x => x.id === t.dataset.v); if (!e) return;
+    try{
+      await Store.updateEntry(e, { shared: t.checked });
+      if (t.checked) Push.send("shared", e.kind === "montage" ? `${CONFIG.PRENOM} a partagé un montage` : `${CONFIG.PRENOM} a partagé une page`, e.title || e.place || "Va voir son carnet");
+    }catch(x){ t.checked = !t.checked; }
+    if (!layers.length) render(); else { const keep = layers.slice(); render(); keep.forEach(l => document.body.appendChild(l)); }
+  }
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape"){ if (player) closePlayer(); else if (layers.length) popLayer(); } });
+
+/* ---------------- Exemples (démo uniquement) ---------------- */
+function demoSeed(){
+  const d0 = parseDay(CONFIG.DEPART);
+  const ex = [
+    ["Exemple · Léa","Ami·e","text","Tu te souviens de la nuit où on a raté le dernier tram et qu'on est rentrées à pied en chantant ? Pense à nous quand tu marcheras dans les rues de là-bas.","voyage"],
+    ["Exemple · Maman","Famille","text","Ma grande, je suis fière de toi. Mange bien, appelle quand tu peux, et profite de chaque jour.","voyage"],
+    ["Exemple · Hugo","Ami·e","song","Notre son de l'été dernier, en boucle dans la voiture.","voyage",{ title:"Chanson d'exemple", artist:"Artiste d'exemple", artwork:null, preview:null, link:null }],
+    ["Exemple · Inès","Collègue","text","Le café de 10 h n'a plus le même goût sans toi.","voyage"],
+    ["Exemple · Léa","Ami·e","text","Un petit sourire en réserve : on t'aime, et dans quelques mois on refait la même soirée qu'avant ton départ.","cafard"],
+    ["Exemple · Toute la bande","Ami·e","text","Bienvenue à la maison ! On a hâte de tout entendre.","retour"],
+    ["Exemple · Tom","Ami·e","text","Bon voyage ! Promets-nous de revenir avec l'accent.","avant"]
+  ];
+  const caps = ex.map((e, i) => ({ id:"demo-" + i, author_id:"demo", author_name:e[0], relation:e[1], kind:e[2], text:e[3], moment:e[4], song:e[5] || null, created_at:new Date().toISOString(), opened_at:null }));
+  const journal = [
+    { id:"demo-j1", kind:"page", date: dayKey(d0 + 2 * DAY), place:"Exemple · Séville", text:"Premier vrai jour ici. Il fait encore 28 degrés en octobre, j'ai mangé des churros à 8 h du matin et je me suis perdue trois fois.", photos:[], shared:true, created_at:new Date().toISOString() },
+    { id:"demo-j2", kind:"page", date: dayKey(d0 + 5 * DAY), place:"Exemple · Plaza de España", text:"Les carreaux bleus partout. Je pense à vous.", photos:[], shared:false, created_at:new Date().toISOString() }
+  ];
+  return { caps, journal };
+}
+
+/* ---------------- Démarrage ---------------- */
+render();
+Store.init().then(render).catch(err => {
+  $app.innerHTML = `<main class="screen"><div class="center" style="padding-top:20vh"><div class="logo">${LOGO}</div><b>Connexion impossible</b><p class="sub">Vérifie ta connexion internet, puis recharge la page.</p><p class="foot">${esc(err.message || "")}</p></div></main>`;
+});
+</script>
+
+</body></html>
