@@ -5,7 +5,7 @@ self.addEventListener("push", e => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (x) { d = { title: "Querida", body: e.data && e.data.text() }; }
   e.waitUntil(self.registration.showNotification(d.title || "Querida", {
-    body: d.body || "", icon: "icon.png", badge: "icon.png", data: { url: d.url || "./" }
+    body: d.body || "", icon: "querida-icon-180.png", badge: "querida-icon-180.png", data: { url: d.url || "./" }
   }));
 });
 self.addEventListener("notificationclick", e => {
