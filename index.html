@@ -9,8 +9,12 @@
 <meta name="theme-color" content="#FBF5EF">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap">
-<link rel="apple-touch-icon" href="icon.png">
-<link id="manifest" rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" sizes="180x180" href="querida-icon-180.png?v=2">
+<link rel="icon" type="image/png" sizes="512x512" href="querida-icon-512.png?v=2">
+<script>
+(function(){var r=false;try{r=new URLSearchParams(location.search).has("pour")||localStorage.getItem("hp_role")==='"romane"';}catch(e){}
+document.write('<link id="manifest" rel="manifest" href="'+(r?"manifest-romane.json":"manifest.json")+'">');})();
+</script>
 <style>
 /* Layout : appli iOS — grands titres, listes groupées, fiches qui montent, barre d'onglets. Palette Azulejo. */
 :root{
@@ -514,7 +518,7 @@ let role = ls.get("hp_role", "ami");
 if (qs.get("pour") && qs.get("pour") === CONFIG.CODE_ROMANE){ role = "romane"; ls.set("hp_role", "romane"); }
 let me = ls.get("hp_me");
 let tab = role === "romane" ? "today" : "depot";
-if (role === "romane") document.getElementById("manifest").href = "manifest-romane.json";
+if (role === "romane"){ const m = document.getElementById("manifest"); if (m) m.href = "manifest-romane.json"; }
 
 const layers = [];
 function pushLayer(el){ layers.push(el); document.body.appendChild(el); document.body.style.overflow = "hidden"; }
@@ -1161,6 +1165,14 @@ function demoSeed(){
 }
 
 /* ---------------- Démarrage ---------------- */
+let lastRefresh = Date.now();
+async function refreshIfStale(){
+  if (DEMO || !Store.ready || layers.length || Date.now() - lastRefresh < 60000) return;
+  lastRefresh = Date.now();
+  try{ await Store.refresh(); calMonth = null; render(); }catch(e){}
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshIfStale(); });
+window.addEventListener("pageshow", e => { if (e.persisted) refreshIfStale(); });
 render();
 Store.init().then(render).catch(err => {
   $app.innerHTML = `<main class="screen"><div class="center" style="padding-top:20vh"><div class="logo">${LOGO}</div><b>Connexion impossible</b><p class="sub">Vérifie ta connexion internet, puis recharge la page.</p><p class="foot">${esc(err.message || "")}</p></div></main>`;
