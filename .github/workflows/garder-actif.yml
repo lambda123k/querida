@@ -1,0 +1,39 @@
+# Querida : garde la base Supabase active (évite la pause des 7 jours)
+name: Garder Querida active
+
+on:
+  schedule:
+    - cron: "17 6 * * *"   # tous les jours vers 8 h (heure de Paris)
+  workflow_dispatch:        # bouton « Run workflow » pour tester à la main
+
+permissions:
+  contents: write
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Réveiller Supabase
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://hslnyzbpuhmqekjbusrl.supabase.co/rest/v1/capsules?select=id&limit=1" \
+            -H "apikey: sb_publishable_TQSglO05NtQHZ1TVF8xpdQ_l66-kAJI")
+          echo "Réponse de Supabase : $code"
+          if [ "$code" != "200" ]; then
+            echo "Supabase ne répond pas normalement : va vérifier le projet (Restore project)."
+            exit 1
+          fi
+
+      # Une fois par semaine, un petit enregistrement pour que GitHub
+      # ne désactive pas cette tâche (il le fait après 60 jours sans activité).
+      - uses: actions/checkout@v4
+      - name: Battement de cœur hebdomadaire
+        run: |
+          if [ "$(date +%u)" = "1" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            date -u +"%Y-%m-%d %H:%M UTC" > .querida-active
+            git config user.name "querida-bot"
+            git config user.email "querida-bot@users.noreply.github.com"
+            git add .querida-active
+            git commit -m "Garder Querida active" || echo "Rien à enregistrer"
+            git push
+          fi
