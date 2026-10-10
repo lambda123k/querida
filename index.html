@@ -607,9 +607,7 @@ function helpSheet(){
     <div class="center" style="gap:8px"><div class="logo" id="sun-logo">${LOGO}</div><h2 style="margin:0;font-size:22px">${role === "romane" ? `Querida ${P()}` : `${APP} en 30 secondes`}</h2>
     ${role === "romane" ? `<p class="letter" style="font-size:18px;max-width:32ch">Cette appli est à toi. Toute la bande y a glissé des souvenirs pour t'accompagner pendant ces 9 mois. Voilà comment ça marche.</p>` : ""}</div>
     <div class="group steps">${rows.join("")}</div>
-    <button class="btn" data-act="close">C'est compris</button>
-    <p class="whisper">Le soleil ne se couche que pour ceux qui le retiennent.</p>` });
-  armSunLogo();
+    <button class="btn" data-act="close">C'est compris</button>` });
 }
 
 /* ===== Amis : bienvenue ===== */
@@ -1153,7 +1151,6 @@ document.addEventListener("click", async ev => {
     case "player-next": if (player) showSlide(player.i + 1); break;
     case "player-prev": if (player) showSlide(player.i - 1); break;
     case "help": helpSheet(); break;
-    case "enig-go": ls.set("hp_enigme_step", 1); drawEnigme(1); break;
     case "push-on": b.textContent = "…"; try{ await Push.enable(); render(); }catch(e){ b.textContent = "Réessayer"; } break;
     case "demo-role": role = v; tab = v === "romane" ? "today" : "depot"; clearLayers(); render(); break;
     case "demo-time": demoOffset = v === "0" ? 0 : Math.max(demoOffset, Math.ceil((parseDay(CONFIG.DEPART) - Date.now()) / DAY) - 7) + 7; render(); break;
@@ -1171,95 +1168,6 @@ document.addEventListener("change", async ev => {
   }
 });
 document.addEventListener("keydown", e => { if (e.key === "Escape"){ if (player) closePlayer(); else if (layers.length) popLayer(); } });
-
-/* ---------------- Énigme cachée : El Enigma del Sol ---------------- */
-function armSunLogo(){
-  const el = document.getElementById("sun-logo"); if (!el) return;
-  let t = null;
-  const stop = () => { clearTimeout(t); t = null; el.classList.remove("sinking"); };
-  el.addEventListener("contextmenu", e => e.preventDefault());
-  el.addEventListener("pointerdown", e => {
-    e.preventDefault(); stop(); el.classList.add("sinking");
-    t = setTimeout(() => { stop(); clearLayers(); openEnigme(); }, 5000);
-  });
-  ["pointerup","pointerleave","pointercancel"].forEach(ev => el.addEventListener(ev, stop));
-}
-const ENIG = [
-  { h:"0b677cb01602791735f341e3b7abe31319c4ff82eec28f5ec25507c0a9f635f8", n:"I",
-    q:"Peint en noir et blanc, il crie sans bouche.\nUn taureau y regarde ailleurs.\nIl a vécu en exil à New York\navant de rentrer à Madrid.\n\nQui est-il ?" },
-  { h:"303c8bd55875dda240897db158acf70afe4226f300757f3518b86e6817c00022", n:"II",
-    q:"Compte les nuits qu'elle passera\nsous le soleil d'Espagne,\nde son départ à son retour.", clue:"La réponse est dans Querida." },
-  { h:"ea9d94bfd2126bb7841df078ed0db21438992c1c659784621974ca7768b90bfa", n:"III",
-    cipher:"YN ERFCHRFGN RF PUHEEBF", q:"Ta dernière réponse est la clé.", clue:"Mais l'alphabet n'a que vingt-six lettres." }
-];
-const normAns = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-async function sha(s){ const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join(""); }
-const toHex = s => [...new TextEncoder().encode(s)].map(x => x.toString(16).padStart(2, "0")).join("");
-const fromHex = h => { try{ return new TextDecoder().decode(new Uint8Array(h.match(/../g).map(x => parseInt(x, 16)))); }catch(e){ return "?"; } };
-const SUNSET = '<svg class="sunset" viewBox="0 0 120 72" aria-hidden="true"><path d="M30 60a30 30 0 0 1 60 0z" fill="#CC3F27"/><rect x="18" y="60" width="84" height="5" rx="2.5" fill="#F2873B"/><rect x="34" y="68" width="52" height="4" rx="2" fill="#F2873B" fill-opacity=".5"/></svg>';
-let demoWall = [];
-const Enigme = {
-  myName(){ return role === "romane" ? CONFIG.PRENOM : ((me && me.name) || "Anonyme"); },
-  async wall(){
-    if (DEMO) return demoWall.slice();
-    const { data, error } = await Store.client.storage.from("capsules").list("enigme", { limit: 200, sortBy: { column: "name", order: "asc" } });
-    if (error) throw error;
-    return (data || []).filter(f => /^\d+__[0-9a-f]+\.txt$/.test(f.name)).sort((a, b) => a.name.localeCompare(b.name))
-      .map(f => { const [ts, hx] = f.name.replace(".txt", "").split("__"); return { ts:+ts, name: fromHex(hx), key: f.name }; });
-  },
-  async sign(){
-    const key = `${String(Date.now()).padStart(14, "0")}__${toHex(this.myName().slice(0, 30))}.txt`;
-    if (DEMO){ demoWall.push({ ts: Date.now(), name: this.myName(), key }); return key; }
-    const r = await Store.client.storage.from("capsules").upload("enigme/" + key, new Blob([this.myName()], { type:"text/plain" }), { contentType:"text/plain", upsert:false });
-    if (r.error) throw r.error;
-    return key;
-  }
-};
-function openEnigme(){
-  const step = ls.get("hp_enigme_step", 0);
-  const el = sheet({ title:"", full:true, right:`<button class="tbtn bold" data-act="close-render">Fermer</button>`, body:`<div class="enig reveal" id="enig"></div>` });
-  el.querySelector(".sheet").classList.add("enigme");
-  drawEnigme(ls.get("hp_enigme_key") ? 99 : step);
-}
-async function drawEnigme(step){
-  const z = document.getElementById("enig"); if (!z) return;
-  if (step === 0){
-    z.innerHTML = `${SUNSET}<span class="roman">El Enigma del Sol</span><h2>¿Quién busca?</h2>
-      <p class="riddle">Trois portes.\nUne tournée pour le premier\nqui les franchit toutes.\n\nAucun indice. Aucune aide.\nNe dis à personne que tu es ici.</p>
-      <button class="btn" data-act="enig-go">Entrer</button>`;
-    return;
-  }
-  if (step >= 1 && step <= 3){
-    const E = ENIG[step - 1];
-    z.innerHTML = `<span class="roman">Porte ${E.n}</span>
-      ${E.cipher ? `<div class="cipher">${E.cipher}</div>` : ""}
-      <p class="riddle">${esc(E.q)}</p>${E.clue ? `<p class="clue">${esc(E.clue)}</p>` : ""}
-      <form id="enig-form" style="display:flex;flex-direction:column;gap:12px" novalidate>
-        <input id="enig-in" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Ta réponse" aria-label="Ta réponse">
-        <p class="nope" id="enig-nope" aria-live="polite"></p>
-        <button class="btn" type="submit">Ouvrir la porte</button></form>`;
-    document.getElementById("enig-form").addEventListener("submit", async e => {
-      e.preventDefault();
-      const v = normAns(document.getElementById("enig-in").value);
-      const nope = document.getElementById("enig-nope");
-      if (!v){ nope.textContent = "Il faut bien répondre quelque chose."; return; }
-      let ok = false; try{ ok = (await sha(v)) === E.h; }catch(x){ nope.textContent = "Ce téléphone ne peut pas vérifier la réponse."; return; }
-      if (!ok){ nope.textContent = ["No.", "Tampoco.", "Frío, frío.", "Nada."][Math.floor(Math.random() * 4)]; z.classList.remove("shake"); void z.offsetWidth; z.classList.add("shake"); return; }
-      if (step < 3){ ls.set("hp_enigme_step", step + 1); drawEnigme(step + 1); }
-      else { z.innerHTML = `${SUNSET}<h2>…</h2>`; try{ const k = await Enigme.sign(); ls.set("hp_enigme_key", k); }catch(x){} drawEnigme(99); }
-    });
-    return;
-  }
-  z.innerHTML = `${SUNSET}<p class="clue" style="text-align:center">Lecture du mur…</p>`;
-  let wall = [], err = false; try{ wall = await Enigme.wall(); }catch(x){ err = true; }
-  const myKey = ls.get("hp_enigme_key");
-  const rank = wall.findIndex(w => w.key === myKey) + 1;
-  const title = rank === 1 ? "¡Eres el primero!" : rank > 1 ? `${rank}e.` : "Tu as franchi les trois portes.";
-  const sub = rank === 1 ? "La tournée est pour toi. Montre cet écran à Naim." : rank > 1 ? "Trop tard pour la tournée. Mais respect éternel." : (err ? "Le mur des génies ne répond pas pour l'instant. Fais une capture d'écran et montre-la à Naim." : "");
-  z.innerHTML = `${SUNSET}<span class="roman">El Enigma del Sol</span><h2>${title}</h2>${sub ? `<p class="riddle" style="font-size:19px">${esc(sub)}</p>` : ""}
-    ${wall.length ? `<div><p class="roman" style="font-size:12px;margin-bottom:8px">Le mur des génies</p><div class="wall">${wall.map((w, i) => `<div class="${w.key === myKey ? "me" : ""}"><b>${i + 1}</b><span style="flex:1">${esc(w.name)}</span><span class="clue">${i === 0 ? "🍻" : new Date(w.ts).toLocaleDateString("fr-FR", { day:"numeric", month:"short" })}</span></div>`).join("")}</div></div>` : ""}
-    <p class="clue" style="text-align:center">Chut. Le soleil garde ses secrets.</p>`;
-}
 
 /* ---------------- Exemples (démo uniquement) ---------------- */
 function demoSeed(){
@@ -1289,6 +1197,20 @@ async function refreshIfStale(){
   try{ await Store.refresh(); calMonth = null; render(); }catch(e){}
 }
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshIfStale(); });
+
+/* ---------------- Énigme cachée : réservée aux amis, dans enigme.js ----------------
+   Jamais chargée avec le lien de Romane. Si le fichier manque ou plante, l'appli continue normalement. */
+if (role === "ami"){
+  try{
+    window.QUERIDA = {
+      role: () => role, me: () => me, demo: () => DEMO, store: () => Store,
+      render: () => render(), clearLayers: () => clearLayers(), layerCount: () => layers.length,
+      goTab: t => { tab = t; clearLayers(); render(); window.scrollTo(0, 0); },
+      push: (type, title, body) => Push.send(type, title, body)
+    };
+    loadScript("enigme.js?v=1").catch(() => {});
+  }catch(e){}
+}
 window.addEventListener("pageshow", e => { if (e.persisted) refreshIfStale(); });
 render();
 Store.init().then(render).catch(err => {
