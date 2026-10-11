@@ -1205,22 +1205,22 @@ async function refreshIfStale(){
 }
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshIfStale(); });
 
-/* ---------------- Énigme cachée : réservée aux amis, dans enigme.js ----------------
-   Jamais chargée avec le lien de Romane. Si le fichier manque ou plante, l'appli continue normalement. */
-if (role === "ami"){
+/* ---------------- Jeux cachés (amis et Romane) et énigme (amis seulement) ----------------
+   L'énigme (enigme.js) n'est jamais chargée avec le lien de Romane. Si un fichier manque ou plante, l'appli continue normalement. */
+if (role === "ami" || role === "romane"){
   try{
     window.QUERIDA = {
-      role: () => role, me: () => me, demo: () => DEMO, store: () => Store,
+      role: () => role, me: () => role === "romane" ? { id: "romane", name: CONFIG.PRENOM } : me, demo: () => DEMO, store: () => Store,
       render: () => render(), clearLayers: () => clearLayers(), layerCount: () => layers.length,
       goTab: t => { tab = t; clearLayers(); render(); window.scrollTo(0, 0); },
       push: (type, title, body) => Push.send(type, title, body),
       pushOn: () => Push.on()
     };
-    loadScript("enigme.js?v=2").catch(() => {});
-    loadScript("arcade.js?v=1").catch(() => {});
-    loadScript("chrono.js?v=2").catch(() => {});
-    loadScript("marathon.js?v=2").catch(() => {});
-    loadScript("feuvert.js?v=1").catch(() => {});
+    if (role === "ami") loadScript("enigme.js?v=2").catch(() => {});
+    loadScript("arcade.js?v=2").catch(() => {});
+    loadScript("chrono.js?v=3").catch(() => {});
+    loadScript("marathon.js?v=3").catch(() => {});
+    loadScript("feuvert.js?v=2").catch(() => {});
   }catch(e){}
 }
 window.addEventListener("pageshow", e => { if (e.persisted) refreshIfStale(); });

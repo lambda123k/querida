@@ -6,7 +6,7 @@
 try{
 
 const Q = window.QUERIDA;
-if (!Q || Q.role() !== "ami") return;
+if (!Q || (Q.role() !== "ami" && Q.role() !== "romane")) return;
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const toHex = s => [...new TextEncoder().encode(s)].map(x => x.toString(16).padStart(2, "0")).join("");
@@ -91,8 +91,15 @@ const st = document.createElement("style"); st.id = "qc-style"; st.textContent =
 /* =================== Le geste : garder le doigt sur le compteur =================== */
 // Toute la case du compteur réagit. Au doigt on écoute les événements « touch » (plus fiables sur iPhone
 // que les « pointer », que Safari annule parfois pendant un appui long) ; à la souris, les « pointer ».
-function counterBox(){ return document.querySelector("#app > main.screen .hero.saff > div"); }
-function counterEl(){ const box = counterBox(); return box ? box.querySelector(".big-num") : null; }
+function counterBox(){
+  const main = document.querySelector("#app > main.screen"); if (!main) return null;
+  if (Q.role() === "romane"){                                  // Romane : le grand compteur de jours, sinon la barre « Jour N »
+    const n = main.querySelector(".hero .big-num"); if (n) return n.closest(".hero");
+    const p = main.querySelector(".group .progress"); return p ? p.closest(".group") : null;
+  }
+  return main.querySelector(".hero.saff > div");
+}
+function counterEl(){ const box = counterBox(); return box ? (box.querySelector(".big-num") || box.querySelector("span")) : null; }
 function decorate(){
   const box = counterBox(); if (!box || box.classList.contains("qc-hold")) return;
   box.classList.add("qc-hold"); box.addEventListener("contextmenu", e => e.preventDefault());

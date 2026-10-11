@@ -6,7 +6,7 @@
 try{
 
 const Q = window.QUERIDA;
-if (!Q || Q.role() !== "ami") return;
+if (!Q || (Q.role() !== "ami" && Q.role() !== "romane")) return;
 
 const TRIES = 5;
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));

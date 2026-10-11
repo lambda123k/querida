@@ -6,7 +6,7 @@
 try{
 
 const Q = window.QUERIDA;
-if (!Q || Q.role() !== "ami") return;
+if (!Q || (Q.role() !== "ami" && Q.role() !== "romane")) return;
 
 const DUR = 10, MAXTAPS = 9999;                                 // pas de plafond réaliste : seule la taille du fichier limite
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -66,7 +66,14 @@ const st = document.createElement("style"); st.id = "qm-style"; st.textContent =
 
 /* =================== Le geste : 10 tapes rapides sur le nombre de capsules =================== */
 const TAPS_TO_OPEN = 10, MAX_GAP = 450;
-function capsBox(){ return document.querySelector("#app > main.screen .hero.saff > div:nth-child(2)"); }
+function capsBox(){
+  const main = document.querySelector("#app > main.screen"); if (!main) return null;
+  if (Q.role() === "romane"){                                  // Romane : son compteur de jours, sinon la barre « Jour N »
+    const n = main.querySelector(".hero .big-num"); if (n) return n.closest(".hero");
+    const p = main.querySelector(".group .progress"); return p ? p.closest(".group") : null;
+  }
+  return main.querySelector(".hero.saff > div:nth-child(2)");
+}
 function decorate(){ const b = capsBox(); if (b && !b.classList.contains("qm-tap")) b.classList.add("qm-tap"); }
 let qd = false; new MutationObserver(() => { if (qd) return; qd = true; requestAnimationFrame(() => { qd = false; try{ decorate(); }catch(e){} }); }).observe(document.body, { childList:true, subtree:true });
 decorate();
@@ -79,7 +86,7 @@ document.addEventListener("pointerdown", e => {
     if (taps.length && now - taps[taps.length - 1] > MAX_GAP) taps = [];
     taps.push(now);
     if (taps.length >= 4){                                         // à partir de la 4e tape, le nombre s'agite
-      const n = box.querySelector(".big-num");
+      const n = box.querySelector(".big-num") || box.querySelector("span");
       if (n){ n.classList.remove("qm-bump"); void n.offsetWidth; n.classList.add("qm-bump"); }
     }
     if (taps.length >= TAPS_TO_OPEN){ taps = []; try{ navigator.vibrate && navigator.vibrate(20); }catch(e){} openGame(); }

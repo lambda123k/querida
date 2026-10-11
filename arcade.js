@@ -6,7 +6,7 @@
 try{
 
 const Q = window.QUERIDA;
-if (!Q || Q.role() !== "ami") return;
+if (!Q || (Q.role() !== "ami" && Q.role() !== "romane")) return;
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const toHex = s => [...new TextEncoder().encode(s)].map(x => x.toString(16).padStart(2, "0")).join("");
@@ -63,7 +63,7 @@ function mainEl(){ return document.querySelector("#app > main.screen"); }
 function decorate(){
   const main = mainEl(); if (!main || !Q.me()) return;
   const tabBtn = document.querySelector('.tabbar .tab[aria-current="page"]');
-  if (!tabBtn || tabBtn.dataset.v !== "depot") return;
+  if (!tabBtn || tabBtn.dataset.v !== (Q.role() === "romane" ? "today" : "depot")) return;
   // si la carte « Active les notifications » n'est pas là, on laisse une petite cloche à sa place
   if (!main.querySelector(".notif") && !main.querySelector(".qa-bellrow")){
     main.insertAdjacentHTML("beforeend", `<div class="qa-bellrow"><span class="sq qa-bell" style="background:var(--accent);color:var(--on-accent);width:30px;height:30px;border-radius:8px;display:grid;place-items:center">${BELL}</span><span>${Q.pushOn() ? "Notifications activées" : "Notifications"}</span></div>`);
