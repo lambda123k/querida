@@ -1,0 +1,30 @@
+# Querida : envoyer une notification à toute la bande (côté amis, jamais à Romane)
+name: Annonce à la bande
+
+on:
+  workflow_dispatch:
+    inputs:
+      titre:
+        description: "Titre de la notification"
+        required: true
+        default: "Querida"
+      message:
+        description: "Texte de la notification"
+        required: true
+
+jobs:
+  envoyer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Envoyer aux amis
+        env:
+          TITRE: ${{ inputs.titre }}
+          MESSAGE: ${{ inputs.message }}
+        run: |
+          body=$(jq -n --arg t "$TITRE" --arg b "$MESSAGE" '{type:"shared", title:$t, body:$b}')
+          rep=$(curl -s -X POST "https://hslnyzbpuhmqekjbusrl.supabase.co/functions/v1/notify" \
+            -H "Content-Type: application/json" \
+            -H "apikey: sb_publishable_TQSglO05NtQHZ1TVF8xpdQ_l66-kAJI" \
+            -d "$body")
+          echo "Réponse : $rep"
+          echo "$rep" | grep -q '"ok":true' || { echo "L'envoi a échoué."; exit 1; }
