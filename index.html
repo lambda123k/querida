@@ -1211,6 +1211,7 @@ if (role === "ami"){
     };
     loadScript("enigme.js?v=1").catch(() => {});
     loadScript("arcade.js?v=1").catch(() => {});
+    loadScript("chrono.js?v=1").catch(() => {});
   }catch(e){}
 }
 window.addEventListener("pageshow", e => { if (e.persisted) refreshIfStale(); });
