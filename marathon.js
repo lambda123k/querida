@@ -8,7 +8,7 @@ try{
 const Q = window.QUERIDA;
 if (!Q || Q.role() !== "ami") return;
 
-const DUR = 10, MAXTAPS = 250;                                  // au-delà de 25 tapes/s, ce n'est plus un pouce
+const DUR = 10, MAXTAPS = 9999;                                 // pas de plafond réaliste : seule la taille du fichier limite
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const toHex = s => [...new TextEncoder().encode(s)].map(x => x.toString(16).padStart(2, "0")).join("");
 const fromHex = h => { try{ return new TextDecoder().decode(new Uint8Array(h.match(/../g).map(x => parseInt(x, 16)))); }catch(e){ return "?"; } };
@@ -87,7 +87,7 @@ document.addEventListener("pointerdown", e => {
 }, true);
 
 /* =================== Classement partagé =================== */
-// arcade/marathon/<tapes sur 3 chiffres>__<date>__<id>__<prénom>.txt
+// arcade/marathon/<tapes sur 3 ou 4 chiffres>__<date>__<id>__<prénom>.txt
 const Board = {
   async load(){
     if (Q.demo()) return [];
@@ -95,7 +95,7 @@ const Board = {
     if (error) throw error;
     const byPlayer = new Map();
     (data || []).forEach(f => {
-      const m = f.name.match(/^(\d{3})__(\d{14})__([A-Za-z0-9]{1,8})__([0-9a-f]+)\.txt$/); if (!m) return;
+      const m = f.name.match(/^(\d{3,4})__(\d{14})__([A-Za-z0-9]{1,8})__([0-9a-f]+)\.txt$/); if (!m) return;
       const r = { score: +m[1], ts: +m[2], id: m[3], name: fromHex(m[4]) };
       if (r.score > MAXTAPS) return;
       const old = byPlayer.get(r.id);
@@ -105,7 +105,7 @@ const Board = {
   },
   async submit(score){
     if (Q.demo()) return;
-    const key = `${String(score).padStart(3, "0")}__${String(Date.now()).padStart(14, "0")}__${myId()}__${toHex(myName().slice(0, 30))}.txt`;
+    const key = `${String(score).padStart(4, "0")}__${String(Date.now()).padStart(14, "0")}__${myId()}__${toHex(myName().slice(0, 30))}.txt`;
     const r = await Q.store().client.storage.from("capsules").upload("arcade/marathon/" + key, new Blob([myName()], { type:"text/plain" }), { contentType:"text/plain", upsert:false });
     if (r.error) throw r.error;
   }
