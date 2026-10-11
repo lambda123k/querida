@@ -69,6 +69,7 @@ const CSS = `
 .qe-pullsky::before{content:"";position:absolute;inset:0;background-image:radial-gradient(1px 1px at 20% 30%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 70% 20%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 45% 60%,#fff8 50%,transparent 51%),radial-gradient(1px 1px at 85% 55%,#fff8 50%,transparent 51%),radial-gradient(1px 1px at 10% 70%,#fff6 50%,transparent 51%)}
 .qe-pullsky .qe-hs{margin-top:calc(env(safe-area-inset-top,0px) + 20px)}
 body.qe-pulling{-webkit-user-select:none;user-select:none}
+html:has(body.qe-pullable),body.qe-pullable{overscroll-behavior-y:none}
 body.qe-pullable #app > main.screen{position:relative;z-index:1;background:var(--bg)}
 .qe-land{display:none;justify-content:center;padding-top:8px}
 @media (orientation:landscape) and (max-height:520px){.qe-land{display:flex}}
@@ -354,12 +355,18 @@ function movePull(y){ pull.d = Math.max(0, Math.min(140, (y - pull.y) * .55)); i
 document.addEventListener("pointerdown", e => { if (e.pointerType !== "mouse" || !canPull(e.target)) return; pull = { y: e.clientY, d: 0 }; document.body.classList.add("qe-pulling"); });
 document.addEventListener("pointermove", e => { if (pull && e.pointerType === "mouse"){ movePull(e.clientY); if (pull.d > 4) e.preventDefault(); } });
 document.addEventListener("pointerup", e => { if (e.pointerType === "mouse") endPull(); });
-document.addEventListener("touchstart", e => { if (e.touches.length !== 1 || !canPull(e.target)) return; pull = { y: e.touches[0].clientY, d: 0 }; document.body.classList.add("qe-pulling"); }, { passive:true });
+document.addEventListener("touchstart", e => { if (e.touches.length !== 1 || !canPull(e.target)) return; pull = { y: e.touches[0].clientY, x: e.touches[0].clientX, d: 0, on: false }; }, { passive:true });
 document.addEventListener("touchmove", e => {
   if (!pull) return;
-  const dy = e.touches[0].clientY - pull.y;
-  if (dy > 0 && window.scrollY <= 2){ e.preventDefault(); movePull(e.touches[0].clientY); }
-  else if (pull.d <= 4){ pull = null; document.body.classList.remove("qe-pulling"); }
+  const t = e.touches[0], dy = t.clientY - pull.y, dx = t.clientX - pull.x;
+  if (!pull.on){
+    // On attend une vraie intention : sinon le moindre tremblement du doigt bloquait le défilement sur iPhone
+    if (Math.abs(dy) < 8 && Math.abs(dx) < 8) return;
+    if (dy > Math.abs(dx) && window.scrollY <= 0 && e.cancelable){ pull.on = true; pull.y = t.clientY; document.body.classList.add("qe-pulling"); }
+    else { pull = null; return; }
+  }
+  if (e.cancelable) e.preventDefault();
+  movePull(t.clientY);
 }, { passive:false });
 document.addEventListener("touchend", endPull); document.addEventListener("touchcancel", endPull);
 function endPull(){

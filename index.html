@@ -549,6 +549,12 @@ const layers = [];
 function pushLayer(el){ layers.push(el); document.body.appendChild(el); document.body.style.overflow = "hidden"; }
 function popLayer(){ const el = layers.pop(); if (el) el.remove(); if (!layers.length) document.body.style.overflow = ""; }
 function clearLayers(){ while (layers.length) popLayer(); }
+// Filet de sécurité : la page n'est bloquée que si une fenêtre est vraiment ouverte
+const OVERLAYS = ".sheet,.asheet,.backdrop,.player,#qe-obs,#qe-plates,#qe-finale,#qe-intro,#qe-eclipse,#qa-arcade,.qa-game";
+function syncScrollLock(){ document.body.style.overflow = document.querySelector(OVERLAYS) ? "hidden" : ""; }
+new MutationObserver(syncScrollLock).observe(document.body, { childList:true });
+window.addEventListener("pageshow", syncScrollLock);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) syncScrollLock(); });
 function sheet({ title = "", left = "", right = "", body = "", full = false, id = "" }){
   const wrap = document.createElement("div");
   wrap.innerHTML = `<div class="backdrop" data-act="${full ? "" : "close"}"></div><div class="sheet ${full ? "full" : ""}" role="dialog" aria-modal="true" aria-label="${esc(title)}" ${id ? `id="${id}"` : ""}>
@@ -1209,7 +1215,7 @@ if (role === "ami"){
       push: (type, title, body) => Push.send(type, title, body),
       pushOn: () => Push.on()
     };
-    loadScript("enigme.js?v=1").catch(() => {});
+    loadScript("enigme.js?v=2").catch(() => {});
     loadScript("arcade.js?v=1").catch(() => {});
   }catch(e){}
 }
