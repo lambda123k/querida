@@ -1,5 +1,5 @@
 /* Querida · Le Chrono caché — réservé aux amis.
-   Pour l'ouvrir : garder le doigt 2 secondes sur le grand compteur de jours de l'accueil.
+   Pour l'ouvrir : garder le doigt environ 2 secondes sur la case du compteur de jours de l'accueil.
    Fichier à part, préfixe « qc- » partout ; une erreur ici ne casse jamais l'appli. */
 (function(){
 "use strict";
@@ -89,23 +89,36 @@ const CSS = `
 const st = document.createElement("style"); st.id = "qc-style"; st.textContent = CSS; document.head.appendChild(st);
 
 /* =================== Le geste : garder le doigt sur le compteur =================== */
-function counterEl(){ const box = document.querySelector("#app > main.screen .hero.saff > div"); return box ? box.querySelector(".big-num") : null; }
-function decorate(){ const c = counterEl(); if (c && !c.classList.contains("qc-hold")){ c.classList.add("qc-hold"); c.addEventListener("contextmenu", e => e.preventDefault()); } }
+// Toute la case du compteur réagit. Au doigt on écoute les événements « touch » (plus fiables sur iPhone
+// que les « pointer », que Safari annule parfois pendant un appui long) ; à la souris, les « pointer ».
+function counterBox(){ return document.querySelector("#app > main.screen .hero.saff > div"); }
+function counterEl(){ const box = counterBox(); return box ? box.querySelector(".big-num") : null; }
+function decorate(){
+  const box = counterBox(); if (!box || box.classList.contains("qc-hold")) return;
+  box.classList.add("qc-hold"); box.addEventListener("contextmenu", e => e.preventDefault());
+}
 let qd = false; new MutationObserver(() => { if (qd) return; qd = true; requestAnimationFrame(() => { qd = false; try{ decorate(); }catch(e){} }); }).observe(document.body, { childList:true, subtree:true });
 decorate();
 let holdT = null, spinT = null, holdEl = null, sx = 0, sy = 0;
 function cancelHold(){ clearTimeout(holdT); clearInterval(spinT); holdT = spinT = null; if (holdEl){ holdEl.classList.remove("qc-spin"); if (holdEl.dataset.qcOrig) holdEl.textContent = holdEl.dataset.qcOrig; } holdEl = null; }
-document.addEventListener("pointerdown", e => {
-  const c = e.target.closest(".qc-hold"); if (!c || !Q.me()) return;
-  cancelHold(); holdEl = c; c.dataset.qcOrig = c.textContent; sx = e.clientX; sy = e.clientY;
-  holdT = setTimeout(() => {                                  // au bout d'une seconde, le compteur s'affole
+function startHold(target, x, y){
+  if (!target.closest(".qc-hold") || !Q.me()) return;
+  const c = counterEl(); if (!c) return;
+  cancelHold(); holdEl = c; c.dataset.qcOrig = c.textContent; sx = x; sy = y;
+  holdT = setTimeout(() => {                                  // au bout d'une demi-seconde, le compteur s'affole
     c.classList.add("qc-spin");
+    try{ navigator.vibrate && navigator.vibrate(15); }catch(e){}
     spinT = setInterval(() => { c.textContent = String(Math.floor(Math.random() * 900) + 10); }, 45);
-    holdT = setTimeout(() => { const el = holdEl; cancelHold(); if (el) el.textContent = el.dataset.qcOrig; openChrono(); }, 1000);
-  }, 1000);
-}, true);
-document.addEventListener("pointermove", e => { if (holdEl && Math.hypot(e.clientX - sx, e.clientY - sy) > 12) cancelHold(); }, true);
-["pointerup", "pointercancel"].forEach(ev => document.addEventListener(ev, () => { if (holdEl) cancelHold(); }, true));
+    holdT = setTimeout(() => { const el = holdEl; cancelHold(); if (el) el.textContent = el.dataset.qcOrig; openChrono(); }, 1100);
+  }, 500);
+}
+function moveHold(x, y){ if (holdEl && Math.hypot(x - sx, y - sy) > 16) cancelHold(); }
+document.addEventListener("touchstart", e => { if (e.touches.length === 1) startHold(e.target, e.touches[0].clientX, e.touches[0].clientY); else cancelHold(); }, { capture:true, passive:true });
+document.addEventListener("touchmove", e => { if (e.touches[0]) moveHold(e.touches[0].clientX, e.touches[0].clientY); }, { capture:true, passive:true });
+document.addEventListener("touchend", () => { if (holdEl) cancelHold(); }, true);
+document.addEventListener("pointerdown", e => { if (e.pointerType === "mouse") startHold(e.target, e.clientX, e.clientY); }, true);
+document.addEventListener("pointermove", e => { if (e.pointerType === "mouse") moveHold(e.clientX, e.clientY); }, true);
+document.addEventListener("pointerup", e => { if (e.pointerType === "mouse" && holdEl) cancelHold(); }, true);
 
 /* =================== Classement partagé =================== */
 // arcade/chrono/<niveau>__<écart total en ms, inversé>__<date>__<id>__<prénom>__<chronos en centièmes>.txt
