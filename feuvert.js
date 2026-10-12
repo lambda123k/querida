@@ -193,7 +193,7 @@ function drawBoard(){
   else if (!board.length) rows = `<p class="qf-empty">Personne n'a encore joué. La couronne est libre.</p>`;
   else rows = board.slice(0, 15).map((p, i) => {
     const isOpen = openRow === p.id;
-    return `<button type="button" class="qf-row ${p.id === myId() ? "qf-me" : ""}" data-qf="row" data-v="${esc(p.id)}" aria-expanded="${isOpen}"><span class="qf-rk">${i + 1}</span><span class="qf-nm">${esc(p.name)}${i === 0 ? " 👑" : ""}</span><span class="qf-sc">${p.avg} ms</span><span class="qf-ch">›</span></button>${isOpen ? `<div class="qf-detail">${resTable(p.times)}</div>` : ""}`;
+    return `<button type="button" class="qf-row ${p.id === myId() ? "qf-me" : ""}" data-qf="row" data-v="${esc(p.id)}" aria-expanded="${isOpen}"><span class="qf-rk">${i + 1}</span><span class="qf-nm">${esc(p.name)}${i === 0 ? " 👑" : ""}${(window.QUERIDA_GRADE ? window.QUERIDA_GRADE.badge("Le Feu vert", board, i, p.avg + " ms de moyenne") : "")}</span><span class="qf-sc">${p.avg} ms</span><span class="qf-ch">›</span></button>${isOpen ? `<div class="qf-detail">${resTable(p.times)}</div>` : ""}`;
   }).join("");
   z.innerHTML = `<h2>Classement de la bande · Le Feu vert</h2>${rows}`;
 }

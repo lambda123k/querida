@@ -251,7 +251,7 @@ function drawBoard(){
   else if (!board.length) rows = `<p class="qc-empty">Personne n'a encore joué. La couronne est libre.</p>`;
   else rows = board.slice(0, 15).map((p, i) => {
     const isOpen = openRow === p.id;
-    return `<button type="button" class="qc-row ${p.id === myId() ? "qc-me" : ""}" data-qc="row" data-v="${esc(p.id)}" aria-expanded="${isOpen}"><span class="qc-rk">${i + 1}</span><span class="qc-nm">${esc(p.name)}${i === 0 ? " 👑" : ""}</span><span class="qc-lv">niveau ${lvOf(p.run)}</span><span class="qc-ch">›</span></button>${isOpen ? `<div class="qc-detail">${runTable(p.run)}</div>` : ""}`;
+    return `<button type="button" class="qc-row ${p.id === myId() ? "qc-me" : ""}" data-qc="row" data-v="${esc(p.id)}" aria-expanded="${isOpen}"><span class="qc-rk">${i + 1}</span><span class="qc-nm">${esc(p.name)}${i === 0 ? " 👑" : ""}${(window.QUERIDA_GRADE ? window.QUERIDA_GRADE.badge("Le Chrono", board, i, "niveau " + lvOf(p.run)) : "")}</span><span class="qc-lv">niveau ${lvOf(p.run)}</span><span class="qc-ch">›</span></button>${isOpen ? `<div class="qc-detail">${runTable(p.run)}</div>` : ""}`;
   }).join("");
   z.innerHTML = `<h2>Classement de la bande · Le Chrono</h2>${rows}`;
 }

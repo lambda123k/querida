@@ -126,7 +126,7 @@ function renderArcade(){
   else if (!board.length) rows = `<p class="qa-empty">Personne n'a encore joué. La couronne est libre.</p>`;
   else {
     const top = board.slice(0, 10), mine = board.findIndex(r => r.id === myId());
-    rows = top.map((r, i) => `<div class="qa-row ${i === 0 ? "qa-king" : ""} ${r.id === myId() ? "qa-me" : ""}"><span class="qa-rk">${i + 1}</span><span class="qa-nm">${esc(r.name)}${i === 0 ? " 👑" : ""}</span><span class="qa-sc">${r.score}</span></div>`).join("");
+    rows = top.map((r, i) => `<div class="qa-row ${i === 0 ? "qa-king" : ""} ${r.id === myId() ? "qa-me" : ""}"><span class="qa-rk">${i + 1}</span><span class="qa-nm">${esc(r.name)}${i === 0 ? " 👑" : ""}${(window.QUERIDA_GRADE ? window.QUERIDA_GRADE.badge("La Tour", board, i, r.score + " étage" + (r.score > 1 ? "s" : "")) : "")}</span><span class="qa-sc">${r.score}</span></div>`).join("");
     if (mine >= 10) rows += `<div class="qa-row qa-me" style="margin-top:12px"><span class="qa-rk">${mine + 1}</span><span class="qa-nm">${esc(board[mine].name)}</span><span class="qa-sc">${board[mine].score}</span></div>`;
   }
   el.innerHTML = `<div class="qa-in">

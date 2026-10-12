@@ -209,7 +209,7 @@ function drawBoard(){
   if (board === null) rows = `<p class="qm-empty">Lecture du classement…</p>`;
   else if (board === "err") rows = `<p class="qm-empty">Le classement ne répond pas pour l'instant. Ton record est gardé.</p>`;
   else if (!board.length) rows = `<p class="qm-empty">Personne n'a encore joué. La couronne est libre.</p>`;
-  else rows = board.slice(0, 15).map((p, i) => `<div class="qm-row ${p.id === myId() ? "qm-me" : ""}"><span class="qm-rk">${i + 1}</span><span class="qm-nm">${esc(p.name)}${i === 0 ? " 👑" : ""}</span><span class="qm-sc">${p.score} tapes</span></div>`).join("");
+  else rows = board.slice(0, 15).map((p, i) => `<div class="qm-row ${p.id === myId() ? "qm-me" : ""}"><span class="qm-rk">${i + 1}</span><span class="qm-nm">${esc(p.name)}${i === 0 ? " 👑" : ""}${(window.QUERIDA_GRADE ? window.QUERIDA_GRADE.badge("Le Marathon", board, i, p.score + " tapes en 10 s") : "")}</span><span class="qm-sc">${p.score} tapes</span></div>`).join("");
   z.innerHTML = `<h2>Classement de la bande · Le Marathon</h2>${rows}`;
 }
 function toast(msg){
