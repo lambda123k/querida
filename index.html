@@ -1217,6 +1217,7 @@ if (role === "ami" || role === "romane"){
       push: (type, title, body) => Push.send(type, title, body),
       pushOn: () => Push.on()
     };
+    loadScript("admin.js?v=1").catch(() => {});
     if (role === "ami") loadScript("enigme.js?v=2").catch(() => {});
     loadScript("arcade.js?v=4").catch(() => {});
     loadScript("chrono.js?v=5").catch(() => {});
