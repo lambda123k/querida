@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" sizes="180x180" href="querida-icon-180.png?v=2">
 <link rel="icon" type="image/png" sizes="512x512" href="querida-icon-512.png?v=2">
 <script>
-(function(){var r=false;try{r=new URLSearchParams(location.search).has("pour")||localStorage.getItem("hp_role")==='"romane"';}catch(e){}
+(function(){var r=false;try{var q=new URLSearchParams(location.search).get("pour");if(q==="amis")localStorage.setItem("hp_role",'"ami"');r=(q&&q!=="amis")||(q!=="amis"&&localStorage.getItem("hp_role")==='"romane"');}catch(e){}
 document.write('<link id="manifest" rel="manifest" href="'+(r?"manifest-romane.json":"manifest.json")+'">');})();
 </script>
 <style>
@@ -542,6 +542,7 @@ function state(){
 /* ---------------- Rôle & navigation ---------------- */
 let role = ls.get("hp_role", "ami");
 if (qs.get("pour") && qs.get("pour") === CONFIG.CODE_ROMANE){ role = "romane"; ls.set("hp_role", "romane"); }
+if (qs.get("pour") === "amis"){ role = "ami"; ls.set("hp_role", "ami"); }   // remet un téléphone côté amis (ex. après avoir testé le lien de Romane)
 let me = ls.get("hp_me");
 let tab = role === "romane" ? "today" : "depot";
 if (role === "romane"){ const m = document.getElementById("manifest"); if (m) m.href = "manifest-romane.json"; }
