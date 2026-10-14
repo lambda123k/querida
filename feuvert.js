@@ -107,7 +107,9 @@ let board = null, openRow = null;
 /* =================== L'écran du jeu =================== */
 let wrap = null, state = "title", times = [], timer = 0, greenAt = 0, readyAt = 0;
 const $ = id => wrap && wrap.querySelector("#" + id);
+function qhFound(id){ try{ const a = JSON.parse(localStorage.getItem("qh_found") || "[]"); if (!a.includes(id)){ a.push(id); localStorage.setItem("qh_found", JSON.stringify(a)); window.dispatchEvent(new CustomEvent("qh-found", { detail: id })); } }catch(e){} }
 function openGame(){
+  qhFound("feuvert");
   if (Q.layerCount()) Q.clearLayers();
   closeGame();
   wrap = document.createElement("div"); wrap.className = "qf-wrap"; wrap.setAttribute("role", "dialog"); wrap.setAttribute("aria-label", "Le Feu vert");
@@ -215,6 +217,10 @@ async function afterGame(avg, ts){
     }
   }catch(e){}
 }
+
+/* Inscription dans l'Arcade (hub.js) */
+(window.QUERIDA_GAMES = window.QUERIDA_GAMES || {})["feuvert"] = { open: () => openGame(), best: () => { try{ return best ? best + " ms" : ""; }catch(e){ return ""; } } };
+window.dispatchEvent(new Event("qh-games"));
 
 }catch(err){ /* le Feu vert ne doit jamais gêner l'appli */ }
 })();

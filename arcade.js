@@ -109,7 +109,9 @@ let board = null;
 
 /* =================== La borne =================== */
 const TOUR_ICON = '<svg viewBox="0 0 58 58"><rect width="58" height="58" fill="#FCEBD6"/><rect x="14" y="40" width="30" height="8" fill="#F2873B"/><rect x="16" y="32" width="26" height="8" fill="#1E4E9C"/><rect x="18" y="24" width="23" height="8" fill="#CC3F27"/><rect x="21" y="16" width="19" height="8" fill="#FFFDF9"/><rect x="25" y="8" width="16" height="8" fill="#F2873B" opacity=".9"/></svg>';
+function qhFound(id){ try{ const a = JSON.parse(localStorage.getItem("qh_found") || "[]"); if (!a.includes(id)){ a.push(id); localStorage.setItem("qh_found", JSON.stringify(a)); window.dispatchEvent(new CustomEvent("qh-found", { detail: id })); } }catch(e){} }
 function openArcade(){
+  qhFound("tour");
   if (Q.layerCount()) Q.clearLayers();
   document.getElementById("qa-arcade")?.remove();
   const el = document.createElement("div"); el.id = "qa-arcade"; el.className = "qa-arcade"; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", "Arcade");
@@ -307,6 +309,10 @@ const Tour = (() => {
   }
   return { open, close };
 })();
+
+/* Inscription dans l'Arcade (hub.js) */
+(window.QUERIDA_GAMES = window.QUERIDA_GAMES || {})["tour"] = { open: () => openArcade(), best: () => { try{ return best ? best + " étage" + (best > 1 ? "s" : "") : ""; }catch(e){ return ""; } } };
+window.dispatchEvent(new Event("qh-games"));
 
 }catch(err){ /* l'arcade ne doit jamais gêner l'appli */ }
 })();

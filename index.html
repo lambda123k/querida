@@ -1218,12 +1218,14 @@ if (role === "ami" || role === "romane"){
       pushOn: () => Push.on()
     };
     if (role === "ami") loadScript("enigme.js?v=2").catch(() => {});
-    loadScript("arcade.js?v=3").catch(() => {});
-    loadScript("chrono.js?v=4").catch(() => {});
-    loadScript("marathon.js?v=4").catch(() => {});
-    loadScript("feuvert.js?v=3").catch(() => {});
+    loadScript("arcade.js?v=4").catch(() => {});
+    loadScript("chrono.js?v=5").catch(() => {});
+    loadScript("marathon.js?v=5").catch(() => {});
+    loadScript("feuvert.js?v=4").catch(() => {});
     loadScript("grade.js?v=2").catch(() => {});
     loadScript("reactions.js?v=2").catch(() => {});
+    loadScript("jeux.js?v=1").catch(() => {});
+    loadScript("hub.js?v=1").catch(() => {});
   }catch(e){}
 }
 window.addEventListener("pageshow", e => { if (e.persisted) refreshIfStale(); });

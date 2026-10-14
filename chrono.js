@@ -157,7 +157,9 @@ let board = null, openRow = null;
 
 /* =================== L'écran du Chrono =================== */
 let wrap = null, state = "title", L = level(1), passed = 0, t0 = 0, raf = 0, lastResult = null, readyAt = 0, newBest = false, run = [];
+function qhFound(id){ try{ const a = JSON.parse(localStorage.getItem("qh_found") || "[]"); if (!a.includes(id)){ a.push(id); localStorage.setItem("qh_found", JSON.stringify(a)); window.dispatchEvent(new CustomEvent("qh-found", { detail: id })); } }catch(e){} }
 function openChrono(){
+  qhFound("chrono");
   if (Q.layerCount()) Q.clearLayers();
   closeChrono();
   wrap = document.createElement("div"); wrap.className = "qc-wrap"; wrap.setAttribute("role", "dialog"); wrap.setAttribute("aria-label", "Le Chrono");
@@ -275,6 +277,10 @@ async function afterGame(r){
     }
   }catch(e){}
 }
+
+/* Inscription dans l'Arcade (hub.js) */
+(window.QUERIDA_GAMES = window.QUERIDA_GAMES || {})["chrono"] = { open: () => openChrono(), best: () => { try{ return bestRun && lvOf(bestRun) ? "niveau " + lvOf(bestRun) : ""; }catch(e){ return ""; } } };
+window.dispatchEvent(new Event("qh-games"));
 
 }catch(err){ /* le Chrono ne doit jamais gêner l'appli */ }
 })();

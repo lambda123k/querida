@@ -122,7 +122,9 @@ let board = null;
 /* =================== L'écran du jeu =================== */
 let wrap = null, state = "ready", count = 0, t0 = 0, raf = 0, recent = [], openedAt = 0;
 const $ = id => wrap && wrap.querySelector("#" + id);
+function qhFound(id){ try{ const a = JSON.parse(localStorage.getItem("qh_found") || "[]"); if (!a.includes(id)){ a.push(id); localStorage.setItem("qh_found", JSON.stringify(a)); window.dispatchEvent(new CustomEvent("qh-found", { detail: id })); } }catch(e){} }
 function openGame(){
+  qhFound("marathon");
   if (Q.layerCount()) Q.clearLayers();
   closeGame();
   wrap = document.createElement("div"); wrap.className = "qm-wrap"; wrap.setAttribute("role", "dialog"); wrap.setAttribute("aria-label", "Le Marathon du pouce");
@@ -230,6 +232,10 @@ async function afterGame(score){
     }
   }catch(e){}
 }
+
+/* Inscription dans l'Arcade (hub.js) */
+(window.QUERIDA_GAMES = window.QUERIDA_GAMES || {})["marathon"] = { open: () => openGame(), best: () => { try{ return best ? best + " tapes" : ""; }catch(e){ return ""; } } };
+window.dispatchEvent(new Event("qh-games"));
 
 }catch(err){ /* le Marathon ne doit jamais gêner l'appli */ }
 })();
