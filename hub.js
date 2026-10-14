@@ -68,6 +68,28 @@ const CSS = `
 .qh-card.qh-lock b{color:var(--label2)}
 .qh-card.qh-lock small{font-style:italic}
 .qh-foot{font-size:13px;color:var(--label3);text-align:center;margin:4px 0 0}
+.qh-seg{display:flex;background:var(--fill);border-radius:10px;padding:3px;gap:3px}
+.qh-seg button{flex:1;border:0;background:none;padding:8px 4px;border-radius:8px;font:600 14px var(--f);color:var(--label2);cursor:pointer}
+.qh-seg button[aria-pressed="true"]{background:var(--card);color:var(--label);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.qh-pod{display:grid;grid-template-columns:1fr 1.15fr 1fr;align-items:end;gap:8px;margin-top:4px}
+.qh-pod div{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;min-width:0}
+.qh-pod svg{width:40px;height:40px}
+.qh-pod b{font-size:15px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qh-pod small{font-size:12.5px;color:var(--label2)}
+.qh-pod i{display:block;width:100%;border-radius:10px 10px 0 0;background:var(--fill2)}
+.qh-pod .p1 i{height:70px;background:linear-gradient(#F3D27A,#E8B530)} .qh-pod .p2 i{height:50px;background:linear-gradient(#DCE2E8,#B8C1CC)} .qh-pod .p3 i{height:36px;background:linear-gradient(#E9B88E,#D08A4E)}
+.qh-row{width:100%;display:flex;align-items:center;gap:10px;padding:11px 14px;border:0;border-radius:12px;background:var(--card);color:var(--label);font:inherit;text-align:left;cursor:pointer;font-variant-numeric:tabular-nums;margin-top:6px}
+.qh-row .qh-rk{width:22px;font-family:var(--f-display);font-size:20px;color:var(--accent);text-align:center}
+.qh-row .qh-nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qh-row .qh-pt{font-weight:800}
+.qh-row .qh-pt small{font-weight:600;color:var(--label2);font-size:12px;margin-left:2px}
+.qh-row.qh-me{box-shadow:inset 0 0 0 1.5px var(--rind)}
+.qh-det{background:var(--card);border-radius:12px;padding:6px 14px 10px;margin-top:2px;font-size:14px}
+.qh-det div{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--sep)}
+.qh-det div:last-child{border-bottom:0}
+.qh-det span{color:var(--label2)}
+.qh-rules{font-size:13px;color:var(--label2);background:var(--card);border-radius:12px;padding:12px 14px;line-height:1.45}
+.qh-rules b{color:var(--label)}
 .qh-toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 96px);transform:translate(-50%,40px);opacity:0;transition:transform .45s cubic-bezier(.2,1.2,.4,1),opacity .3s;z-index:85;background:var(--label);color:var(--bg);font-weight:600;border-radius:999px;padding:10px 16px;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,.3);white-space:nowrap;display:flex;align-items:center;gap:8px}
 .qh-toast svg{width:20px;height:20px}
 .qh-toast.on{transform:translate(-50%,0);opacity:1}
@@ -88,7 +110,23 @@ let qd = false; new MutationObserver(() => { if (qd) return; qd = true; requestA
 decorate();
 
 /* =================== L'écran de l'Arcade =================== */
-let wrap = null;
+let wrap = null, view = "jeux", openRow = null;
+const G = () => window.QUERIDA_GRADE;
+const meId = () => String((Q.me() || {}).id || "anon").replace(/[^a-zA-Z0-9]/g, "").slice(0, 8);
+function rankingHTML(){
+  const g = G(); if (!g) return `<p class="qh-foot">Classement indisponible.</p>`;
+  const ov = g.overall();
+  const rules = `<div class="qh-rules">Chaque jeu rapporte des points selon ta place dans son classement : <b>1er 10 pts</b>, 2e 7, 3e 5, 4e 4, 5e 3, 6e 2, et <b>1 pt</b> pour chaque autre jeu où tu as un score. Plus tu joues à de jeux, plus tu montes. Les trois premiers portent un grade dans tous les classements : <b>Légende</b>, <b>As</b> et <b>Prodige</b>.</div>`;
+  if (ov === null) return `<p class="qh-foot">Calcul du classement…</p>` + rules;
+  if (!ov.length) return `<p class="qh-foot">Personne n'a encore de score. À toi de jouer !</p>` + rules;
+  const pod = [1, 0, 2].map(i => { const p = ov[i]; if (!p) return `<div></div>`; return `<div class="p${i + 1}">${g.medal(i, 40)}<b>${esc(p.name)}</b><small>${p.pts} pts</small><i></i></div>`; }).join("");
+  const rows = ov.slice(0, 30).map((p, i) => {
+    const open = openRow === p.id;
+    return `<button type="button" class="qh-row ${p.id === meId() ? "qh-me" : ""}" data-qh="row" data-v="${esc(p.id)}" aria-expanded="${open}"><span class="qh-rk">${i + 1}</span><span class="qh-nm">${esc(p.name)}${g.badgeFor(p.id, p.name)}</span><span class="qh-pt">${p.pts}<small>pts</small></span></button>`
+      + (open ? `<div class="qh-det">${p.games.map(x => `<div><span>${esc(x.game)} · ${x.rank}${x.rank > 1 ? "e" : "er"} · ${esc(x.show)}</span><b>+${x.pts}</b></div>`).join("")}</div>` : "");
+  }).join("");
+  return `<div class="qh-pod">${pod}</div>${rows}${rules}`;
+}
 function render(){
   if (!wrap) return;
   const n = count(), total = CATALOG.length;
@@ -102,14 +140,15 @@ function render(){
   wrap.innerHTML = `<div class="qh-in"><div class="qh-head"><h1>${PAD}Arcade</h1><button type="button" class="qh-close" data-qh="close" aria-label="Fermer">×</button></div>
     <p class="qh-sub">${n === total ? "Tu as trouvé tous les jeux de Querida. Respect." : `${n} jeu${n > 1 ? "x" : ""} trouvé${n > 1 ? "s" : ""} sur ${total}. Les autres sont cachés dans l'appli.`}</p>
     <div class="qh-prog"><i style="width:${Math.round(n / total * 100)}%"></i></div>
-    <div class="qh-grid">${cards}</div>
-    <p class="qh-foot">Chaque jeu a son classement de la bande. Le premier porte la couronne.</p></div>`;
+    <div class="qh-seg" role="tablist"><button type="button" data-qh="view" data-v="jeux" aria-pressed="${view === "jeux"}">Les jeux</button><button type="button" data-qh="view" data-v="general" aria-pressed="${view === "general"}">Classement général</button></div>
+    ${view === "jeux" ? `<div class="qh-grid">${cards}</div><p class="qh-foot">Chaque jeu a son classement de la bande. Le premier porte la couronne.</p>` : rankingHTML()}</div>`;
 }
 function openHub(){
   if (Q.layerCount()) Q.clearLayers();
   closeHub(); fresh = false; document.querySelector(".qh-btn")?.classList.remove("qh-new");
   wrap = document.createElement("div"); wrap.className = "qh-wrap"; wrap.setAttribute("role", "dialog"); wrap.setAttribute("aria-label", "Arcade");
   document.body.appendChild(wrap); document.body.style.overflow = "hidden"; render();
+  if (G()) G().loadOverall().then(render).catch(() => {});
 }
 function closeHub(){ if (wrap){ wrap.remove(); wrap = null; if (!Q.layerCount()) document.body.style.overflow = ""; } }
 document.addEventListener("click", e => {
@@ -117,6 +156,8 @@ document.addEventListener("click", e => {
   e.stopPropagation(); e.preventDefault();
   if (b.dataset.qh === "open") openHub();
   else if (b.dataset.qh === "close") closeHub();
+  else if (b.dataset.qh === "view"){ view = b.dataset.v; render(); if (view === "general" && G()) G().loadOverall(true).then(render).catch(render); }
+  else if (b.dataset.qh === "row"){ openRow = openRow === b.dataset.v ? null : b.dataset.v; render(); }
   else if (b.dataset.qh === "play"){ const g = R()[b.dataset.v]; if (!g) return; closeHub(); try{ g.open(); }catch(err){} }
 }, true);
 // les jeux s'inscrivent au fil du chargement : on rafraîchit le compteur
