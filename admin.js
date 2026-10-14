@@ -102,6 +102,11 @@ const CSS = `
 .qx-act.qx-sure{background:var(--accent);color:var(--on-accent)}
 .qx-h{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--label2);margin:10px 0 2px}
 .qx-empty{font-size:14px;color:var(--label3);text-align:center;padding:14px}
+.qx-prev{background:var(--card);border-radius:12px;padding:14px;margin-top:-2px;border:1.5px solid #5B2A6E22}
+.qx-prev .letter{font-size:17px}
+.qx-prev img,.qx-prev video{max-height:50vh}
+.qx-btns{display:flex;flex-direction:column;gap:6px;flex:none}
+.qx-act.qx-see{background:#EEE6F3;color:#5B2A6E}
 .qx-toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 30px);transform:translateX(-50%);z-index:90;background:var(--label);color:var(--bg);border-radius:999px;padding:9px 16px;font:600 14px var(--f)}
 `;
 const st = document.createElement("style"); st.id = "qx-style"; st.textContent = CSS; document.head.appendChild(st);
@@ -114,7 +119,7 @@ function decorate(){
 let qd = false; new MutationObserver(() => { if (qd) return; qd = true; requestAnimationFrame(() => { qd = false; try{ decorate(); }catch(e){} }); }).observe(document.body, { childList:true, subtree:true });
 decorate();
 
-let wrap = null, view = "comments", items = null, armed = null;
+let wrap = null, view = "capsules", items = null, armed = null, seen = null;
 const GAMES = [["tour","La Tour"],["chrono","Le Chrono"],["marathon","Le Marathon"],["feuvert","Le Feu vert"],["oeil","L'Œil"],["diff","Les Différences"],["chiffres","La Mémoire des chiffres"]];
 function toast(t){ document.getElementById("qx-toast")?.remove(); document.body.insertAdjacentHTML("beforeend", `<div class="qx-toast" id="qx-toast">${esc(t)}</div>`); setTimeout(() => document.getElementById("qx-toast")?.remove(), 2200); }
 const when = ts => { try{ return new Date(ts).toLocaleString("fr-FR", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }); }catch(e){ return ""; } };
@@ -163,7 +168,8 @@ async function load(){
         }
       }
     } else if (view === "capsules"){
-      (Q.store().caps || []).slice().reverse().forEach(c => out.push({ cap: c, ts: Date.parse(c.created_at) || 0, who: c.author_name, what: (c.kind === "song" && c.song ? c.song.title + " · " + c.song.artist : c.text || "(" + c.kind + ")"), where: c.kind + " · " + (c.moment || "voyage") + (c.opened_at ? " · ouverte" : "") }));
+      const KIND = { photo:"Photo", video:"Vidéo", audio:"Vocal", text:"Message", song:"Chanson" }, WHEN = { voyage:"pendant le voyage", avant:"avant le départ", cafard:"quand elle a besoin d'un sourire", retour:"au retour" };
+      (Q.store().caps || []).slice().sort((a, b) => (!!a.opened_at - !!b.opened_at) || ((Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0))).forEach(c => out.push({ cap: c, ts: Date.parse(c.created_at) || 0, who: c.author_name, what: (c.kind === "song" && c.song ? c.song.title + " · " + c.song.artist : c.text || ""), where: `${KIND[c.kind] || c.kind} · à ouvrir ${WHEN[c.moment || "voyage"] || ""}` + (c.opened_at ? " · déjà ouverte par Romane" : " · pas encore vue par Romane") }));
     } else if (view === "hidden"){
       for (const path of hidden){
         const parts = path.split("/"), file = parts.pop(), bits = file.replace(/\.txt$/, "").split("__"), it = bits.findIndex(x => /^\d{14}$/.test(x));
@@ -181,7 +187,7 @@ async function load(){
 }
 function render(){
   if (!wrap) return;
-  const tabs = [["comments","Commentaires"],["reactions","Réactions"],["scores","Scores"],["capsules","Capsules"],["hidden","Masqués"]];
+  const tabs = [["capsules","Capsules"],["comments","Commentaires"],["reactions","Réactions"],["scores","Scores"],["hidden","Masqués"]];
   let list;
   if (items === null) list = `<p class="qx-empty">Chargement…</p>`;
   else if (!items.length) list = `<p class="qx-empty">Rien à afficher.</p>`;
@@ -191,7 +197,9 @@ function render(){
       const head = x.group && x.group !== lastGroup ? `<p class="qx-h">${esc(x.group)}</p>` : ""; lastGroup = x.group || lastGroup;
       if (x.cap){
         const sure = armed === "cap:" + x.cap.id;
-        return `<div class="qx-item"><div class="qx-t"><b>${esc(x.who)}</b> · ${esc(x.what)}<small>${esc(x.where)} · ${when(x.ts)}</small></div><button type="button" class="qx-act ${sure ? "qx-sure" : ""}" data-qx="delcap" data-i="${i}">${sure ? "Confirmer" : "Supprimer"}</button></div>`;
+        const open = seen === x.cap.id;
+        let prev = ""; if (open){ try{ prev = `<div class="qx-prev">${Q.capsuleHTML ? Q.capsuleHTML(x.cap) : esc(x.what)}</div>`; }catch(e){ prev = `<div class="qx-prev">${esc(x.what)}</div>`; } }
+        return `<div class="qx-item"><div class="qx-t"><b>${esc(x.who)}</b>${x.what ? " · " + esc(x.what.length > 90 ? x.what.slice(0, 88) + "…" : x.what) : ""}<small>${esc(x.where)} · ${when(x.ts)}</small></div><div class="qx-btns"><button type="button" class="qx-act qx-see" data-qx="see" data-i="${i}">${open ? "Fermer" : "Voir"}</button><button type="button" class="qx-act ${sure ? "qx-sure" : ""}" data-qx="delcap" data-i="${i}">${sure ? "Confirmer" : "Supprimer"}</button></div></div>${prev}`;
       }
       const off = hidden.has(x.path);
       return head + `<div class="qx-item ${off ? "qx-off" : ""}"><div class="qx-t">${x.who ? `<b>${esc(x.who)}</b> · ` : ""}${esc(x.what)}<small>${esc(x.where)}${x.ts ? " · " + when(x.ts) : ""}</small></div><button type="button" class="qx-act ${off ? "qx-on" : ""}" data-qx="toggle" data-i="${i}">${off ? "Rétablir" : "Masquer"}</button></div>`;
@@ -214,13 +222,14 @@ document.addEventListener("click", async e => {
   const a = b.dataset.qx;
   if (a === "open"){ if (Q.layerCount()) Q.clearLayers(); wrap = document.createElement("div"); wrap.className = "qx-wrap"; document.body.appendChild(wrap); document.body.style.overflow = "hidden"; load(); }
   else if (a === "close"){ wrap?.remove(); wrap = null; document.body.style.overflow = ""; Q.render(); }
-  else if (a === "view"){ view = b.dataset.v; armed = null; load(); }
+  else if (a === "view"){ view = b.dataset.v; armed = null; seen = null; load(); }
   else if (a === "toggle"){
     const x = items[+b.dataset.i]; if (!x) return; const hide = !hidden.has(x.path);
     try{ await setHidden(x.path, hide); toast(hide ? "Masqué pour tout le monde" : "Rétabli"); }catch(err){ toast("Échec, réessaie"); }
     if (view === "hidden") items = items.filter(y => hidden.has(y.path) || y === x);
     render();
   }
+  else if (a === "see"){ const x = items[+b.dataset.i]; if (!x) return; wrap.querySelectorAll("video,audio").forEach(m => { try{ m.pause(); }catch(err){} }); seen = seen === x.cap.id ? null : x.cap.id; render(); }
   else if (a === "delcap"){
     const x = items[+b.dataset.i]; if (!x) return;
     if (armed !== "cap:" + x.cap.id){ armed = "cap:" + x.cap.id; render(); return; }
