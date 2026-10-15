@@ -88,6 +88,22 @@ const CSS = `
 .qh-det div{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--sep)}
 .qh-det div:last-child{border-bottom:0}
 .qh-det span{color:var(--label2)}
+.qh-radar{display:block;width:100%;max-width:340px;margin:0 auto}
+.qh-sum{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.qh-sum div{background:var(--card);border-radius:12px;padding:10px 12px}
+.qh-sum small{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--label2)}
+.qh-sum b{font-size:16px}
+.qh-skill{background:var(--card);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.qh-skill .qh-sh{display:flex;align-items:center;gap:10px}
+.qh-skill .qh-sh svg{width:30px;height:30px;flex:none}
+.qh-skill .qh-sh b{flex:1;font-size:16px}
+.qh-skill .qh-lvl{font-size:13px;font-weight:700;color:var(--accent)}
+.qh-skill .qh-bar{display:flex;gap:3px}
+.qh-skill .qh-bar i{flex:1;height:7px;border-radius:3px;background:var(--fill2)}
+.qh-skill .qh-bar i.on{background:linear-gradient(90deg,var(--rind),var(--accent))}
+.qh-skill p{margin:0;font-size:14px;color:var(--label2);line-height:1.4}
+.qh-skill .qh-go{align-self:flex-start;border:0;border-radius:999px;padding:6px 12px;background:var(--fill);color:var(--accent);font:600 13px var(--f);cursor:pointer}
+.qh-skill.qh-none{opacity:.75}
 .qh-rules{font-size:13px;color:var(--label2);background:var(--card);border-radius:12px;padding:12px 14px;line-height:1.45}
 .qh-rules b{color:var(--label)}
 .qh-toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 96px);transform:translate(-50%,40px);opacity:0;transition:transform .45s cubic-bezier(.2,1.2,.4,1),opacity .3s;z-index:85;background:var(--label);color:var(--bg);font-weight:600;border-radius:999px;padding:10px 16px;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,.3);white-space:nowrap;display:flex;align-items:center;gap:8px}
@@ -113,6 +129,73 @@ decorate();
 let wrap = null, view = "jeux", openRow = null;
 const G = () => window.QUERIDA_GRADE;
 const meId = () => String((Q.me() || {}).id || "anon").replace(/[^a-zA-Z0-9]/g, "").slice(0, 8);
+/* =================== Mon profil : les capacités =================== */
+const fmtN = (n, d = 1) => n.toFixed(d).replace(".", ",");
+const lvlFrom = (v, steps) => { let l = 0; steps.forEach((t, i) => { if (v >= t) l = i + 1; }); return Math.max(1, Math.min(10, l)); };
+const SKILLS = [
+  { id:"reflexes", my:"tes réflexes", name:"Réflexes", game:"feuvert", col:"#2E8B57", lower:true,
+    level: ms => ms <= 180 ? 10 : ms <= 200 ? 9 : ms <= 215 ? 8 : ms <= 230 ? 7 : ms <= 250 ? 6 : ms <= 270 ? 5 : ms <= 290 ? 4 : ms <= 320 ? 3 : ms <= 360 ? 2 : 1,
+    say: ms => `Tu réagis en ${ms} ms en moyenne. Un clignement d'œil dure environ 100 à 150 ms.` },
+  { id:"memoire", my:"ta mémoire", name:"Mémoire", game:"chiffres", col:"#E0892E",
+    level: n => Math.max(1, Math.min(10, n - 2)),
+    say: n => `Tu retiens ${n} chiffres d'affilée. La plupart des gens plafonnent autour de 7.` },
+  { id:"observation", my:"ton sens de l'observation", name:"Observation", game:"diff", col:"#1E4E9C",
+    level: n => lvlFrom(n, [1, 3, 5, 8, 11, 14, 18, 22, 27, 33]),
+    say: n => `Tu as repéré ${n} différence${n > 1 ? "s" : ""} d'affilée dans des scènes que tu n'avais jamais vues.` },
+  { id:"couleurs", my:"ta vision des couleurs", name:"Vision des couleurs", game:"oeil", col:"#7B5BB0",
+    level: n => lvlFrom(n, [4, 8, 12, 16, 20, 24, 28, 32, 36, 42]),
+    say: n => `Ton œil distingue un écart de couleur de ${fmtN(Math.max(1.5, 22 * Math.pow(.9, n)))} %. ${n >= 24 ? "Bien au-delà de la moyenne." : "Avec de l'entraînement, on descend sous 3 %."}` },
+  { id:"horloge", my:"ton horloge interne", name:"Horloge interne", game:"chrono", col:"#9E3320",
+    level: n => Math.max(1, Math.min(10, n)),
+    say: n => `Tu as tenu jusqu'au niveau ${n} : tu sens le temps passer à ±${fmtN(Math.max(.03, .3 * Math.pow(.83, n - 1)), 2)} s près, sans regarder.` },
+  { id:"doigts", my:"la vitesse de tes doigts", name:"Vitesse des doigts", game:"marathon", col:"#CC3F27",
+    level: n => lvlFrom(n, [25, 35, 45, 55, 65, 75, 85, 95, 110, 125]),
+    say: n => `${n} tapes en 10 secondes, soit ${fmtN(n / 10)} par seconde.` },
+  { id:"precision", my:"ta précision", name:"Précision", game:"tour", col:"#F2873B",
+    level: n => lvlFrom(n, [2, 5, 8, 11, 15, 19, 24, 29, 35, 44]),
+    say: n => `${n} étage${n > 1 ? "s" : ""} empilé${n > 1 ? "s" : ""} au bon moment, sans trembler.` },
+];
+const RANKS = ["", "Novice", "Novice", "Amateur", "Amateur", "Solide", "Solide", "Redoutable", "Redoutable", "Expert", "Phénomène"];
+function localBest(game){
+  try{
+    if (game === "tour") return +localStorage.getItem("qa_tour_best") || 0;
+    if (game === "chrono"){ const r = JSON.parse(localStorage.getItem("qc_bestrun") || "null"); return r ? r.filter(x => x.ok).length : 0; }
+    if (game === "marathon") return +localStorage.getItem("qm_best") || 0;
+    if (game === "feuvert") return +localStorage.getItem("qf_best") || 0;
+    return +localStorage.getItem("qj_" + game + "_best") || 0;
+  }catch(e){ return 0; }
+}
+function myValue(sk){
+  const loc = localBest(sk.game), ov = G() && G().overall(), me = ov && ov.find(p => p.id === meId()), srv = me && me.raw ? me.raw[sk.game] || 0 : 0;
+  if (sk.lower){ const c = [loc, srv].filter(x => x > 0); return c.length ? Math.min(...c) : 0; }
+  return Math.max(loc, srv);
+}
+const skIcon = (sk, lv) => `<svg viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="14" fill="${sk.col}" opacity=".14"/><circle cx="15" cy="15" r="14" fill="none" stroke="${sk.col}" stroke-width="2" stroke-dasharray="${(lv / 10 * 88).toFixed(1)} 88" transform="rotate(-90 15 15)" stroke-linecap="round"/><text x="15" y="19.5" text-anchor="middle" font-family="-apple-system,sans-serif" font-weight="800" font-size="12" fill="${sk.col}">${lv || "?"}</text></svg>`;
+function radar(vals){
+  const N = SKILLS.length, cx = 170, cy = 150, R = 100, pt = (i, r) => { const a = -Math.PI / 2 + i * 2 * Math.PI / N; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; };
+  let g = "";
+  [2, 4, 6, 8, 10].forEach(l => { g += `<polygon points="${SKILLS.map((_, i) => pt(i, R * l / 10).map(v => v.toFixed(1)).join(",")).join(" ")}" fill="none" stroke="var(--sep)" stroke-width="1"/>`; });
+  SKILLS.forEach((sk, i) => { const [x, y] = pt(i, R); g += `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--sep)"/>`; const [lx, ly] = pt(i, R + 26); g += `<text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--label2)" font-family="-apple-system,sans-serif">${sk.name.split(" ")[0]}</text>`; });
+  g += `<polygon points="${vals.map((v, i) => pt(i, R * Math.max(.06, v / 10)).map(x => x.toFixed(1)).join(",")).join(" ")}" fill="var(--accent)" fill-opacity=".22" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>`;
+  vals.forEach((v, i) => { if (v){ const [x, y] = pt(i, R * v / 10); g += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${SKILLS[i].col}"/>`; } });
+  return `<svg class="qh-radar" viewBox="0 0 340 300" role="img" aria-label="Tes capacités">${g}</svg>`;
+}
+function profileHTML(){
+  const rows = SKILLS.map(sk => { const v = myValue(sk); return { sk, v, lv: v ? sk.level(v) : 0 }; });
+  const tested = rows.filter(r => r.lv), avg = tested.length ? tested.reduce((a, r) => a + r.lv, 0) / tested.length : 0;
+  const best = tested.slice().sort((a, b) => b.lv - a.lv)[0], weak = tested.length > 1 ? tested.slice().sort((a, b) => a.lv - b.lv)[0] : null;
+  const ov = G() && G().overall(), me = ov && ov.find(p => p.id === meId());
+  const sum = `<div class="qh-sum"><div><small>Point fort</small><b>${best ? best.sk.name : "—"}</b></div><div><small>À travailler</small><b>${weak && weak !== best ? weak.sk.name : "—"}</b></div>
+    <div><small>Niveau moyen</small><b>${avg ? fmtN(avg) + " / 10" : "—"}</b></div><div><small>Classement général</small><b>${me ? me.rank + (me.rank > 1 ? "e" : "er") + " · " + me.pts + " pts" : "—"}</b></div></div>`;
+  const cards = rows.map(({ sk, v, lv }) => {
+    const c = CATALOG.find(x => x.id === sk.game), found = isFound(sk.game);
+    return `<div class="qh-skill ${lv ? "" : "qh-none"}"><div class="qh-sh">${skIcon(sk, lv)}<b>${sk.name}</b><span class="qh-lvl">${lv ? "Niveau " + lv + " · " + RANKS[lv] : "Pas encore testé"}</span></div>
+      <div class="qh-bar">${Array.from({ length: 10 }, (_, i) => `<i class="${i < lv ? "on" : ""}"></i>`).join("")}</div>
+      <p>${lv ? sk.say(v) : found ? `Joue à ${c.name} pour mesurer ${sk.my}.` : `Le jeu qui mesure ${sk.my} est encore caché. Indice : ${c.hint}`}</p>
+      ${found ? `<button type="button" class="qh-go" data-qh="play" data-v="${sk.game}">${lv ? "Améliorer" : "Tester"} · ${c.name}</button>` : ""}</div>`;
+  }).join("");
+  return `${radar(rows.map(r => r.lv))}${sum}${cards}<p class="qh-foot">Chaque capacité est mesurée par ton record dans un jeu de l'Arcade.</p>`;
+}
 function rankingHTML(){
   const g = G(); if (!g) return `<p class="qh-foot">Classement indisponible.</p>`;
   const ov = g.overall();
@@ -140,8 +223,8 @@ function render(){
   wrap.innerHTML = `<div class="qh-in"><div class="qh-head"><h1>${PAD}Arcade</h1><button type="button" class="qh-close" data-qh="close" aria-label="Fermer">×</button></div>
     <p class="qh-sub">${n === total ? "Tu as trouvé tous les jeux de Querida. Respect." : `${n} jeu${n > 1 ? "x" : ""} trouvé${n > 1 ? "s" : ""} sur ${total}. Les autres sont cachés dans l'appli.`}</p>
     <div class="qh-prog"><i style="width:${Math.round(n / total * 100)}%"></i></div>
-    <div class="qh-seg" role="tablist"><button type="button" data-qh="view" data-v="jeux" aria-pressed="${view === "jeux"}">Les jeux</button><button type="button" data-qh="view" data-v="general" aria-pressed="${view === "general"}">Classement général</button></div>
-    ${view === "jeux" ? `<div class="qh-grid">${cards}</div><p class="qh-foot">Chaque jeu a son classement de la bande. Le premier porte la couronne.</p>` : rankingHTML()}</div>`;
+    <div class="qh-seg" role="tablist"><button type="button" data-qh="view" data-v="jeux" aria-pressed="${view === "jeux"}">Les jeux</button><button type="button" data-qh="view" data-v="profil" aria-pressed="${view === "profil"}">Mes capacités</button><button type="button" data-qh="view" data-v="general" aria-pressed="${view === "general"}">Classement</button></div>
+    ${view === "jeux" ? `<div class="qh-grid">${cards}</div><p class="qh-foot">Chaque jeu a son classement de la bande. Le premier porte la couronne.</p>` : view === "profil" ? profileHTML() : rankingHTML()}</div>`;
 }
 function openHub(){
   if (Q.layerCount()) Q.clearLayers();
@@ -156,7 +239,7 @@ document.addEventListener("click", e => {
   e.stopPropagation(); e.preventDefault();
   if (b.dataset.qh === "open") openHub();
   else if (b.dataset.qh === "close") closeHub();
-  else if (b.dataset.qh === "view"){ view = b.dataset.v; render(); if (view === "general" && G()) G().loadOverall(true).then(render).catch(render); }
+  else if (b.dataset.qh === "view"){ view = b.dataset.v; render(); if (view !== "jeux" && G()) G().loadOverall(true).then(render).catch(render); }
   else if (b.dataset.qh === "row"){ openRow = openRow === b.dataset.v ? null : b.dataset.v; render(); }
   else if (b.dataset.qh === "play"){ const g = R()[b.dataset.v]; if (!g) return; closeHub(); try{ g.open(); }catch(err){} }
 }, true);

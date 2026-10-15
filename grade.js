@@ -38,7 +38,7 @@ async function loadGame(G){
   const best = new Map();
   (data || []).forEach(f => {
     const m = f.name.match(G.re); if (!m) return;
-    const r = { id: m[G.idx], name: fromHex(m[G.nm]), v: G.v(m), ts: +m[G.ts], show: G.show(m) };
+    const r = { id: m[G.idx], name: fromHex(m[G.nm]), v: G.v(m), ts: +m[G.ts], show: G.show(m), raw: +m[1] };
     if (r.v < 0) return;
     const o = best.get(r.id); if (!o || r.v > o.v || (r.v === o.v && r.ts < o.ts)) best.set(r.id, r);
   });
@@ -52,7 +52,8 @@ function loadOverall(force){
     const boards = await Promise.all(GAMES.map(G => loadGame(G).catch(() => [])));
     const people = new Map();
     boards.forEach((b, gi) => b.forEach((r, rank) => {
-      const p = people.get(r.id) || { id: r.id, name: r.name, pts: 0, games: [], lastTs: 0 };
+      const p = people.get(r.id) || { id: r.id, name: r.name, pts: 0, games: [], lastTs: 0, raw: {} };
+      p.raw[GAMES[gi].id] = r.raw;
       if (r.ts > p.lastTs){ p.lastTs = r.ts; p.name = r.name; }
       const pts = ptsFor(rank); p.pts += pts;
       p.games.push({ game: GAMES[gi].name, rank: rank + 1, pts, show: r.show });
