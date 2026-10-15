@@ -29,6 +29,8 @@ const CATALOG = [
     icon: ic("#DDF0FA", `<path d="M0 30 Q24 25 48 29 V48 H0 Z" fill="#9CCB6E"/><circle cx="35" cy="14" r="5" fill="#F6C945"/><rect x="9" y="25" width="13" height="11" fill="#E9B8A8"/><path d="M7 26 L15.5 18 L24 26 Z" fill="#CC3F27"/><circle cx="33" cy="30" r="6" fill="#3E8A3A"/>`) },
   { id:"chiffres", name:"La Mémoire des chiffres", what:"Retiens le nombre",     hint:"La petite ligne au-dessus du titre compte pour toi : touche-la 3 fois.",
     icon: ic("#FFF3D6", `<text x="24" y="31" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-weight="700" font-size="17" fill="#3B1F17">372</text>`) },
+  { id:"accord",   name:"L'Accord",         what:"Pareil ou différent ?",        hint:"Le soleil de « Comment ça marche » aime qu'on le touche 3 fois.",
+    icon: ic("#F1E9F7", `<rect x="11" y="24" width="5" height="14" rx="2.5" fill="#5B2A6E"/><rect x="18.5" y="17" width="5" height="21" rx="2.5" fill="#5B2A6E"/><rect x="26" y="12" width="5" height="26" rx="2.5" fill="#F2873B"/><rect x="33.5" y="20" width="5" height="18" rx="2.5" fill="#5B2A6E"/>`) },
 ];
 const PAD = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8h10a5 5 0 015 5v1a4 4 0 01-7 2.6L14 15h-4l-1 1.6A4 4 0 012 14v-1a5 5 0 015-5z"/><path d="M8 11v3M6.5 12.5h3"/><circle cx="16" cy="11.5" r=".6" fill="currentColor"/><circle cx="17.6" cy="13.6" r=".6" fill="currentColor"/></svg>`;
 const LOCK = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>`;
@@ -147,6 +149,8 @@ const M = {
     say: n => `${n} changement${n > 1 ? "s" : ""} détecté${n > 1 ? "s" : ""} dans des scènes jamais vues.` },
   chrono: { name:"Le Chrono", level: n => Math.max(1, Math.min(10, n)),
     say: n => `Estimation du temps à ±${fmtN(Math.max(.03, .3 * Math.pow(.83, n - 1)), 2)} s près, sans repère visuel.` },
+  accord: { name:"L'Accord", level: n => lvlFrom(n, [2, 4, 6, 8, 11, 14, 17, 21, 25, 30]),
+    say: n => `${n} bonnes réponses d'affilée : tu entends une note glisser de ${Math.round(Math.max(3, 70 * Math.pow(.86, n)))} cents, soit ${Math.round(Math.max(3, 70 * Math.pow(.86, n))) < 50 ? "1/" + Math.round(100 / Math.max(3, 70 * Math.pow(.86, n))) + " de demi-ton" : "moins d'un demi-ton"}.` },
   marathon: { name:"Le Marathon", level: n => lvlFrom(n, [25, 35, 45, 55, 65, 75, 85, 95, 110, 125]),
     say: n => `Cadence de frappe : ${fmtN(n / 10)} tapes par seconde.` },
 };
@@ -159,6 +163,8 @@ const SKILLS = [
     what:"La finesse de ton œil : nuances de couleur et détails qui changent." },
   { id:"temps", name:"Perception du temps", short:"Temps", col:"#1E4E9C", games:["chrono"],
     what:"Ton horloge interne : sentir une durée sans la voir." },
+  { id:"oreille", name:"Oreille musicale", short:"Oreille", col:"#5B2A6E", games:["accord"],
+    what:"La finesse de ton oreille : entendre qu'une note a bougé d'un cheveu." },
   { id:"motricite", name:"Motricité fine", short:"Motricité", col:"#CC3F27", games:["marathon"],
     what:"La vitesse et l'endurance de tes doigts." },
 ];

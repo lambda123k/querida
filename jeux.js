@@ -2,7 +2,8 @@
    Pour les amis et pour Romane. Un peu cachés :
    · L'Œil : toucher 3 fois le grand titre de la page ;
    · Les Différences : sur l'accueil, toucher 3 fois l'onglet de l'accueil ;
-   · La Mémoire des chiffres : toucher 3 fois la petite ligne au-dessus du titre.
+   · La Mémoire des chiffres : toucher 3 fois la petite ligne au-dessus du titre ;
+   · L'Accord : toucher 3 fois le soleil de « Comment ça marche ».
    On les retrouve ensuite dans l'Arcade (hub.js).
    Fichier à part, préfixe « qj- » partout ; une erreur ici ne casse jamais l'appli. */
 (function(){
@@ -94,6 +95,22 @@ const CSS = `
 .qj-pad .ok:disabled{opacity:.35}
 .qj-cmp{width:100%;background:#fff;border-radius:12px;padding:10px;display:flex;flex-direction:column;align-items:center;gap:4px;margin:4px 0}
 .qj-verdict{font-family:var(--f-display);font-style:italic;font-size:42px;line-height:1;margin:0;color:#2F7D4E}
+/* L'Accord */
+.qj-stage2{min-height:200px;display:flex;align-items:center;justify-content:center;gap:22px}
+.qj-ch{position:relative;width:118px;height:150px;border-radius:18px;background:rgba(59,31,23,.05);display:flex;align-items:flex-end;justify-content:center;gap:9px;padding:18px 0;transition:background-color .2s,transform .2s}
+.qj-ch i{display:block;width:12px;height:16px;border-radius:6px;background:rgba(59,31,23,.15);transition:height .25s cubic-bezier(.3,1.5,.5,1),background-color .2s}
+.qj-ch.on{background:#F1E9F7;transform:scale(1.05)} .qj-ch.on i{background:#5B2A6E}
+.qj-ch.c2.on{background:#FCEBD6} .qj-ch.c2.on i{background:#F2873B}
+.qj-ch span{position:absolute;top:10px;left:0;right:0;text-align:center;font-family:var(--f-display);font-style:italic;font-size:22px;color:rgba(59,31,23,.35)}
+.qj-ch i.odd{background:#CC3F27!important;box-shadow:0 0 0 3px #fff,0 0 0 5px #CC3F27}
+.qj-ab{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.qj-ab button{height:72px;border:0;border-radius:16px;font:700 18px var(--f);cursor:pointer;transition:transform .08s,opacity .15s}
+.qj-ab button:active{transform:scale(.96)} .qj-ab button:disabled{opacity:.35}
+.qj-ab .same{background:#E3F1E7;color:#2F7D4E} .qj-ab .diff{background:#FBE3D3;color:#CC3F27}
+.qj-again{align-self:center;border:0;background:none;color:#7A5A4C;font:600 14px var(--f);text-decoration:underline;cursor:pointer;padding:4px}
+.qj-again:disabled{opacity:.3}
+.qj-hp{display:flex;gap:6px;align-items:center;font-size:13px;color:#7A5A4C;background:rgba(59,31,23,.05);border-radius:10px;padding:8px 12px}
+.qj-hp svg{width:18px;height:18px;flex:none}
 /* Classement */
 .qj-board h2{margin:8px 0 6px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--label2)}
 .qj-row{width:100%;display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:12px;background:var(--card);color:var(--label);font-variant-numeric:tabular-nums;margin-top:6px}
@@ -504,6 +521,107 @@ const CHIF = (() => {
   return G;
 })();
 
+/* ============================================================
+   4 · L'ACCORD — deux fois le même accord… ou une note a-t-elle glissé ?
+   ============================================================ */
+const ACC = (() => {
+  const LIVES = 3;
+  let root, state, lives, score, chord, shifted, shift, replays, smallest, timers = [];
+  const G = { id:"accord", title:"L'Accord", short:"L'Accord", key:"qj_accord_best", Board: makeBoard("accord"), unit: s => `${s} bonne${s > 1 ? "s" : ""} réponse${s > 1 ? "s" : ""}` };
+  const SHAPES = [["majeur",[0,4,7,12]],["mineur",[0,3,7,12]],["majeur 7",[0,4,7,11]],["mineur 7",[0,3,7,10]],["sus 2",[0,2,7,12]],["add 9",[0,4,7,14]],["sixte",[0,4,9,12]]];
+  const NOTES = ["do","do♯","ré","mi♭","mi","fa","fa♯","sol","la♭","la","si♭","si"];
+  const shiftFor = s => Math.max(3, 70 * Math.pow(.86, s));
+  const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+  const HP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 15v-3a8 8 0 0116 0v3"/><rect x="3" y="14" width="4" height="7" rx="1.5"/><rect x="17" y="14" width="4" height="7" rx="1.5"/></svg>';
+  const heart = on => `<svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.8 4.5c2.2 0 3.6 1.2 5.2 3 1.6-1.8 3-3 5.2-3 3.8 0 5.9 3.9 4.4 7.3C19.5 16.4 12 21 12 21z" fill="${on ? "#CC3F27" : "rgba(59,31,23,.15)"}"/></svg>`;
+  /* Son : un petit piano électrique doux, joué même si l'iPhone est en silencieux */
+  let a = null, bus = null;
+  function ac(){
+    try{ if (navigator.audioSession) navigator.audioSession.type = "playback"; }catch(e){}
+    if (!a){ a = new (window.AudioContext || window.webkitAudioContext)(); bus = a.createGain(); bus.gain.value = .55; const lp = a.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 3200; bus.connect(lp).connect(a.destination); }
+    if (a.state === "suspended") a.resume();
+    return a;
+  }
+  function voice(f, t, dur){
+    const out = a.createGain();
+    out.gain.setValueAtTime(0, t); out.gain.linearRampToValueAtTime(.16, t + .012); out.gain.exponentialRampToValueAtTime(.05, t + .35); out.gain.exponentialRampToValueAtTime(.0008, t + dur);
+    out.connect(bus);
+    [[1, 1], [2, .28], [3, .08], [4.01, .05]].forEach(([h, g]) => { const o = a.createOscillator(), v = a.createGain(); o.type = "sine"; o.frequency.value = f * h; v.gain.value = g; o.connect(v).connect(out); o.start(t); o.stop(t + dur + .05); });
+  }
+  const strum = (fs, at) => { const t = a.currentTime + at; fs.forEach((f, i) => voice(f, t + i * .028, 1.3)); };
+  function stop(){ timers.forEach(clearTimeout); timers = []; state = "off"; }
+  const $ = q => root.querySelector(q);
+  const bars = (n, c) => `<div class="qj-ch ${c}"><span>${c === "c1" ? "1" : "2"}</span>${"<i></i>".repeat(n)}</div>`;
+  function title(){ state = "title"; root.innerHTML = `<div class="qj-title"><b>L'Accord</b><p>Tu vas entendre deux fois le même accord… ou presque. Parfois, <b>une seule note a glissé</b>. Pareil ou différent ?</p><div class="qj-hp">${HP}<span>Mets le son, ou mieux, un casque.</span></div>${lsGet(G.key) ? `<p>Ton record : <b>${G.unit(lsGet(G.key))}</b></p>` : ""}<button type="button" class="qj-go" data-qj-go="1">Commencer</button></div>`; }
+  function frame(){
+    root.innerHTML = `<div class="qj-hud"><div><div class="qj-k">Bonnes réponses</div><div class="qj-v" id="qj-sc">${score}</div></div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><div class="qj-lives">${[0,1,2].map(i => heart(i < lives)).join("")}</div><div class="qj-k" id="qj-info"></div></div></div>
+      <div class="qj-stage2"></div><p class="qj-msg"></p>
+      <div class="qj-ab"><button type="button" class="same" data-a="same" disabled>Pareil</button><button type="button" class="diff" data-a="diff" disabled>Différent</button></div>
+      <button type="button" class="qj-again" data-a="again" disabled>Réécouter</button>`;
+  }
+  function msg(t, cls){ const m = $(".qj-msg"); if (m){ m.textContent = t; m.style.color = cls === "ok" ? "#2F7D4E" : cls === "ko" ? "#CC3F27" : ""; } }
+  function btns(on){ root.querySelectorAll(".qj-ab button").forEach(b => b.disabled = !on); const r = $(".qj-again"); if (r) r.disabled = !on || replays >= 1; }
+  function light(which, on){ const el = $(".qj-ch." + which); if (!el) return; el.classList.toggle("on", on); el.querySelectorAll("i").forEach((b, k) => b.style.height = on ? (40 + chord.iv[k] * 5) + "px" : "16px"); }
+  function play(){
+    ac(); btns(false);
+    const f2 = chord.f.map((f, k) => k === shifted ? f * Math.pow(2, shift / 1200) : f);
+    strum(chord.f, .05); strum(f2, 1.45);
+    later(() => light("c1", true), 50); later(() => light("c1", false), 1150);
+    later(() => light("c2", true), 1450); later(() => { light("c2", false); if (state === "ask") btns(true); }, 2550);
+  }
+  function next(){
+    replays = 0; state = "ask";
+    const [n, iv] = SHAPES[Math.floor(Math.random() * SHAPES.length)], r = 48 + Math.floor(Math.random() * 12);
+    chord = { name: NOTES[r % 12] + " " + n, iv, f: iv.map(i => 440 * Math.pow(2, (r + i - 69) / 12)) };
+    const isDiff = Math.random() < .55;
+    shifted = isDiff ? 1 + Math.floor(Math.random() * (iv.length - 1)) : -1;
+    shift = isDiff ? (Math.random() < .5 ? -1 : 1) * shiftFor(score) : 0;
+    $(".qj-stage2").innerHTML = bars(iv.length, "c1") + bars(iv.length, "c2");
+    $("#qj-info").textContent = "Accord de " + chord.name;
+    msg("Écoute…");
+    later(() => { if (state === "ask"){ play(); later(() => { if (state === "ask") msg("Pareil, ou différent ?"); }, 2550); } }, 450);
+  }
+  function answer(saysDiff){
+    if (state !== "ask") return;
+    state = "wait"; btns(false);
+    const isDiff = shifted >= 0, c = Math.round(Math.abs(shift));
+    if (saysDiff === isDiff){
+      score++; $("#qj-sc").textContent = score;
+      if (isDiff) smallest = smallest ? Math.min(smallest, Math.abs(shift)) : Math.abs(shift);
+      msg(isDiff ? `Bien entendu : une note avait glissé de ${c} cents.` : "Oui, c'était exactement le même.", "ok");
+      bip(880, .08); setTimeout(() => bip(1320, .1), 80);
+      later(next, 1300);
+    } else {
+      lives--; $(".qj-lives").innerHTML = [0,1,2].map(i => heart(i < lives)).join("");
+      msg(isDiff ? `Raté : une note avait glissé de ${c} cents ${shift > 0 ? "vers l'aigu" : "vers le grave"}.` : "Raté : c'était exactement le même accord.", "ko");
+      if (isDiff){ const b = root.querySelectorAll(".qj-ch.c2 i")[shifted]; if (b) b.classList.add("odd"); }
+      bip(160, .3, "sawtooth", .05); vib(40);
+      later(lives <= 0 ? end : next, lives <= 0 ? 1800 : 2000);
+    }
+  }
+  function end(){
+    state = "over"; const prev = lsGet(G.key);
+    finished(G, score).then(isBest => {
+      if (state !== "over") return;
+      const v = score >= 30 ? "Oreille de chef d'orchestre." : score >= 22 ? "Oreille de musicien." : score >= 15 ? "Très fine oreille." : score >= 9 ? "Bonne oreille." : score >= 4 ? "Ça vient." : "Il faut déboucher les oreilles ?";
+      const extra = smallest ? `<p>Le plus petit glissement que tu as repéré : <b>${Math.round(smallest)} cents</b>${smallest < 50 ? ", soit 1/" + Math.round(100 / smallest) + " de demi-ton" : ""}. Un demi-ton, c'est 100 cents.</p>` : "";
+      root.insertAdjacentHTML("beforeend", overHTML(v, score, `bonne${score > 1 ? "s" : ""} réponse${score > 1 ? "s" : ""}`, extra, isBest, Math.max(prev, score), G.unit));
+      armReplay(root, start);
+    });
+  }
+  function start(){ stop(); ac(); lives = LIVES; score = 0; smallest = 0; frame(); next(); }
+  G.mount = el => { root = el; title();
+    el.addEventListener("click", e => {
+      if (e.target.closest("[data-qj-go]")){ start(); return; }
+      const b = e.target.closest("[data-a]"); if (!b || b.disabled) return;
+      if (b.dataset.a === "same") answer(false); else if (b.dataset.a === "diff") answer(true);
+      else if (b.dataset.a === "again" && state === "ask" && replays < 1){ replays++; play(); }
+    }); };
+  G.stop = () => { stop(); try{ if (a) a.suspend(); }catch(e){} };
+  return G;
+})();
+
 /* =================== Les cachettes (3 tapes rapides) =================== */
 function triple(selectorFn, G){
   let taps = [];
@@ -522,6 +640,7 @@ function triple(selectorFn, G){
 const inHead = (t, sel) => { const h = t.closest && t.closest("#app > main.screen .head"); return h ? t.closest(sel) : null; };
 triple(t => inHead(t, ".ltitle"), OEIL);                                    // le grand titre
 triple(t => inHead(t, ".eyebrow"), CHIF);                                   // la petite ligne au-dessus
+triple(t => t.closest && t.closest("#sun-logo"), ACC);                        // le soleil de « Comment ça marche »
 triple(t => {                                                               // l'onglet de l'accueil, quand on y est déjà
   const tab = t.closest && t.closest("nav.tabbar .tab"); if (!tab || tab.getAttribute("aria-current") !== "page") return null;
   return tab.dataset.v === (ROMANE ? "today" : "depot") ? tab : null;
@@ -532,7 +651,7 @@ decorate();
 
 /* =================== Inscription dans l'Arcade =================== */
 const R = window.QUERIDA_GAMES = window.QUERIDA_GAMES || {};
-[OEIL, DIFF, CHIF].forEach(G => { R[G.id] = { open: () => openGame(G), best: () => { const b = lsGet(G.key); return b ? G.unit(b) : ""; } }; });
+[OEIL, DIFF, CHIF, ACC].forEach(G => { R[G.id] = { open: () => openGame(G), best: () => { const b = lsGet(G.key); return b ? G.unit(b) : ""; } }; });
 window.dispatchEvent(new Event("qh-games"));
 
 }catch(err){ /* ces jeux ne doivent jamais gêner l'appli */ }
