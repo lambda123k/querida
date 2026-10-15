@@ -514,6 +514,15 @@ function schedule(n){
   const s0 = new Date(start);
   return weeks.map(w => new Date(s0.getFullYear(), s0.getMonth(), s0.getDate() + 7 * (w - 1)).getTime());
 }
+/* Quand chaque capsule arrive chez Romane (pour le suivi « colis » des amis) */
+function capsulePlan(){
+  const all = Store.caps, regular = all.filter(c => (c.moment || "voyage") === "voyage").sort((a, b) => hash(a.id) - hash(b.id));
+  const dates = schedule(regular.length), out = {};
+  regular.forEach((c, k) => { out[c.id] = { at: dates[k] ?? null, ahead: regular.slice(0, k).filter(x => !x.opened_at).length }; });
+  all.forEach(c => { if (out[c.id]) return; const m = c.moment;
+    out[c.id] = { at: m === "avant" ? (Date.parse(c.created_at) || now()) : m === "retour" ? parseDay(CONFIG.RETOUR) : m === "cafard" ? parseDay(CONFIG.DEPART) : null }; });
+  return out;
+}
 function hash(s){ let h = 2166136261; for (let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 function state(){
   const all = Store.caps, t = now();
@@ -941,7 +950,7 @@ function capsuleBody(c){
   if (c.kind === "audio" && url) media = `<audio src="${esc(url)}" controls preload="metadata"></audio>`;
   if (c.kind === "song" && c.song) media = songCard(c.song) + (c.song.preview ? `<audio src="${esc(c.song.preview)}" controls preload="none"></audio>` : "") + songLinks(c.song);
   if (["photo","video","audio"].includes(c.kind) && !url) media = `<p class="foot" style="padding:0">Le fichier n'est pas disponible en démo.</p>`;
-  return `<div class="reveal" style="display:flex;flex-direction:column;gap:18px"><span class="from">De la part de ${esc(c.author_name)}${c.relation ? " · " + esc(c.relation) : ""}</span><p class="letter" style="font-family:var(--f-display);font-style:italic;font-size:30px;color:var(--accent)">Querida ${P()},</p>${media}${c.text ? `<p class="letter">${esc(c.text)}</p>` : ""}
+  return `<div class="reveal" data-cap="${esc(c.id)}" style="display:flex;flex-direction:column;gap:18px"><span class="from">De la part de ${esc(c.author_name)}${c.relation ? " · " + esc(c.relation) : ""}</span><p class="letter" style="font-family:var(--f-display);font-style:italic;font-size:30px;color:var(--accent)">Querida ${P()},</p>${media}${c.text ? `<p class="letter">${esc(c.text)}</p>` : ""}
     ${c.opened_at ? `<p class="foot" style="padding:0">Ouverte le ${fmt(new Date(c.opened_at).getTime(), { day:"numeric", month:"long", year:"numeric" })}</p>` : ""}</div>`;
 }
 function viewCapsule(c){ sheet({ title: TYPES[c.kind].label, right:`<button class="tbtn bold" data-act="close">OK</button>`, body: capsuleBody(c) }); }
@@ -1216,7 +1225,9 @@ if (role === "ami" || role === "romane"){
       goTab: t => { tab = t; clearLayers(); render(); window.scrollTo(0, 0); },
       push: (type, title, body) => Push.send(type, title, body),
       pushOn: () => Push.on(),
-      capsuleHTML: c => capsuleBody(c)
+      capsuleHTML: c => capsuleBody(c),
+      plan: () => capsulePlan(), now: () => now(), dates: () => ({ depart: parseDay(CONFIG.DEPART), retour: parseDay(CONFIG.RETOUR) }),
+      openMyCapsule: id => { const c = Store.caps.find(x => x.id === id); if (c) myCapsuleSheet(c); }
     };
     loadScript("admin.js?v=3").catch(() => {});
     if (role === "ami") loadScript("enigme.js?v=2").catch(() => {});
@@ -1228,6 +1239,7 @@ if (role === "ami" || role === "romane"){
     loadScript("reactions.js?v=2").catch(() => {});
     loadScript("jeux.js?v=2").catch(() => {});
     loadScript("hub.js?v=5").catch(() => {});
+    loadScript("colis.js?v=1").catch(() => {});
   }catch(e){}
 }
 window.addEventListener("pageshow", e => { if (e.persisted) refreshIfStale(); });
