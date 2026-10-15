@@ -132,28 +132,35 @@ const meId = () => String((Q.me() || {}).id || "anon").replace(/[^a-zA-Z0-9]/g, 
 /* =================== Mon profil : les capacités =================== */
 const fmtN = (n, d = 1) => n.toFixed(d).replace(".", ",");
 const lvlFrom = (v, steps) => { let l = 0; steps.forEach((t, i) => { if (v >= t) l = i + 1; }); return Math.max(1, Math.min(10, l)); };
+/* Cinq domaines, comme en sciences cognitives. Chaque domaine est mesuré par un ou deux jeux ;
+   son niveau est la moyenne des jeux déjà joués. */
+const M = {
+  feuvert: { name:"Le Feu vert", level: ms => ms <= 180 ? 10 : ms <= 200 ? 9 : ms <= 215 ? 8 : ms <= 230 ? 7 : ms <= 250 ? 6 : ms <= 270 ? 5 : ms <= 290 ? 4 : ms <= 320 ? 3 : ms <= 360 ? 2 : 1, lower:true,
+    say: ms => `Temps de réaction moyen : ${ms} ms. Un clignement d'œil dure 100 à 150 ms.` },
+  tour: { name:"La Tour", level: n => lvlFrom(n, [2, 5, 8, 11, 15, 19, 24, 29, 35, 44]),
+    say: n => `${n} étage${n > 1 ? "s" : ""} posé${n > 1 ? "s" : ""} au bon instant, de plus en plus vite.` },
+  chiffres: { name:"La Mémoire des chiffres", level: n => Math.max(1, Math.min(10, n - 2)),
+    say: n => `Empan de ${n} chiffres. La moyenne humaine tourne autour de 7.` },
+  oeil: { name:"L'Œil", level: n => lvlFrom(n, [4, 8, 12, 16, 20, 24, 28, 32, 36, 42]),
+    say: n => `Seuil de discrimination des couleurs : ${fmtN(Math.max(1.5, 22 * Math.pow(.9, n)))} % d'écart.` },
+  diff: { name:"Les Différences", level: n => lvlFrom(n, [1, 3, 5, 8, 11, 14, 18, 22, 27, 33]),
+    say: n => `${n} changement${n > 1 ? "s" : ""} détecté${n > 1 ? "s" : ""} dans des scènes jamais vues.` },
+  chrono: { name:"Le Chrono", level: n => Math.max(1, Math.min(10, n)),
+    say: n => `Estimation du temps à ±${fmtN(Math.max(.03, .3 * Math.pow(.83, n - 1)), 2)} s près, sans repère visuel.` },
+  marathon: { name:"Le Marathon", level: n => lvlFrom(n, [25, 35, 45, 55, 65, 75, 85, 95, 110, 125]),
+    say: n => `Cadence de frappe : ${fmtN(n / 10)} tapes par seconde.` },
+};
 const SKILLS = [
-  { id:"reflexes", my:"tes réflexes", name:"Réflexes", game:"feuvert", col:"#2E8B57", lower:true,
-    level: ms => ms <= 180 ? 10 : ms <= 200 ? 9 : ms <= 215 ? 8 : ms <= 230 ? 7 : ms <= 250 ? 6 : ms <= 270 ? 5 : ms <= 290 ? 4 : ms <= 320 ? 3 : ms <= 360 ? 2 : 1,
-    say: ms => `Tu réagis en ${ms} ms en moyenne. Un clignement d'œil dure environ 100 à 150 ms.` },
-  { id:"memoire", my:"ta mémoire", name:"Mémoire", game:"chiffres", col:"#E0892E",
-    level: n => Math.max(1, Math.min(10, n - 2)),
-    say: n => `Tu retiens ${n} chiffres d'affilée. La plupart des gens plafonnent autour de 7.` },
-  { id:"observation", my:"ton sens de l'observation", name:"Observation", game:"diff", col:"#1E4E9C",
-    level: n => lvlFrom(n, [1, 3, 5, 8, 11, 14, 18, 22, 27, 33]),
-    say: n => `Tu as repéré ${n} différence${n > 1 ? "s" : ""} d'affilée dans des scènes que tu n'avais jamais vues.` },
-  { id:"couleurs", my:"ta vision des couleurs", name:"Vision des couleurs", game:"oeil", col:"#7B5BB0",
-    level: n => lvlFrom(n, [4, 8, 12, 16, 20, 24, 28, 32, 36, 42]),
-    say: n => `Ton œil distingue un écart de couleur de ${fmtN(Math.max(1.5, 22 * Math.pow(.9, n)))} %. ${n >= 24 ? "Bien au-delà de la moyenne." : "Avec de l'entraînement, on descend sous 3 %."}` },
-  { id:"horloge", my:"ton horloge interne", name:"Horloge interne", game:"chrono", col:"#9E3320",
-    level: n => Math.max(1, Math.min(10, n)),
-    say: n => `Tu as tenu jusqu'au niveau ${n} : tu sens le temps passer à ±${fmtN(Math.max(.03, .3 * Math.pow(.83, n - 1)), 2)} s près, sans regarder.` },
-  { id:"doigts", my:"la vitesse de tes doigts", name:"Vitesse des doigts", game:"marathon", col:"#CC3F27",
-    level: n => lvlFrom(n, [25, 35, 45, 55, 65, 75, 85, 95, 110, 125]),
-    say: n => `${n} tapes en 10 secondes, soit ${fmtN(n / 10)} par seconde.` },
-  { id:"precision", my:"ta précision", name:"Précision", game:"tour", col:"#F2873B",
-    level: n => lvlFrom(n, [2, 5, 8, 11, 15, 19, 24, 29, 35, 44]),
-    say: n => `${n} étage${n > 1 ? "s" : ""} empilé${n > 1 ? "s" : ""} au bon moment, sans trembler.` },
+  { id:"reaction", name:"Vitesse de réaction", short:"Réaction", col:"#2E8B57", games:["feuvert", "tour"],
+    what:"La rapidité avec laquelle ton cerveau perçoit un signal et déclenche le geste." },
+  { id:"memoire", name:"Mémoire de travail", short:"Mémoire", col:"#E0892E", games:["chiffres"],
+    what:"Ce que tu peux garder en tête quelques secondes et manipuler." },
+  { id:"perception", name:"Perception visuelle", short:"Perception", col:"#7B5BB0", games:["oeil", "diff"],
+    what:"La finesse de ton œil : nuances de couleur et détails qui changent." },
+  { id:"temps", name:"Perception du temps", short:"Temps", col:"#1E4E9C", games:["chrono"],
+    what:"Ton horloge interne : sentir une durée sans la voir." },
+  { id:"motricite", name:"Motricité fine", short:"Motricité", col:"#CC3F27", games:["marathon"],
+    what:"La vitesse et l'endurance de tes doigts." },
 ];
 const RANKS = ["", "Novice", "Novice", "Amateur", "Amateur", "Solide", "Solide", "Redoutable", "Redoutable", "Expert", "Phénomène"];
 function localBest(game){
@@ -165,36 +172,46 @@ function localBest(game){
     return +localStorage.getItem("qj_" + game + "_best") || 0;
   }catch(e){ return 0; }
 }
-function myValue(sk){
-  const loc = localBest(sk.game), ov = G() && G().overall(), me = ov && ov.find(p => p.id === meId()), srv = me && me.raw ? me.raw[sk.game] || 0 : 0;
-  if (sk.lower){ const c = [loc, srv].filter(x => x > 0); return c.length ? Math.min(...c) : 0; }
+function myValue(game){
+  const loc = localBest(game), ov = G() && G().overall(), me = ov && ov.find(p => p.id === meId()), srv = me && me.raw ? me.raw[game] || 0 : 0;
+  if (M[game].lower){ const c = [loc, srv].filter(x => x > 0); return c.length ? Math.min(...c) : 0; }
   return Math.max(loc, srv);
 }
-const skIcon = (sk, lv) => `<svg viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="14" fill="${sk.col}" opacity=".14"/><circle cx="15" cy="15" r="14" fill="none" stroke="${sk.col}" stroke-width="2" stroke-dasharray="${(lv / 10 * 88).toFixed(1)} 88" transform="rotate(-90 15 15)" stroke-linecap="round"/><text x="15" y="19.5" text-anchor="middle" font-family="-apple-system,sans-serif" font-weight="800" font-size="12" fill="${sk.col}">${lv || "?"}</text></svg>`;
+function skillLevel(sk){
+  const parts = sk.games.map(g => { const v = myValue(g); return { g, v, lv: v ? M[g].level(v) : 0 }; });
+  const done = parts.filter(p => p.lv);
+  return { parts, lv: done.length ? Math.round(done.reduce((a, p) => a + p.lv, 0) / done.length * 10) / 10 : 0 };
+}
+const skIcon = (sk, lv) => `<svg viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="14" fill="${sk.col}" opacity=".14"/><circle cx="15" cy="15" r="14" fill="none" stroke="${sk.col}" stroke-width="2" stroke-dasharray="${(lv / 10 * 88).toFixed(1)} 88" transform="rotate(-90 15 15)" stroke-linecap="round"/><text x="15" y="19.5" text-anchor="middle" font-family="-apple-system,sans-serif" font-weight="800" font-size="12" fill="${sk.col}">${lv ? Math.round(lv) : "?"}</text></svg>`;
 function radar(vals){
-  const N = SKILLS.length, cx = 170, cy = 150, R = 100, pt = (i, r) => { const a = -Math.PI / 2 + i * 2 * Math.PI / N; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; };
+  const N = SKILLS.length, cx = 170, cy = 145, R = 95, pt = (i, r) => { const a = -Math.PI / 2 + i * 2 * Math.PI / N; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; };
   let g = "";
   [2, 4, 6, 8, 10].forEach(l => { g += `<polygon points="${SKILLS.map((_, i) => pt(i, R * l / 10).map(v => v.toFixed(1)).join(",")).join(" ")}" fill="none" stroke="var(--sep)" stroke-width="1"/>`; });
-  SKILLS.forEach((sk, i) => { const [x, y] = pt(i, R); g += `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--sep)"/>`; const [lx, ly] = pt(i, R + 26); g += `<text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--label2)" font-family="-apple-system,sans-serif">${sk.name.split(" ")[0]}</text>`; });
+  SKILLS.forEach((sk, i) => { const [x, y] = pt(i, R); g += `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--sep)"/>`; const [lx, ly] = pt(i, R + 24); g += `<text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="600" fill="var(--label2)" font-family="-apple-system,sans-serif">${sk.short}</text>`; });
   g += `<polygon points="${vals.map((v, i) => pt(i, R * Math.max(.06, v / 10)).map(x => x.toFixed(1)).join(",")).join(" ")}" fill="var(--accent)" fill-opacity=".22" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>`;
-  vals.forEach((v, i) => { if (v){ const [x, y] = pt(i, R * v / 10); g += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${SKILLS[i].col}"/>`; } });
-  return `<svg class="qh-radar" viewBox="0 0 340 300" role="img" aria-label="Tes capacités">${g}</svg>`;
+  vals.forEach((v, i) => { if (v){ const [x, y] = pt(i, R * v / 10); g += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.5" fill="${SKILLS[i].col}"/>`; } });
+  return `<svg class="qh-radar" viewBox="0 0 340 290" role="img" aria-label="Ton profil cognitif">${g}</svg>`;
 }
 function profileHTML(){
-  const rows = SKILLS.map(sk => { const v = myValue(sk); return { sk, v, lv: v ? sk.level(v) : 0 }; });
+  const rows = SKILLS.map(sk => ({ sk, ...skillLevel(sk) }));
   const tested = rows.filter(r => r.lv), avg = tested.length ? tested.reduce((a, r) => a + r.lv, 0) / tested.length : 0;
   const best = tested.slice().sort((a, b) => b.lv - a.lv)[0], weak = tested.length > 1 ? tested.slice().sort((a, b) => a.lv - b.lv)[0] : null;
   const ov = G() && G().overall(), me = ov && ov.find(p => p.id === meId());
   const sum = `<div class="qh-sum"><div><small>Point fort</small><b>${best ? best.sk.name : "—"}</b></div><div><small>À travailler</small><b>${weak && weak !== best ? weak.sk.name : "—"}</b></div>
-    <div><small>Niveau moyen</small><b>${avg ? fmtN(avg) + " / 10" : "—"}</b></div><div><small>Classement général</small><b>${me ? me.rank + (me.rank > 1 ? "e" : "er") + " · " + me.pts + " pts" : "—"}</b></div></div>`;
-  const cards = rows.map(({ sk, v, lv }) => {
-    const c = CATALOG.find(x => x.id === sk.game), found = isFound(sk.game);
-    return `<div class="qh-skill ${lv ? "" : "qh-none"}"><div class="qh-sh">${skIcon(sk, lv)}<b>${sk.name}</b><span class="qh-lvl">${lv ? "Niveau " + lv + " · " + RANKS[lv] : "Pas encore testé"}</span></div>
-      <div class="qh-bar">${Array.from({ length: 10 }, (_, i) => `<i class="${i < lv ? "on" : ""}"></i>`).join("")}</div>
-      <p>${lv ? sk.say(v) : found ? `Joue à ${c.name} pour mesurer ${sk.my}.` : `Le jeu qui mesure ${sk.my} est encore caché. Indice : ${c.hint}`}</p>
-      ${found ? `<button type="button" class="qh-go" data-qh="play" data-v="${sk.game}">${lv ? "Améliorer" : "Tester"} · ${c.name}</button>` : ""}</div>`;
+    <div><small>Indice global</small><b>${avg ? fmtN(avg) + " / 10" : "—"}</b></div><div><small>Classement général</small><b>${me ? me.rank + (me.rank > 1 ? "e" : "er") + " · " + me.pts + " pts" : "—"}</b></div></div>`;
+  const cards = rows.map(({ sk, parts, lv }) => {
+    const L = Math.round(lv);
+    const lines = parts.map(p => {
+      const c = CATALOG.find(x => x.id === p.g), found = isFound(p.g);
+      if (p.lv) return `<p><b style="color:var(--label)">${M[p.g].name} · niv. ${p.lv}</b> — ${M[p.g].say(p.v)}</p>`;
+      return `<p><b style="color:var(--label)">${M[p.g].name}</b> — ${found ? "pas encore joué." : "jeu encore caché. Indice : " + esc(c.hint)}</p>`;
+    }).join("");
+    const btns = parts.filter(p => isFound(p.g)).map(p => `<button type="button" class="qh-go" data-qh="play" data-v="${p.g}">${p.lv ? "Améliorer" : "Tester"} · ${M[p.g].name}</button>`).join("");
+    return `<div class="qh-skill ${lv ? "" : "qh-none"}"><div class="qh-sh">${skIcon(sk, lv)}<b>${sk.name}</b><span class="qh-lvl">${lv ? fmtN(lv) + " · " + RANKS[L] : "Non mesuré"}</span></div>
+      <div class="qh-bar">${Array.from({ length: 10 }, (_, i) => `<i class="${i < L ? "on" : ""}"></i>`).join("")}</div>
+      <p style="font-style:italic">${sk.what}</p>${lines}${btns ? `<div style="display:flex;flex-wrap:wrap;gap:6px">${btns}</div>` : ""}</div>`;
   }).join("");
-  return `${radar(rows.map(r => r.lv))}${sum}${cards}<p class="qh-foot">Chaque capacité est mesurée par ton record dans un jeu de l'Arcade.</p>`;
+  return `${radar(rows.map(r => r.lv))}${sum}${cards}<p class="qh-foot">Chaque domaine est mesuré par tes records dans les jeux de l'Arcade. Quand deux jeux mesurent le même domaine, c'est la moyenne des deux.</p>`;
 }
 function rankingHTML(){
   const g = G(); if (!g) return `<p class="qh-foot">Classement indisponible.</p>`;
@@ -223,7 +240,7 @@ function render(){
   wrap.innerHTML = `<div class="qh-in"><div class="qh-head"><h1>${PAD}Arcade</h1><button type="button" class="qh-close" data-qh="close" aria-label="Fermer">×</button></div>
     <p class="qh-sub">${n === total ? "Tu as trouvé tous les jeux de Querida. Respect." : `${n} jeu${n > 1 ? "x" : ""} trouvé${n > 1 ? "s" : ""} sur ${total}. Les autres sont cachés dans l'appli.`}</p>
     <div class="qh-prog"><i style="width:${Math.round(n / total * 100)}%"></i></div>
-    <div class="qh-seg" role="tablist"><button type="button" data-qh="view" data-v="jeux" aria-pressed="${view === "jeux"}">Les jeux</button><button type="button" data-qh="view" data-v="profil" aria-pressed="${view === "profil"}">Mes capacités</button><button type="button" data-qh="view" data-v="general" aria-pressed="${view === "general"}">Classement</button></div>
+    <div class="qh-seg" role="tablist"><button type="button" data-qh="view" data-v="jeux" aria-pressed="${view === "jeux"}">Les jeux</button><button type="button" data-qh="view" data-v="profil" aria-pressed="${view === "profil"}">Mon profil</button><button type="button" data-qh="view" data-v="general" aria-pressed="${view === "general"}">Classement</button></div>
     ${view === "jeux" ? `<div class="qh-grid">${cards}</div><p class="qh-foot">Chaque jeu a son classement de la bande. Le premier porte la couronne.</p>` : view === "profil" ? profileHTML() : rankingHTML()}</div>`;
 }
 function openHub(){
