@@ -25,6 +25,7 @@ const GAMES = [
   { id:"oeil",     name:"L'Œil",            dir:"oeil",     re:/^(\d{3,4})__(\d{14})__([A-Za-z0-9]{1,8})__([0-9a-f]+)\.txt$/, v: m => +m[1], ts:2, idx:3, nm:4, show: m => `${+m[1]} cases` },
   { id:"diff",     name:"Les Différences",  dir:"diff",     re:/^(\d{3,4})__(\d{14})__([A-Za-z0-9]{1,8})__([0-9a-f]+)\.txt$/, v: m => +m[1], ts:2, idx:3, nm:4, show: m => `${+m[1]} trouvées` },
   { id:"accord",   name:"L'Accord",         dir:"accord",   re:/^(\d{3,4})__(\d{14})__([A-Za-z0-9]{1,8})__([0-9a-f]+)\.txt$/, v: m => +m[1], ts:2, idx:3, nm:4, show: m => `${+m[1]} bonnes réponses` },
+  { id:"hanoi",    name:"Les Tours de Hanoï", dir:"hanoi", re:/^(\d{3,4})__(\d{14})__([A-Za-z0-9]{1,8})__([0-9a-f]+)\.txt$/, v: m => +m[1], ts:2, idx:3, nm:4, show: m => `${+m[1]} pts` },
   { id:"chiffres", name:"La Mémoire des chiffres", dir:"chiffres", re:/^(\d{3,4})__(\d{14})__([A-Za-z0-9]{1,8})__([0-9a-f]+)\.txt$/, v: m => +m[1], ts:2, idx:3, nm:4, show: m => `${+m[1]} chiffres` },
 ];
 const TITLES = [

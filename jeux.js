@@ -3,7 +3,8 @@
    · L'Œil : toucher 3 fois le grand titre de la page ;
    · Les Différences : sur l'accueil, toucher 3 fois l'onglet de l'accueil ;
    · La Mémoire des chiffres : toucher 3 fois la petite ligne au-dessus du titre ;
-   · L'Accord : toucher 3 fois le soleil de « Comment ça marche ».
+   · L'Accord : toucher 3 fois le soleil de « Comment ça marche » ;
+   · Les Tours de Hanoï : dans l'Arcade, toucher 3 fois le titre « Arcade ».
    On les retrouve ensuite dans l'Arcade (hub.js).
    Fichier à part, préfixe « qj- » partout ; une erreur ici ne casse jamais l'appli. */
 (function(){
@@ -122,6 +123,23 @@ const CSS = `
 .qj-toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 14px);transform:translate(-50%,-150%);transition:transform .5s cubic-bezier(.2,1.2,.4,1);z-index:80;background:#F3C77A;color:#1A1222;font-weight:700;border-radius:999px;padding:10px 18px;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,.35);white-space:nowrap}
 .qj-toast.on{transform:translate(-50%,0)}
 @media (prefers-reduced-motion: reduce){.qj-wrap{animation:none}.qj-grid button.qj-reveal{animation:none}}
+/* Tours de Hanoï */
+.qj-v small{font-size:15px;font-weight:600;color:#7A5A4C}
+.qj-hn{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;height:190px;margin-top:4px}
+.qj-hn-peg{position:relative;border:0;background:rgba(59,31,23,.04);border-radius:12px;padding:0 4px 10px;cursor:pointer;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.qj-hn-peg::after{content:"";position:absolute;left:6%;right:6%;bottom:6px;height:6px;border-radius:3px;background:#7A5A4C}
+.qj-hn-peg.sel{background:rgba(242,135,59,.14)}
+.qj-hn-pole{position:absolute;left:50%;bottom:8px;width:6px;height:150px;margin-left:-3px;border-radius:3px;background:#C9B8AC}
+.qj-hn-st{position:relative;z-index:1;width:100%;display:flex;flex-direction:column-reverse;align-items:center;gap:3px;margin-bottom:4px}
+.qj-hn-d{display:block;height:20px;border-radius:7px;box-shadow:inset 0 -3px 0 rgba(0,0,0,.18);transition:transform .15s cubic-bezier(.2,1.3,.4,1)}
+.qj-hn-d.up{transform:translateY(-22px);box-shadow:inset 0 -3px 0 rgba(0,0,0,.18),0 6px 10px rgba(59,31,23,.25)}
+.qj-hn-goal{position:absolute;top:6px;left:0;right:0;text-align:center;font-style:normal;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#2F7D4E}
+.qj-hn.done .qj-hn-peg:last-child{background:rgba(47,125,78,.14)}
+.qj-msg.ok{color:#2F7D4E}
+.qj-foot2{margin:0;text-align:center;font-size:14px;color:#7A5A4C;font-variant-numeric:tabular-nums}
+.qj-hn-sum{width:100%;max-width:320px;font-size:13.5px;text-align:left;font-variant-numeric:tabular-nums}
+.qj-hn-sum div{display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid rgba(59,31,23,.1)}
+.qj-hn-sum span{color:#7A5A4C}
 `;
 const st = document.createElement("style"); st.id = "qj-style"; st.textContent = CSS; document.head.appendChild(st);
 
@@ -189,7 +207,8 @@ function closeGame(){
   if (!cur) return;
   try{ cur.G.stop(); }catch(e){}
   cur.wrap.remove(); cur = null;
-  if (!Q.layerCount()) document.body.style.overflow = "";
+  if (!Q.layerCount() && !document.querySelector(".qh-wrap")) document.body.style.overflow = "";
+  try{ window.dispatchEvent(new Event("qh-games")); }catch(e){}
 }
 document.addEventListener("click", e => {
   const b = e.target.closest && e.target.closest('[data-qj="close"]'); if (!b) return;
@@ -622,6 +641,107 @@ const ACC = (() => {
   return G;
 })();
 
+/* ============================================================
+   5 · LES TOURS DE HANOÏ — déplacer la tour, un disque à la fois,
+   jamais un grand sur un petit. Quatre tours : 3, 4, 5 puis 6 disques.
+   ============================================================ */
+const HANOI = (() => {
+  const LEVELS = [3, 4, 5, 6];
+  const COLS = ["#CC3F27", "#F2873B", "#E8B530", "#2F7D4E", "#1E4E9C", "#7B5BB0"];
+  let root, state, li, n, pegs, sel, moves, t0, total, log, raf = 0, timers = [];
+  const G = { id:"hanoi", title:"Les Tours de Hanoï", short:"Hanoï", key:"qj_hanoi_best", Board: makeBoard("hanoi"), unit: s => `${s} pts` };
+  const opt = k => Math.pow(2, k) - 1;
+  const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+  const secs = () => t0 ? (performance.now() - t0) / 1000 : 0;
+  function stop(){ timers.forEach(clearTimeout); timers = []; cancelAnimationFrame(raf); state = "off"; }
+  const $ = q => root.querySelector(q);
+  // Points d'une tour : base (coups minimum × 10, réduite si on fait des coups en trop) + bonus de vitesse
+  function points(k, mv, s){
+    const o = opt(k), eff = o / mv;
+    const base = Math.round(o * 10 * eff);
+    const speed = Math.max(0, Math.round(o * 10 * (1 - s / (o * 2)) * eff));
+    return { base, speed, eff, pts: base + speed };
+  }
+  function title(){
+    state = "title";
+    root.innerHTML = titleHTML("Les Tours<br>de Hanoï", "Fais passer la tour sur le piquet de droite. Un seul disque à la fois, et jamais un grand sur un petit. Quatre tours, de 3 à 6 disques. Moins de coups et plus vite, plus de points.", lsGet(G.key), G.unit);
+  }
+  function frame(){
+    root.innerHTML = `<div class="qj-hud"><div><div class="qj-k">Tour ${li + 1} / ${LEVELS.length}</div><div class="qj-v">${n} disques</div></div>
+      <div style="text-align:center"><div class="qj-k">Coups</div><div class="qj-v" id="qj-hn-mv">0<small>/${opt(n)}</small></div></div>
+      <div style="text-align:right"><div class="qj-k">Temps</div><div class="qj-v" id="qj-hn-t">0,0</div></div></div>
+      <div class="qj-hn" id="qj-hn">${[0, 1, 2].map(p => `<button type="button" class="qj-hn-peg" data-p="${p}" aria-label="Piquet ${p + 1}"><i class="qj-hn-pole"></i><span class="qj-hn-st"></span>${p === 2 ? '<em class="qj-hn-goal">Arrivée</em>' : ""}</button>`).join("")}</div>
+      <p class="qj-msg" id="qj-hn-msg">${li === 0 ? "Touche un piquet pour prendre son disque du dessus." : "Le chrono part à ton premier coup."}</p>
+      <p class="qj-foot2">Total : <b id="qj-hn-tot">${total}</b> pts</p>`;
+    paint();
+  }
+  function paint(){
+    root.querySelectorAll(".qj-hn-peg").forEach(b => {
+      const p = +b.dataset.p, st = b.querySelector(".qj-hn-st");
+      st.innerHTML = pegs[p].map((d, i) => `<i class="qj-hn-d ${sel === p && i === pegs[p].length - 1 ? "up" : ""}" style="width:${28 + (d - 1) / Math.max(1, n - 1) * 68}%;background:${COLS[(d - 1) % COLS.length]}"></i>`).join("");
+      b.classList.toggle("sel", sel === p);
+    });
+    const mv = $("#qj-hn-mv"); if (mv) mv.innerHTML = `${moves}<small>/${opt(n)}</small>`;
+  }
+  function tick(){ if (state !== "play") return; const t = $("#qj-hn-t"); if (t) t.textContent = fmt(secs()); raf = requestAnimationFrame(tick); }
+  const fmt = s => s.toFixed(1).replace(".", ",");
+  function level(){
+    n = LEVELS[li]; pegs = [Array.from({ length: n }, (_, i) => n - i), [], []]; sel = null; moves = 0; t0 = 0; state = "play";
+    frame(); cancelAnimationFrame(raf); raf = requestAnimationFrame(tick);
+  }
+  function msg(t, c){ const m = $("#qj-hn-msg"); if (m){ m.textContent = t; m.className = "qj-msg" + (c ? " " + c : ""); } }
+  function tap(p){
+    if (state !== "play") return;
+    const top = k => pegs[k][pegs[k].length - 1];
+    if (sel === null){
+      if (!pegs[p].length) return;
+      sel = p; bip(520 + top(p) * 60, .05, "triangle", .05); paint(); return;
+    }
+    if (p === sel){ sel = null; paint(); return; }
+    if (pegs[p].length && top(p) < top(sel)){
+      const b = root.querySelector(`.qj-hn-peg[data-p="${p}"]`); if (b){ b.classList.remove("qj-shake"); void b.offsetWidth; b.classList.add("qj-shake"); }
+      bip(160, .2, "sawtooth", .05); vib(30); msg("Pas de grand disque sur un petit !", "hot"); return;
+    }
+    if (!t0) t0 = performance.now();
+    pegs[p].push(pegs[sel].pop()); sel = null; moves++;
+    bip(400 + top(p) * 60, .06, "sine", .07); paint();
+    if (moves === 1) msg("");
+    if (pegs[2].length === n) won();
+  }
+  function won(){
+    state = "between"; cancelAnimationFrame(raf);
+    const s = secs(), r = points(n, moves, s); total += r.pts;
+    log.push({ n, moves, s, ...r });
+    const t = $("#qj-hn-t"); if (t) t.textContent = fmt(s);
+    const tot = $("#qj-hn-tot"); if (tot) tot.textContent = total;
+    bip(660, .1); later(() => bip(880, .1), 100); later(() => bip(1320, .16), 200);
+    root.querySelector(".qj-hn")?.classList.add("done");
+    msg(`${moves === opt(n) ? "Parfait ! " : ""}+${r.pts} pts (${Math.round(r.eff * 100)} % d'efficacité, bonus vitesse ${r.speed})`, "ok");
+    li++;
+    later(li < LEVELS.length ? level : end, li < LEVELS.length ? 1900 : 1600);
+  }
+  function end(){
+    state = "over"; const prev = lsGet(G.key), score = total;
+    finished(G, score).then(isBest => {
+      if (state !== "over") return;
+      const perfect = log.filter(x => x.moves === opt(x.n)).length;
+      const v = score >= 1800 ? "Grand maître." : score >= 1450 ? "Stratège redoutable." : score >= 1100 ? "Belle planification." : score >= 750 ? "Pas mal du tout." : "Ça se travaille.";
+      const extra = `<div class="qj-hn-sum">${log.map(x => `<div><span>${x.n} disques · ${x.moves} coups${x.moves === opt(x.n) ? " ✓" : ` (min. ${opt(x.n)})`} · ${fmt(x.s)} s</span><b>${x.pts}</b></div>`).join("")}</div>
+        <p>${perfect === LEVELS.length ? "Les quatre tours au nombre minimum de coups. Chapeau." : perfect ? `${perfect} tour${perfect > 1 ? "s" : ""} sur 4 au nombre minimum de coups.` : "Astuce : le plus petit disque tourne toujours dans le même sens."}</p>`;
+      root.insertAdjacentHTML("beforeend", overHTML(v, score, "points", extra, isBest, Math.max(prev, score), G.unit));
+      armReplay(root, start);
+    });
+  }
+  function start(){ stop(); li = 0; total = 0; log = []; level(); }
+  G.mount = el => { root = el; title();
+    el.addEventListener("pointerdown", e => {
+      if (e.target.closest("[data-qj-go]")){ e.preventDefault(); start(); return; }
+      const b = e.target.closest(".qj-hn-peg"); if (!b) return; e.preventDefault(); tap(+b.dataset.p);
+    }); };
+  G.stop = stop;
+  return G;
+})();
+
 /* =================== Les cachettes (3 tapes rapides) =================== */
 function triple(selectorFn, G){
   let taps = [];
@@ -645,13 +765,14 @@ triple(t => {                                                               // l
   const tab = t.closest && t.closest("nav.tabbar .tab"); if (!tab || tab.getAttribute("aria-current") !== "page") return null;
   return tab.dataset.v === (ROMANE ? "today" : "depot") ? tab : null;
 }, DIFF);
+triple(t => t.closest && t.closest(".qh-wrap .qh-head h1"), HANOI);          // le titre « Arcade », dans l'Arcade même
 function decorate(){ document.querySelectorAll("#app > main.screen .head .ltitle, #app > main.screen .head .eyebrow").forEach(el => el.classList.add("qj-tap")); }
 let qd = false; new MutationObserver(() => { if (qd) return; qd = true; requestAnimationFrame(() => { qd = false; try{ decorate(); }catch(e){} }); }).observe(document.body, { childList:true, subtree:true });
 decorate();
 
 /* =================== Inscription dans l'Arcade =================== */
 const R = window.QUERIDA_GAMES = window.QUERIDA_GAMES || {};
-[OEIL, DIFF, CHIF, ACC].forEach(G => { R[G.id] = { open: () => openGame(G), best: () => { const b = lsGet(G.key); return b ? G.unit(b) : ""; } }; });
+[OEIL, DIFF, CHIF, ACC, HANOI].forEach(G => { R[G.id] = { open: () => openGame(G), best: () => { const b = lsGet(G.key); return b ? G.unit(b) : ""; } }; });
 window.dispatchEvent(new Event("qh-games"));
 
 }catch(err){ /* ces jeux ne doivent jamais gêner l'appli */ }
