@@ -120,7 +120,7 @@ let qd = false; new MutationObserver(() => { if (qd) return; qd = true; requestA
 decorate();
 
 let wrap = null, view = "capsules", items = null, armed = null, seen = null;
-const GAMES = [["tour","La Tour"],["chrono","Le Chrono"],["marathon","Le Marathon"],["feuvert","Le Feu vert"],["oeil","L'Œil"],["diff","Les Différences"],["chiffres","La Mémoire des chiffres"],["accord","L'Accord"],["hanoi","Les Tours de Hanoï"]];
+const GAMES = [["tour","La Tour"],["chrono","Le Chrono"],["marathon","Le Marathon"],["feuvert","Le Feu vert"],["oeil","L'Œil"],["diff","Les Différences"],["chiffres","La Mémoire des chiffres"],["accord","L'Accord"],["hanoi2","Les Tours de Hanoï"]];
 function toast(t){ document.getElementById("qx-toast")?.remove(); document.body.insertAdjacentHTML("beforeend", `<div class="qx-toast" id="qx-toast">${esc(t)}</div>`); setTimeout(() => document.getElementById("qx-toast")?.remove(), 2200); }
 const when = ts => { try{ return new Date(ts).toLocaleString("fr-FR", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }); }catch(e){ return ""; } };
 async function subfolders(folder){
@@ -177,7 +177,7 @@ async function load(){
         let what = path, where = "Masqué";
         if (parts[0] === "comments"){ what = await readText(path) || "(commentaire)"; where = "Commentaire · " + pageName(parts[1]); }
         else if (parts[0] === "reactions"){ what = "Réaction"; where = pageName(parts[1]); }
-        else if (parts[0] === "arcade"){ const g = GAMES.find(x => x[0] === parts[1]); what = (g ? g[1] : parts[1]) + " · score " + +bits[0]; where = "Score"; }
+        else if (parts[0] === "arcade"){ const g = GAMES.find(x => x[0] === parts[1]); what = (g ? g[1] : parts[1]) + (parts[1] === "hanoi2" ? " · " + (+bits[0] / 1000).toFixed(2).replace(".", ",") + " s" : " · score " + +bits[0]); where = "Score"; }
         out.push({ path, ts: it >= 0 ? +bits[it] : 0, who: parts[0] === "comments" || parts[0] === "reactions" ? fromHex(bits[3] || "") : who, what, where });
       }
     }
