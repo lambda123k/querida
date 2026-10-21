@@ -314,8 +314,11 @@ const CONFIG = {
   PRENOM: "Romane",
   CODE_ROMANE: "romane-98ef57",   // mot secret du lien de Romane (QR code)
   DEPART: "2026-10-15",
-  RETOUR: "2027-07-15"
+  RETOUR: "2027-07-15",
+  // Auteurs dont Romane peut ouvrir toutes les capsules tout de suite (et les supprimer si elle veut)
+  LIBRES: ["4db9be0b-23db-4411-8020-a34dd7f6ec1d"]
 };
+const isLibre = c => (CONFIG.LIBRES || []).includes(c.author_id);
 /* ========================================================= */
 
 const APP = "Querida";
@@ -516,16 +519,17 @@ function schedule(n){
 }
 /* Quand chaque capsule arrive chez Romane (pour le suivi « colis » des amis) */
 function capsulePlan(){
-  const all = Store.caps, regular = all.filter(c => (c.moment || "voyage") === "voyage").sort((a, b) => hash(a.id) - hash(b.id));
+  const all = Store.caps.filter(c => !isLibre(c)), regular = all.filter(c => (c.moment || "voyage") === "voyage").sort((a, b) => hash(a.id) - hash(b.id));
   const dates = schedule(regular.length), out = {};
   regular.forEach((c, k) => { out[c.id] = { at: dates[k] ?? null, ahead: regular.slice(0, k).filter(x => !x.opened_at).length }; });
   all.forEach(c => { if (out[c.id]) return; const m = c.moment;
     out[c.id] = { at: m === "avant" ? (Date.parse(c.created_at) || now()) : m === "retour" ? parseDay(CONFIG.RETOUR) : m === "cafard" ? parseDay(CONFIG.DEPART) : null }; });
+  Store.caps.filter(isLibre).forEach(c => { out[c.id] = { at: Date.parse(c.created_at) || now() }; });
   return out;
 }
 function hash(s){ let h = 2166136261; for (let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 function state(){
-  const all = Store.caps, t = now();
+  const all = Store.caps.filter(c => !isLibre(c)), t = now();
   const regular = all.filter(c => (c.moment || "voyage") === "voyage").sort((a, b) => hash(a.id) - hash(b.id));
   const dates = schedule(regular.length);
   const unlocked = dates.filter(d => d <= t).length;
@@ -544,7 +548,8 @@ function state(){
     started: t >= start, back: t >= end,
     dayN: Math.min(total, Math.floor((t - start) / DAY) + 1), total,
     toStart: Math.max(0, Math.ceil((start - t) / DAY)),
-    opened: all.filter(c => c.opened_at)
+    opened: all.filter(c => c.opened_at),
+    libres: Store.caps.filter(isLibre)
   };
 }
 
@@ -722,6 +727,7 @@ function viewToday(){
   const pct = s.started ? Math.min(100, Math.round(s.dayN / s.total * 100)) : 0;
   return `<div class="head"><span class="eyebrow">${fmt(now(), { weekday:"long", day:"numeric", month:"long" })}</span><h1 class="ltitle">Querida ${P()}</h1></div>
     ${hero}
+    ${s.libres.length ? `<div class="group"><button class="rowi" data-act="libres"><span class="sq" style="background:#7A5A4C">${IC.env}</span><span class="t"><b>Les capsules de ${esc(s.libres[0].author_name)}</b><small>Toutes disponibles, à ouvrir ou supprimer quand tu veux</small></span><span class="v">${s.libres.length}${IC.chev}</span></button></div>` : ""}
     <div class="group">
       ${s.avant.length || !s.started ? `<button class="rowi" data-act="open-avant" ${s.avant.length ? "" : "disabled"}><span class="sq" style="background:var(--accent)">${IC.env}</span><span class="t"><b>Avant ton départ</b><small>${s.avant.length ? "À ouvrir dès maintenant" : "Rien pour l'instant"}</small></span><span class="v">${s.avant.length}${s.avant.length ? IC.chev : ""}</span></button>` : ""}
       <button class="rowi" data-act="open-cafard" ${s.cafard.length && s.started ? "" : "disabled"}><span class="sq" style="background:var(--red)">${IC.heart}</span><span class="t"><b>Un sourire de la bande</b><small>${s.cafard.length ? (s.started ? "Un mot doux à ouvrir quand tu veux" : "Disponible dès ton départ") : "Bientôt de nouveaux sourires"}</small></span><span class="v">${s.cafard.length}${s.cafard.length && s.started ? IC.chev : ""}</span></button>
@@ -953,6 +959,16 @@ function capsuleBody(c){
   return `<div class="reveal" data-cap="${esc(c.id)}" style="display:flex;flex-direction:column;gap:18px"><span class="from">De la part de ${esc(c.author_name)}${c.relation ? " · " + esc(c.relation) : ""}</span><p class="letter" style="font-family:var(--f-display);font-style:italic;font-size:30px;color:var(--accent)">Querida ${P()},</p>${media}${c.text ? `<p class="letter">${esc(c.text)}</p>` : ""}
     ${c.opened_at ? `<p class="foot" style="padding:0">Ouverte le ${fmt(new Date(c.opened_at).getTime(), { day:"numeric", month:"long", year:"numeric" })}</p>` : ""}</div>`;
 }
+function libresSheet(){
+  const list = Store.caps.filter(isLibre).sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+  if (!list.length) return;
+  const who = esc(list[0].author_name), closed = list.filter(c => !c.opened_at).length;
+  sheet({ title: "Capsules de " + who, right:`<button class="tbtn bold" data-act="close">OK</button>`, body:`
+    <p class="sub" style="margin:0">${list.length} capsule${list.length > 1 ? "s" : ""}${closed ? `, dont ${closed} pas encore ouverte${closed > 1 ? "s" : ""}` : ""}. Tu peux toutes les ouvrir maintenant, sans attendre.</p>
+    <div class="group">${list.map(c => `<button class="rowi" data-act="libre-open" data-v="${c.id}">${sq(c.kind)}<span class="t"><b>${c.opened_at ? esc(summary(c)) : TYPES[c.kind].label}</b><small>${c.opened_at ? "Déjà ouverte" : "Pas encore ouverte"}</small></span>${IC.chev}</button>`).join("")}</div>
+    <div class="group plain"><button class="rowi danger" data-act="libres-del" style="justify-content:center">Supprimer toutes les capsules de ${who}</button></div>
+    <p class="foot" style="padding-top:0">La suppression est définitive : elles disparaissent aussi de son côté.</p>` });
+}
 function viewCapsule(c){ sheet({ title: TYPES[c.kind].label, right:`<button class="tbtn bold" data-act="close">OK</button>`, body: capsuleBody(c) }); }
 async function openCapsule(c){
   const el = sheet({ title:"", full:true, right:`<button class="tbtn bold" data-act="close-render">OK</button>`, body:`<div class="center" style="padding-top:18vh;gap:18px"><div class="envelope" id="env" style="width:220px"><div class="flap"></div><div class="seal">${INI}</div></div><span class="from">De la part de ${esc(c.author_name)}</span></div>` });
@@ -1145,6 +1161,18 @@ document.addEventListener("click", async ev => {
     case "del-cap-ask": document.getElementById("del-zone").innerHTML = `<button class="rowi danger" data-act="del-cap" data-v="${v}" style="justify-content:center;font-weight:600">Confirmer la suppression</button><button class="rowi" data-act="close" style="justify-content:center">Garder</button>`; break;
     case "del-cap": { const c = Store.caps.find(x => x.id === v); try{ if (c) await Store.removeCapsule(c); }catch(e){} clearLayers(); render(); break; }
     case "open-next": { const s = state(); if (s.available > 0 && s.next) openCapsule(s.next); break; }
+    case "libres": libresSheet(); break;
+    case "libre-open": { const c = Store.caps.find(x => x.id === v); if (!c) break; clearLayers(); if (c.opened_at) viewCapsule(c); else openCapsule(c); break; }
+    case "libres-del": b.outerHTML = `<button class="rowi danger" data-act="libres-del-yes" style="justify-content:center;font-weight:700">Oui, supprimer définitivement</button>`; break;
+    case "libres-del-yes": {
+      b.disabled = true; b.textContent = "Suppression…";
+      const list = Store.caps.filter(isLibre); let fail = 0;
+      for (const c of list){ try{ if (c.media_path) await Store.client.storage.from("capsules").remove([c.media_path]); const { error } = await Store.client.from("capsules").delete().eq("id", c.id); if (error) fail++; }catch(e){ fail++; } }
+      try{ await Store.refresh(); }catch(e){}
+      clearLayers(); render();
+      if (fail) sheet({ title:"", right:`<button class="tbtn bold" data-act="close">OK</button>`, body:`<p class="err" style="padding:0">${fail} capsule${fail > 1 ? "s n'ont" : " n'a"} pas pu être supprimée${fail > 1 ? "s" : ""}. Vérifie ta connexion et réessaie.</p>` });
+      break;
+    }
     case "open-avant": { const s = state(); if (s.avant.length) openCapsule(s.avant[0]); break; }
     case "open-cafard": { const s = state(); if (s.cafard.length) openCapsule(s.cafard[Math.floor(Math.random() * s.cafard.length)]); break; }
     case "open-retour": { const s = state(); if (s.retour.length && s.back) openCapsule(s.retour[0]); break; }
