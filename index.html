@@ -1257,16 +1257,16 @@ if (role === "ami" || role === "romane"){
       plan: () => capsulePlan(), now: () => now(), dates: () => ({ depart: parseDay(CONFIG.DEPART), retour: parseDay(CONFIG.RETOUR) }),
       openMyCapsule: id => { const c = Store.caps.find(x => x.id === id); if (c) myCapsuleSheet(c); }
     };
-    loadScript("admin.js?v=5").catch(() => {});
+    loadScript("admin.js?v=6").catch(() => {});
     if (role === "ami") loadScript("enigme.js?v=2").catch(() => {});
     loadScript("arcade.js?v=4").catch(() => {});
     loadScript("chrono.js?v=5").catch(() => {});
     loadScript("marathon.js?v=5").catch(() => {});
     loadScript("feuvert.js?v=4").catch(() => {});
-    loadScript("grade.js?v=7").catch(() => {});
+    loadScript("grade.js?v=8").catch(() => {});
     loadScript("reactions.js?v=2").catch(() => {});
-    loadScript("jeux.js?v=4").catch(() => {});
-    loadScript("hub.js?v=7").catch(() => {});
+    loadScript("jeux.js?v=5").catch(() => {});
+    loadScript("hub.js?v=8").catch(() => {});
     loadScript("colis.js?v=1").catch(() => {});
   }catch(e){}
 }

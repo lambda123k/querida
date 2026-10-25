@@ -4,7 +4,8 @@
    · Les Différences : sur l'accueil, toucher 3 fois l'onglet de l'accueil ;
    · La Mémoire des chiffres : toucher 3 fois la petite ligne au-dessus du titre ;
    · L'Accord : toucher 3 fois le soleil de « Comment ça marche » ;
-   · Les Tours de Hanoï (course chronométrée) : dans l'Arcade, toucher 3 fois le titre « Arcade ».
+   · Les Tours de Hanoï (course chronométrée) : dans l'Arcade, toucher 3 fois le titre « Arcade » ;
+   · Le Savant (culture générale) : dans « Mon profil » de l'Arcade, toucher 3 fois le radar.
    On les retrouve ensuite dans l'Arcade (hub.js).
    Fichier à part, préfixe « qj- » partout ; une erreur ici ne casse jamais l'appli. */
 (function(){
@@ -171,6 +172,36 @@ const CSS = `
 .qj-hn-rin p,.qj-hn-rin li{margin:0;font-size:15px;line-height:1.45}
 .qj-hn-rin ul{margin:0;padding-left:20px}
 .qj-hn-rin .qj-go{margin-top:14px}
+/* Le Savant */
+.qj-sv-steps{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%;max-width:340px}
+.qj-sv-steps div{background:rgba(59,31,23,.05);border-radius:10px;padding:8px 4px;font-size:12px;color:#7A5A4C;line-height:1.3}
+.qj-sv-steps b{display:block;font-family:var(--f);font-style:normal;font-size:14px;font-weight:800;color:#3B1F17}
+.qj-sv-lvl{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;padding:5px 10px;border-radius:999px;background:rgba(59,31,23,.05)}
+.qj-sv-lvl i{display:flex;gap:2px}
+.qj-sv-lvl i b{width:6px;height:12px;border-radius:2px;background:rgba(59,31,23,.15)}
+.qj-sv-lvl i b.on{background:#F2873B}
+.qj-sv-th{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.qj-sv-th span{width:10px;height:10px;border-radius:50%}
+.qj-sv-q{margin:0;font-size:21px;font-weight:700;line-height:1.3;text-wrap:balance;min-height:82px}
+.qj-sv-ans{display:flex;flex-direction:column;gap:8px}
+.qj-sv-ans button{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:13px 14px;border-radius:14px;border:1.5px solid rgba(59,31,23,.1);background:#fff;color:#3B1F17;font:600 16px var(--f);cursor:pointer;transition:transform .08s,background .2s,border-color .2s;touch-action:manipulation}
+.qj-sv-ans button:active{transform:scale(.98)}
+.qj-sv-ans button em{flex:none;width:26px;height:26px;border-radius:8px;background:rgba(59,31,23,.05);display:grid;place-items:center;font-style:normal;font-size:13px;font-weight:800;color:#7A5A4C}
+.qj-sv-ans button.ok{background:rgba(47,125,78,.12);border-color:#2F7D4E}
+.qj-sv-ans button.ok em{background:#2F7D4E;color:#fff}
+.qj-sv-ans button.ko{background:rgba(204,63,39,.1);border-color:#CC3F27}
+.qj-sv-ans button.ko em{background:#CC3F27;color:#fff}
+.qj-sv-ans button.dim{opacity:.45}
+.qj-sv-miss{width:100%;max-width:340px;background:#fff;border-radius:12px;padding:12px 14px;text-align:left;box-shadow:0 1px 3px rgba(59,31,23,.12);display:flex;flex-direction:column;gap:4px}
+.qj-sv-miss small{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A5A4C}
+.qj-sv-miss b{font-size:15px;line-height:1.35}
+.qj-sv-miss .good{color:#2F7D4E;font-weight:700}
+.qj-sv-miss .bad{color:#CC3F27;font-weight:600;text-decoration:line-through}
+.qj-sv-thr{padding:0 14px 10px;display:flex;flex-direction:column;gap:7px}
+.qj-sv-thr div{display:grid;grid-template-columns:1fr auto;gap:4px 8px;align-items:center;font-size:14px}
+.qj-sv-thr div i{grid-column:1/-1;height:6px;border-radius:3px;background:rgba(59,31,23,.08);overflow:hidden;display:block}
+.qj-sv-thr div i s{display:block;height:100%;border-radius:3px;text-decoration:none}
+.qj-sv-thr span{color:#7A5A4C;font-variant-numeric:tabular-nums}
 `;
 const st = document.createElement("style"); st.id = "qj-style"; st.textContent = CSS; document.head.appendChild(st);
 
@@ -252,7 +283,7 @@ function drawBoard(){
   if (board === null) rows = `<p class="qj-empty">Lecture du classement…</p>`;
   else if (board === "err") rows = `<p class="qj-empty">Le classement ne répond pas pour l'instant. Ton record est gardé.</p>`;
   else if (!board.length) rows = `<p class="qj-empty">Personne n'a encore joué. La couronne est libre.</p>`;
-  else rows = board.slice(0, 15).map((p, i) => `<div class="qj-row ${p.id === myId() ? "qj-me" : ""}"><span class="qj-rk">${i + 1}</span><span class="qj-nm">${esc(p.name)}${i === 0 ? " 👑" : ""}${window.QUERIDA_GRADE ? window.QUERIDA_GRADE.badge(G.title, board, i) : ""}</span><span class="qj-sc">${G.unit(p.score)}</span></div>`).join("");
+  else rows = board.slice(0, 15).map((p, i) => `<div class="qj-row ${p.id === myId() ? "qj-me" : ""}"><span class="qj-rk">${i + 1}</span><span class="qj-nm">${esc(p.name)}${i === 0 ? " 👑" : ""}${window.QUERIDA_GRADE ? window.QUERIDA_GRADE.badge(G.title, board, i) : ""}</span><span class="qj-sc">${G.boardUnit ? G.boardUnit(p) : G.unit(p.score)}</span></div>`).join("");
   cur.boardEl.innerHTML = `<h2>Classement de la bande · ${G.title}</h2>${rows}`;
 }
 // Fin de partie commune : record perso, classement, couronne
@@ -878,6 +909,160 @@ const HANOI = (() => {
   return G;
 })();
 
+/* ============================================================
+   6 · LE SAVANT — culture générale : le plus de bonnes réponses d'affilée.
+   4 réponses, une seule bonne, 20 s par question, difficulté qui monte.
+   À série égale, le plus rapide gagne (temps cumulé des bonnes réponses).
+   ============================================================ */
+const SAVANT = (() => {
+  const TIME = 20000, REC = "qj_savant_rec", SEEN = "qj_savant_seen";
+  const THEMES = { H:["Histoire","#7A5A4C"], G:["Géographie","#1E4E9C"], S:["Sciences","#7B5BB0"], N:["Nature","#2F7D4E"], A:["Art et littérature","#CC3F27"], C:["Cinéma et musique","#B0457B"], P:["Sport","#F2873B"], L:["Langue française","#B08A1E"] };
+  const LV = ["", "Échauffement", "Moyen", "Difficile", "Expert"];
+  const levelFor = k => k < 3 ? 1 : k < 10 ? 2 : k < 20 ? 3 : 4;
+  const fmtT = ms => { const s = ms / 1000; if (s < 60) return s.toFixed(1).replace(".", ",") + " s"; const m = Math.floor(s / 60); return m + " min " + String(Math.round(s - m * 60)).padStart(2, "0") + " s"; };
+  const unit = n => `${n} bonne${n > 1 ? "s" : ""} réponse${n > 1 ? "s" : ""}`;
+  const G = { id:"savant", title:"Le Savant", short:"Le Savant", key:"qj_savant_best", unit };
+  const rec = () => { try{ const r = JSON.parse(localStorage.getItem(REC) || "null"); return r && r.n ? r : { n: 0, ms: 0 }; }catch(e){ return { n: 0, ms: 0 }; } };
+  // Classement : arcade/savant/<série 3 chiffres>__<temps ms 7 chiffres>__<date>__<id>__<prénom>.txt
+  G.Board = {
+    async load(){
+      if (Q.demo()) return [];
+      const { data, error } = await Q.store().client.storage.from("capsules").list("arcade/savant", { limit: 500, sortBy: { column: "name", order: "desc" } });
+      if (error) throw error;
+      const by = new Map(), better = (a, b) => a.score > b.score || (a.score === b.score && (a.ms < b.ms || (a.ms === b.ms && a.ts < b.ts)));
+      (data || []).forEach(f => {
+        const m = f.name.match(/^(\d{3})__(\d{7})__(\d{14})__([A-Za-z0-9]{1,8})__([0-9a-f]+)\.txt$/); if (!m) return;
+        const r = { score: +m[1], ms: +m[2], ts: +m[3], id: m[4], name: fromHex(m[5]) };
+        const old = by.get(r.id); if (!old || better(r, old)) by.set(r.id, r);
+      });
+      return [...by.values()].sort((a, b) => b.score - a.score || a.ms - b.ms || a.ts - b.ts);
+    },
+    async submit(n, ms){
+      if (Q.demo()) return;
+      const key = `${String(Math.min(999, n)).padStart(3, "0")}__${String(Math.min(9999999, Math.round(ms))).padStart(7, "0")}__${String(Date.now()).padStart(14, "0")}__${myId()}__${toHex(myName().slice(0, 30))}.txt`;
+      const r = await Q.store().client.storage.from("capsules").upload("arcade/savant/" + key, new Blob([myName()], { type:"text/plain" }), { contentType:"text/plain", upsert:false });
+      if (r.error) throw r.error;
+    }
+  };
+  G.boardUnit = p => `${p.score} · ${fmtT(p.ms)}`;
+  let QS = null, loading = null;
+  function loadQs(){
+    if (QS) return Promise.resolve(QS);
+    if (loading) return loading;
+    loading = new Promise((ok, ko) => {
+      if (window.QUERIDA_SAVANT_Q){ QS = window.QUERIDA_SAVANT_Q; ok(QS); return; }
+      const s = document.createElement("script"); s.src = "savant-q.js?v=1";
+      s.onload = () => { QS = window.QUERIDA_SAVANT_Q || []; ok(QS); }; s.onerror = () => { loading = null; ko(); };
+      document.head.appendChild(s);
+    });
+    return loading;
+  }
+  let root, state, streak, used, cq, t0, raf = 0, timers = [], byTheme, missed, spent;
+  const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+  const seenGet = () => { try{ return JSON.parse(localStorage.getItem(SEEN) || "[]"); }catch(e){ return []; } };
+  const seenSet = a => { try{ localStorage.setItem(SEEN, JSON.stringify(a)); }catch(e){} };
+  function stop(){ timers.forEach(clearTimeout); timers = []; cancelAnimationFrame(raf); state = "off"; }
+  function title(){
+    state = "title"; const r = rec();
+    root.innerHTML = `<div class="qj-title"><b>Le Savant</b><p>Une question, quatre réponses, une seule est bonne. Enchaîne le plus de bonnes réponses d'affilée : à la première erreur, c'est fini. 20 secondes par question. À égalité, le plus rapide gagne.</p>
+      <div class="qj-sv-steps"><div><b>Échauff.</b>1 à 3</div><div><b>Moyen</b>4 à 10</div><div><b>Difficile</b>11 à 20</div><div><b>Expert</b>21 et +</div></div>
+      ${r.n ? `<p>Ton record : <b>${unit(r.n)}</b> en ${fmtT(r.ms)}</p>` : ""}<button type="button" class="qj-go" data-qj-go="1">Commencer</button></div>`;
+  }
+  function pick(level){
+    const seen = seenGet();
+    for (const L of [level, level + 1, level - 1, level + 2, level - 2, level + 3, level - 3]){
+      const pool = []; QS.forEach((q, i) => { if (q[1] === L && !used.has(i)) pool.push(i); });
+      if (!pool.length) continue;
+      const fresh = pool.filter(i => !seen.includes(i)), from = fresh.length ? fresh : pool;
+      return from[Math.floor(Math.random() * from.length)];
+    }
+    return null;
+  }
+  function start(){
+    stop(); root.innerHTML = `<p class="qj-msg" style="margin:auto">Chargement des questions…</p>`;
+    loadQs().then(() => { streak = 0; used = new Set(); byTheme = {}; missed = null; spent = 0; next(); })
+      .catch(() => { root.innerHTML = `<p class="qj-msg hot" style="margin:auto">Les questions n'ont pas pu se charger. Vérifie ta connexion et réessaie.</p><button type="button" class="qj-go" data-qj-go="1" style="align-self:center">Réessayer</button>`; });
+  }
+  function next(){
+    const L = levelFor(streak), i = pick(L);
+    if (i === null){ end("all"); return; }
+    used.add(i); const seen = seenGet(); if (!seen.includes(i)){ seen.push(i); seenSet(seen.length > QS.length * .8 ? [] : seen); }
+    const q = QS[i], opts = [q[3], q[4], q[5], q[6]].sort(() => Math.random() - .5);
+    cq = { q, opts, good: opts.indexOf(q[3]) }; state = "ask";
+    const th = THEMES[q[0]] || ["Culture", "#7A5A4C"];
+    root.innerHTML = `<div class="qj-hud"><div><div class="qj-k">Série</div><div class="qj-v">${streak}</div></div>
+        <span class="qj-sv-lvl"><i>${[1,2,3,4].map(n => `<b class="${n <= L ? "on" : ""}"></b>`).join("")}</i>${LV[L]}</span>
+        <div style="text-align:right"><div class="qj-k">Temps</div><div class="qj-v" style="font-size:20px;margin-top:6px" id="qj-sv-tt">${fmtT(spent)}</div></div></div>
+      <div class="qj-bar" id="qj-sv-bar"><i id="qj-sv-bari"></i></div>
+      <div class="qj-sv-th" style="color:${th[1]}"><span style="background:${th[1]}"></span>${th[0]}</div>
+      <p class="qj-sv-q">${esc(q[2])}</p>
+      <div class="qj-sv-ans">${opts.map((o, k) => `<button type="button" data-sv="${k}"><em>${"ABCD"[k]}</em><span>${esc(o)}</span></button>`).join("")}</div>
+      <p class="qj-msg" id="qj-sv-msg"></p>`;
+    t0 = performance.now(); cancelAnimationFrame(raf); raf = requestAnimationFrame(tick);
+  }
+  function tick(now){
+    if (state !== "ask") return;
+    const k = Math.max(0, 1 - (now - t0) / TIME), bi = root.querySelector("#qj-sv-bari"), b = root.querySelector("#qj-sv-bar"), tt = root.querySelector("#qj-sv-tt");
+    if (bi) bi.style.transform = `scaleX(${k})`; if (b) b.classList.toggle("hot", k < .25);
+    if (tt) tt.textContent = fmtT(spent + Math.min(TIME, now - t0));
+    if (k <= 0){ answer(-1); return; }
+    raf = requestAnimationFrame(tick);
+  }
+  function answer(k){
+    if (state !== "ask") return;
+    state = "wait"; cancelAnimationFrame(raf);
+    const took = Math.min(TIME, performance.now() - t0), th = cq.q[0];
+    byTheme[th] = byTheme[th] || { ok: 0, n: 0 }; byTheme[th].n++;
+    root.querySelectorAll(".qj-sv-ans button").forEach((b, j) => b.classList.add(j === cq.good ? "ok" : j === k ? "ko" : "dim"));
+    const m = root.querySelector("#qj-sv-msg");
+    if (k === cq.good){
+      streak++; byTheme[th].ok++; spent += took;
+      const tt = root.querySelector("#qj-sv-tt"); if (tt) tt.textContent = fmtT(spent);
+      m.textContent = (streak === 3 ? "Bonne réponse ! On passe au niveau Moyen." : streak === 10 ? "Bonne réponse ! Place au niveau Difficile." : streak === 20 ? "Bonne réponse ! Niveau Expert débloqué." : "Bonne réponse !") + ` (${fmtT(took)})`;
+      m.className = "qj-msg ok"; bip(880, .08); later(() => bip(1320, .1), 80);
+      later(next, [3, 10, 20].includes(streak) ? 1500 : 950);
+    } else {
+      missed = { q: cq.q, chose: k >= 0 ? cq.opts[k] : null };
+      m.textContent = k < 0 ? "Temps écoulé !" : "Raté…"; m.className = "qj-msg hot";
+      bip(160, .35, "sawtooth", .06); vib(60);
+      later(() => end(k < 0 ? "time" : "wrong"), 1300);
+    }
+  }
+  function end(why){
+    state = "over";
+    const B = rec(), isBest = streak > 0 && (streak > B.n || (streak === B.n && spent < B.ms));
+    if (isBest){ try{ localStorage.setItem(REC, JSON.stringify({ n: streak, ms: spent })); localStorage.setItem(G.key, String(streak)); }catch(e){} }
+    const v = streak >= 40 ? "Puits de science." : streak >= 30 ? "Encyclopédie vivante." : streak >= 20 ? "Grand savant." : streak >= 12 ? "Bien cultivé." : streak >= 6 ? "Pas mal du tout." : "La prochaine sera la bonne.";
+    const rows = Object.keys(THEMES).filter(t => byTheme[t]).map(t => { const r = byTheme[t]; return `<div><b>${THEMES[t][0]}</b><span>${r.ok} / ${r.n}</span><i><s style="width:${Math.round(r.ok / r.n * 100)}%;background:${THEMES[t][1]}"></s></i></div>`; }).join("");
+    root.insertAdjacentHTML("beforeend", `<div class="qj-over qj-hn-over" role="dialog" aria-label="Fin de partie"><h2>${v}</h2>
+      <div class="qj-big">${streak}</div><p>${unit(streak).replace(/^\d+ /, "")} d'affilée · niveau ${LV[levelFor(streak)]}</p>
+      ${streak ? `<p>en <b style="color:#3B1F17">${fmtT(spent)}</b>, soit ${fmtT(spent / streak)} par réponse en moyenne</p>` : ""}
+      <p class="${isBest ? "qj-rec" : ""}">${isBest ? (streak === B.n ? "Nouveau record : même série, mais plus rapide !" : "Nouveau record !") : B.n ? `Record : ${unit(B.n)} en ${fmtT(B.ms)}` : ""}</p>
+      ${missed ? `<div class="qj-sv-miss"><small>${why === "time" ? "Temps écoulé sur" : "La question ratée"}</small><b>${esc(missed.q[2])}</b>${missed.chose ? `<span class="bad">${esc(missed.chose)}</span>` : ""}<span class="good">Bonne réponse : ${esc(missed.q[3])}</span></div>` : why === "all" ? `<p>Tu as répondu à toutes les questions. Chapeau !</p>` : ""}
+      ${rows ? `<details class="qj-hn-det"><summary>Tes résultats par thème</summary><div class="qj-sv-thr">${rows}</div></details>` : ""}
+      <button type="button" class="qj-go" data-qj-go="1">Rejouer</button></div>`);
+    if (isBest) (async () => {
+      try{
+        const before = await G.Board.load(), king = before[0];
+        await G.Board.submit(streak, spent);
+        const b = await G.Board.load();
+        if (cur && cur.G === G){ cur.board = b; drawBoard(); }
+        if (b[0] && b[0].id === myId() && (!king || king.id !== myId())){
+          toast("👑 Tu as la couronne du Savant !");
+          Q.push("shared", "Nouvelle couronne 👑", `${myName()} a pris la couronne du Savant (${unit(streak)} d'affilée).`);
+        }
+      }catch(e){}
+    })();
+  }
+  G.mount = el => { root = el; title(); loadQs().catch(() => {});
+    el.addEventListener("click", e => {
+      if (e.target.closest("[data-qj-go]")){ start(); return; }
+      const b = e.target.closest("[data-sv]"); if (b) answer(+b.dataset.sv);
+    }); };
+  G.stop = stop;
+  return G;
+})();
+
 /* =================== Les cachettes (3 tapes rapides) =================== */
 function triple(selectorFn, G){
   let taps = [];
@@ -902,13 +1087,14 @@ triple(t => {                                                               // l
   return tab.dataset.v === (ROMANE ? "today" : "depot") ? tab : null;
 }, DIFF);
 triple(t => t.closest && t.closest(".qh-wrap .qh-head h1"), HANOI);          // le titre « Arcade », dans l'Arcade même
+triple(t => t.closest && t.closest(".qh-wrap .qh-radar"), SAVANT);        // le radar de « Mon profil »
 function decorate(){ document.querySelectorAll("#app > main.screen .head .ltitle, #app > main.screen .head .eyebrow").forEach(el => el.classList.add("qj-tap")); }
 let qd = false; new MutationObserver(() => { if (qd) return; qd = true; requestAnimationFrame(() => { qd = false; try{ decorate(); }catch(e){} }); }).observe(document.body, { childList:true, subtree:true });
 decorate();
 
 /* =================== Inscription dans l'Arcade =================== */
 const R = window.QUERIDA_GAMES = window.QUERIDA_GAMES || {};
-[OEIL, DIFF, CHIF, ACC, HANOI].forEach(G => { R[G.id] = { open: () => openGame(G), best: () => { const b = lsGet(G.key); return b ? G.unit(b) : ""; } }; });
+[OEIL, DIFF, CHIF, ACC, HANOI, SAVANT].forEach(G => { R[G.id] = { open: () => openGame(G), best: () => { const b = lsGet(G.key); return b ? G.unit(b) : ""; } }; });
 window.dispatchEvent(new Event("qh-games"));
 
 }catch(err){ /* ces jeux ne doivent jamais gêner l'appli */ }

@@ -120,7 +120,7 @@ let qd = false; new MutationObserver(() => { if (qd) return; qd = true; requestA
 decorate();
 
 let wrap = null, view = "capsules", items = null, armed = null, seen = null;
-const GAMES = [["tour","La Tour"],["chrono","Le Chrono"],["marathon","Le Marathon"],["feuvert","Le Feu vert"],["oeil","L'Œil"],["diff","Les Différences"],["chiffres","La Mémoire des chiffres"],["accord","L'Accord"],["hanoi2","Les Tours de Hanoï"]];
+const GAMES = [["tour","La Tour"],["chrono","Le Chrono"],["marathon","Le Marathon"],["feuvert","Le Feu vert"],["oeil","L'Œil"],["diff","Les Différences"],["chiffres","La Mémoire des chiffres"],["accord","L'Accord"],["hanoi2","Les Tours de Hanoï"],["savant","Le Savant"]];
 function toast(t){ document.getElementById("qx-toast")?.remove(); document.body.insertAdjacentHTML("beforeend", `<div class="qx-toast" id="qx-toast">${esc(t)}</div>`); setTimeout(() => document.getElementById("qx-toast")?.remove(), 2200); }
 const when = ts => { try{ return new Date(ts).toLocaleString("fr-FR", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }); }catch(e){ return ""; } };
 async function subfolders(folder){

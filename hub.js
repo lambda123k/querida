@@ -31,6 +31,8 @@ const CATALOG = [
     icon: ic("#FFF3D6", `<text x="24" y="31" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-weight="700" font-size="17" fill="#3B1F17">372</text>`) },
   { id:"accord",   name:"L'Accord",         what:"Pareil ou différent ?",        hint:"Le soleil de « Comment ça marche » aime qu'on le touche 3 fois.",
     icon: ic("#F1E9F7", `<rect x="11" y="24" width="5" height="14" rx="2.5" fill="#5B2A6E"/><rect x="18.5" y="17" width="5" height="21" rx="2.5" fill="#5B2A6E"/><rect x="26" y="12" width="5" height="26" rx="2.5" fill="#F2873B"/><rect x="33.5" y="20" width="5" height="18" rx="2.5" fill="#5B2A6E"/>`) },
+  { id:"savant",   name:"Le Savant", what:"Culture générale, sans erreur", hint:"Dans « Mon profil », le radar aime qu'on le touche 3 fois.",
+    icon: ic("#EFE7F7", `<circle cx="24" cy="21" r="11" fill="#7B5BB0"/><path d="M19 30h10v5a2 2 0 01-2 2h-6a2 2 0 01-2-2z" fill="#5B2A6E"/><text x="24" y="26" text-anchor="middle" font-family="Georgia,serif" font-style="italic" font-weight="700" font-size="15" fill="#fff">?</text>`) },
   { id:"hanoi",    name:"Les Tours de Hanoï", what:"Course contre la montre en 4 tours", hint:"Ici même : la manette du titre « Arcade » aime qu'on la touche 3 fois.",
     icon: ic("#E6F1EA", `<rect x="6" y="37" width="36" height="4" rx="2" fill="#7A5A4C"/><rect x="11" y="12" width="3" height="25" rx="1.5" fill="#C9B8AC"/><rect x="22.5" y="12" width="3" height="25" rx="1.5" fill="#C9B8AC"/><rect x="34" y="12" width="3" height="25" rx="1.5" fill="#C9B8AC"/><rect x="4" y="31" width="17" height="6" rx="2.5" fill="#2F7D4E"/><rect x="6.5" y="25" width="12" height="6" rx="2.5" fill="#E8B530"/><rect x="29" y="31" width="13" height="6" rx="2.5" fill="#CC3F27"/>`) },
 ];
@@ -136,7 +138,7 @@ const meId = () => String((Q.me() || {}).id || "anon").replace(/[^a-zA-Z0-9]/g, 
 /* =================== Mon profil : les capacités =================== */
 const fmtN = (n, d = 1) => n.toFixed(d).replace(".", ",");
 const lvlFrom = (v, steps) => { let l = 0; steps.forEach((t, i) => { if (v >= t) l = i + 1; }); return Math.max(1, Math.min(10, l)); };
-/* Sept domaines, comme en sciences cognitives. Chaque domaine est mesuré par un ou deux jeux ;
+/* Huit domaines, comme en sciences cognitives. Chaque domaine est mesuré par un ou deux jeux ;
    son niveau est la moyenne des jeux déjà joués. */
 const M = {
   feuvert: { name:"Le Feu vert", level: ms => ms <= 180 ? 10 : ms <= 200 ? 9 : ms <= 215 ? 8 : ms <= 230 ? 7 : ms <= 250 ? 6 : ms <= 270 ? 5 : ms <= 290 ? 4 : ms <= 320 ? 3 : ms <= 360 ? 2 : 1, lower:true,
@@ -155,6 +157,8 @@ const M = {
     say: n => `${n} bonnes réponses d'affilée : tu entends une note glisser de ${Math.round(Math.max(3, 70 * Math.pow(.86, n)))} cents, soit ${Math.round(Math.max(3, 70 * Math.pow(.86, n))) < 50 ? "1/" + Math.round(100 / Math.max(3, 70 * Math.pow(.86, n))) + " de demi-ton" : "moins d'un demi-ton"}.` },
   hanoi: { name:"Les Tours de Hanoï", lower:true, level: ms => { const s = ms / 1000; return s <= 40 ? 10 : s <= 50 ? 9 : s <= 60 ? 8 : s <= 75 ? 7 : s <= 90 ? 6 : s <= 110 ? 5 : s <= 135 ? 4 : s <= 165 ? 3 : s <= 210 ? 2 : 1; },
     say: ms => `Les quatre tours (3 à 6 disques, 116 coups au minimum) bouclées en ${fmtN(ms / 1000, 2)} s.` },
+  savant: { name:"Le Savant", level: n => lvlFrom(n, [2, 4, 7, 10, 13, 16, 20, 25, 30, 40]),
+    say: n => `${n} bonne${n > 1 ? "s" : ""} réponse${n > 1 ? "s" : ""} d'affilée en culture générale, jusqu'au niveau ${n >= 20 ? "Expert" : n >= 10 ? "Difficile" : n >= 3 ? "Moyen" : "Échauffement"}.` },
   marathon: { name:"Le Marathon", level: n => lvlFrom(n, [25, 35, 45, 55, 65, 75, 85, 95, 110, 125]),
     say: n => `Cadence de frappe : ${fmtN(n / 10)} tapes par seconde.` },
 };
@@ -171,6 +175,8 @@ const SKILLS = [
     what:"La finesse de ton oreille : entendre qu'une note a bougé d'un cheveu." },
   { id:"planif", name:"Planification", short:"Planif.", col:"#2F7D4E", games:["hanoi"],
     what:"Anticiper plusieurs coups à l'avance pour atteindre un but : la stratégie." },
+  { id:"culture", name:"Culture générale", short:"Culture", col:"#B08A1E", games:["savant"],
+    what:"Ce que tu sais du monde : histoire, sciences, arts, géographie…" },
   { id:"motricite", name:"Motricité fine", short:"Motricité", col:"#CC3F27", games:["marathon"],
     what:"La vitesse et l'endurance de tes doigts." },
 ];
