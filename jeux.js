@@ -50,8 +50,9 @@ const CSS = `
 .qj-msg{font-size:15px;font-weight:600;text-align:center;min-height:22px;margin:0;color:#7A5A4C}
 .qj-msg.hot{color:#CC3F27}
 .qj-title{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;padding:34px 8px}
-.qj-title b{font-family:var(--f-display);font-style:italic;font-weight:400;font-size:44px;line-height:1}
+.qj-title>b{font-family:var(--f-display);font-style:italic;font-weight:400;font-size:44px;line-height:1}
 .qj-title p{margin:0;color:#7A5A4C;max-width:30ch}
+.qj-title p b{color:#3B1F17}
 .qj-go{margin-top:8px;font:700 17px var(--f);color:#fff;background:#CC3F27;border:0;border-radius:999px;padding:13px 30px;cursor:pointer}
 .qj-over{position:absolute;inset:0;border-radius:18px;background:rgba(251,245,239,.97);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:22px;cursor:pointer;z-index:3}
 .qj-over h2{margin:0;font-family:var(--f-display);font-style:italic;font-weight:400;font-size:40px;line-height:1;color:#CC3F27}
@@ -262,7 +263,7 @@ function openGame(G){
     markFound(G.id);
     G.mount(cur.root);
     drawBoard();
-    G.Board.load().then(b => { if (cur && cur.G === G){ cur.board = b; drawBoard(); } }).catch(() => { if (cur && cur.G === G){ cur.board = "err"; drawBoard(); } });
+    G.Board.load().then(b => { if (cur && cur.G === G){ cur.board = b; drawBoard(); if (G.repair) G.repair(b); } }).catch(() => { if (cur && cur.G === G){ cur.board = "err"; drawBoard(); } });
   }catch(e){}
 }
 function closeGame(){
@@ -933,6 +934,7 @@ const SAVANT = (() => {
       (data || []).forEach(f => {
         const m = f.name.match(/^(\d{3})__(\d{7})__(\d{14})__([A-Za-z0-9]{1,8})__([0-9a-f]+)\.txt$/); if (!m) return;
         const r = { score: +m[1], ms: +m[2], ts: +m[3], id: m[4], name: fromHex(m[5]) };
+        if (!r.score) return;
         const old = by.get(r.id); if (!old || better(r, old)) by.set(r.id, r);
       });
       return [...by.values()].sort((a, b) => b.score - a.score || a.ms - b.ms || a.ts - b.ts);
@@ -1041,19 +1043,32 @@ const SAVANT = (() => {
       ${missed ? `<div class="qj-sv-miss"><small>${why === "time" ? "Temps écoulé sur" : "La question ratée"}</small><b>${esc(missed.q[2])}</b>${missed.chose ? `<span class="bad">${esc(missed.chose)}</span>` : ""}<span class="good">Bonne réponse : ${esc(missed.q[3])}</span></div>` : why === "all" ? `<p>Tu as répondu à toutes les questions. Chapeau !</p>` : ""}
       ${rows ? `<details class="qj-hn-det"><summary>Tes résultats par thème</summary><div class="qj-sv-thr">${rows}</div></details>` : ""}
       <button type="button" class="qj-go" data-qj-go="1">Rejouer</button></div>`);
+    const fN = streak, fMs = spent;
     if (isBest) (async () => {
       try{
         const before = await G.Board.load(), king = before[0];
-        await G.Board.submit(streak, spent);
+        await G.Board.submit(fN, fMs);
         const b = await G.Board.load();
         if (cur && cur.G === G){ cur.board = b; drawBoard(); }
         if (b[0] && b[0].id === myId() && (!king || king.id !== myId())){
           toast("👑 Tu as la couronne du Savant !");
-          Q.push("shared", "Nouvelle couronne 👑", `${myName()} a pris la couronne du Savant (${unit(streak)} d'affilée).`);
+          Q.push("shared", "Nouvelle couronne 👑", `${myName()} a pris la couronne du Savant (${unit(fN)} d'affilée).`);
         }
       }catch(e){}
     })();
   }
+  G.repair = board => {
+    try{
+      const r = rec(); if (!r.n || !Array.isArray(board)) return false;
+      const mine = board.find(p => p.id === myId());
+      if (mine && (mine.score > r.n || (mine.score === r.n && mine.ms <= r.ms))) return false;
+      // une seule tentative par record (pour ne pas contourner un score masqué par la modération)
+      const tag = r.n + "_" + Math.round(r.ms); if (localStorage.getItem("qj_savant_sync") === tag) return false;
+      localStorage.setItem("qj_savant_sync", tag);
+      G.Board.submit(r.n, r.ms).then(() => G.Board.load()).then(b => { if (cur && cur.G === G){ cur.board = b; drawBoard(); } }).catch(() => {});
+      return true;
+    }catch(e){ return false; }
+  };
   G.mount = el => { root = el; title(); loadQs().catch(() => {});
     el.addEventListener("click", e => {
       if (e.target.closest("[data-qj-go]")){ start(); return; }

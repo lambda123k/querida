@@ -26,7 +26,7 @@ const GAMES = [
   { id:"diff",     name:"Les Différences",  dir:"diff",     re:/^(\d{3,4})__(\d{14})__([A-Za-z0-9]{1,8})__([0-9a-f]+)\.txt$/, v: m => +m[1], ts:2, idx:3, nm:4, show: m => `${+m[1]} trouvées` },
   { id:"accord",   name:"L'Accord",         dir:"accord",   re:/^(\d{3,4})__(\d{14})__([A-Za-z0-9]{1,8})__([0-9a-f]+)\.txt$/, v: m => +m[1], ts:2, idx:3, nm:4, show: m => `${+m[1]} bonnes réponses` },
   { id:"hanoi",    name:"Les Tours de Hanoï", dir:"hanoi2", re:/^(\d{7})__(\d{14})__([A-Za-z0-9]{1,8})__([0-9a-f]+)\.txt$/, v: m => 1e8 - +m[1], ts:2, idx:3, nm:4, show: m => `${(+m[1] / 1000).toFixed(2).replace(".", ",")} s` },
-  { id:"savant",   name:"Le Savant", dir:"savant", re:/^(\d{3})__(\d{7})__(\d{14})__([A-Za-z0-9]{1,8})__([0-9a-f]+)\.txt$/, v: m => +m[1] * 1e7 + (1e7 - 1 - +m[2]), ts:3, idx:4, nm:5, show: m => `${+m[1]} bonne${+m[1] > 1 ? "s" : ""} réponse${+m[1] > 1 ? "s" : ""}` },
+  { id:"savant",   name:"Le Savant", dir:"savant", re:/^(\d{3})__(\d{7})__(\d{14})__([A-Za-z0-9]{1,8})__([0-9a-f]+)\.txt$/, v: m => +m[1] ? +m[1] * 1e7 + (1e7 - 1 - +m[2]) : -1, ts:3, idx:4, nm:5, show: m => `${+m[1]} bonne${+m[1] > 1 ? "s" : ""} réponse${+m[1] > 1 ? "s" : ""}` },
   { id:"chiffres", name:"La Mémoire des chiffres", dir:"chiffres", re:/^(\d{3,4})__(\d{14})__([A-Za-z0-9]{1,8})__([0-9a-f]+)\.txt$/, v: m => +m[1], ts:2, idx:3, nm:4, show: m => `${+m[1]} chiffres` },
 ];
 const TITLES = [
