@@ -157,7 +157,7 @@ async function sendCom(eid, text){
     const r = await Q.store().client.storage.from("capsules").upload(`comments/${eid}/${key}`, new Blob([text], { type:"text/plain;charset=utf-8" }), { contentType:"text/plain;charset=utf-8", upsert:false });
     if (r.error) throw r.error;
     texts.set(`comments/${eid}/${key}`, text); item.pending = false;
-    if (ROMANE) Q.push("shared", `${myName()} a répondu sur son carnet`, text.length > 110 ? text.slice(0, 107) + "…" : text);
+    if (ROMANE) Q.push("shared", `${myName()} a répondu sur son carnet`, text.length > 110 ? text.slice(0, 107) + "…" : text, { carnet: true });
   }catch(e){ item.pending = false; item.failed = true; }
   paintCom(eid);
 }

@@ -316,8 +316,11 @@ const CONFIG = {
   DEPART: "2026-10-15",
   RETOUR: "2027-07-15",
   // Auteurs dont Romane peut ouvrir toutes les capsules tout de suite (et les supprimer si elle veut)
-  LIBRES: ["4db9be0b-23db-4411-8020-a34dd7f6ec1d"]
+  LIBRES: ["4db9be0b-23db-4411-8020-a34dd7f6ec1d"],
+  // Amis qui n'ont plus accès au carnet de Romane (ses publications), mais gardent tout le reste (jeux…)
+  SANS_CARNET: ["4db9be0b-23db-4411-8020-a34dd7f6ec1d"]
 };
+const sansCarnet = () => { try{ return role === "ami" && !!me && (CONFIG.SANS_CARNET || []).includes(me.id); }catch(e){ return false; } };
 const isLibre = c => (CONFIG.LIBRES || []).includes(c.author_id);
 /* ========================================================= */
 
@@ -406,7 +409,7 @@ const Store = {
       this.client.from("journal").select("*").order("date", { ascending:false })
     ]);
     if (a.error) throw a.error; if (b.error) throw b.error;
-    this.caps = a.data || []; this.journal = b.data || [];
+    this.caps = a.data || []; this.journal = sansCarnet() ? [] : (b.data || []);
   },
   url(path){
     if (!path) return null;
@@ -481,10 +484,10 @@ const Push = {
     if (error) throw error;
     ls.set("hp_push_ok", true);
   },
-  async send(type, title, body){
+  async send(type, title, body, extra){
     if (DEMO) return;
     try{
-      await fetch(CONFIG.SUPABASE_URL + "/functions/v1/notify", { method:"POST", headers: Object.assign({ "Content-Type":"application/json", "apikey":CONFIG.SUPABASE_KEY }, CONFIG.SUPABASE_KEY.startsWith("sb_") ? {} : { "Authorization":"Bearer " + CONFIG.SUPABASE_KEY }), body: JSON.stringify({ type, title, body }) });
+      await fetch(CONFIG.SUPABASE_URL + "/functions/v1/notify", { method:"POST", headers: Object.assign({ "Content-Type":"application/json", "apikey":CONFIG.SUPABASE_KEY }, CONFIG.SUPABASE_KEY.startsWith("sb_") ? {} : { "Authorization":"Bearer " + CONFIG.SUPABASE_KEY }), body: JSON.stringify(Object.assign({ type, title, body }, extra || {})) });
     }catch(e){}
   }
 };
@@ -687,6 +690,8 @@ function summary(c){ if (c.kind === "song" && c.song) return `${c.song.title} ·
 
 /* ===== Carnet (amis) ===== */
 function viewCarnetAmis(){
+  if (sansCarnet()) return `<div class="head"><span class="eyebrow">Nouvelles d'Espagne</span><h1 class="ltitle">Carnet de ${P()}</h1></div>
+    <div class="group"><div class="empty">${IC.lock}<b>Carnet privé</b><p>${P()} a choisi de ne plus partager son carnet avec toi. Le reste de l'appli, comme les jeux de l'Arcade, reste ouvert.</p></div></div>`;
   const shared = Store.journal.filter(e => e.shared).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   return `<div class="head"><span class="eyebrow">Nouvelles d'Espagne</span><h1 class="ltitle">Carnet de ${P()}</h1></div>
     ${notifCard()}
@@ -821,7 +826,7 @@ async function saveEntry(){
   try{
     const e = { id: uid(), kind:"page", date: d.date, text: d.text || null, place: d.place || null, shared: d.shared };
     await Store.addEntry(e, d.photos.map(p => p.blob));
-    if (d.shared) Push.send("shared", `${CONFIG.PRENOM} a partagé une page`, d.place ? `Nouvelles de ${d.place}` : "Va voir son carnet");
+    if (d.shared) Push.send("shared", `${CONFIG.PRENOM} a partagé une page`, d.place ? `Nouvelles de ${d.place}` : "Va voir son carnet", { carnet: true });
     popLayer(); tab = "carnet"; render();
   }catch(ex){ d.busy = false; b.disabled = false; b.textContent = "Enregistrer"; err.textContent = "L'envoi a échoué. Vérifie ta connexion et réessaie."; err.hidden = false; }
 }
@@ -1207,7 +1212,7 @@ document.addEventListener("change", async ev => {
     const e = Store.journal.find(x => x.id === t.dataset.v); if (!e) return;
     try{
       await Store.updateEntry(e, { shared: t.checked });
-      if (t.checked) Push.send("shared", e.kind === "montage" ? `${CONFIG.PRENOM} a partagé un montage` : `${CONFIG.PRENOM} a partagé une page`, e.title || e.place || "Va voir son carnet");
+      if (t.checked) Push.send("shared", e.kind === "montage" ? `${CONFIG.PRENOM} a partagé un montage` : `${CONFIG.PRENOM} a partagé une page`, e.title || e.place || "Va voir son carnet", { carnet: true });
     }catch(x){ t.checked = !t.checked; }
     if (!layers.length) render(); else { const keep = layers.slice(); render(); keep.forEach(l => document.body.appendChild(l)); }
   }
@@ -1251,7 +1256,7 @@ if (role === "ami" || role === "romane"){
       role: () => role, me: () => role === "romane" ? { id: "romane", name: CONFIG.PRENOM } : me, demo: () => DEMO, store: () => Store,
       render: () => render(), clearLayers: () => clearLayers(), layerCount: () => layers.length,
       goTab: t => { tab = t; clearLayers(); render(); window.scrollTo(0, 0); },
-      push: (type, title, body) => Push.send(type, title, body),
+      push: (type, title, body, extra) => Push.send(type, title, body, extra),
       pushOn: () => Push.on(),
       capsuleHTML: c => capsuleBody(c),
       plan: () => capsulePlan(), now: () => now(), dates: () => ({ depart: parseDay(CONFIG.DEPART), retour: parseDay(CONFIG.RETOUR) }),
@@ -1264,7 +1269,7 @@ if (role === "ami" || role === "romane"){
     loadScript("marathon.js?v=5").catch(() => {});
     loadScript("feuvert.js?v=4").catch(() => {});
     loadScript("grade.js?v=9").catch(() => {});
-    loadScript("reactions.js?v=2").catch(() => {});
+    loadScript("reactions.js?v=3").catch(() => {});
     loadScript("jeux.js?v=6").catch(() => {});
     loadScript("hub.js?v=8").catch(() => {});
     loadScript("colis.js?v=1").catch(() => {});
