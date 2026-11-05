@@ -141,6 +141,9 @@ const CSS = `
 .qj-hn-goal{position:absolute;top:7px;left:0;right:0;text-align:center;font-style:normal;font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#2F7D4E}
 .qj-hn.done .qj-hn-peg.goal{background:rgba(47,125,78,.2)}
 .qj-hn-lost{animation:qj-hurt .5s}
+.qj-hn{touch-action:none} .qj-hn-peg{touch-action:none}
+.qj-hn-peg.qj-ko{animation:qj-pegko .4s ease-out}
+@keyframes qj-pegko{from{background:rgba(204,63,39,.35)}}
 @keyframes qj-hurt{30%{transform:scale(1.4) rotate(-10deg)}}
 .qj-hn-clock{display:flex;align-items:baseline;justify-content:center;gap:10px;font-family:ui-monospace,"SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums}
 .qj-hn-clock b{font-size:38px;font-weight:700;letter-spacing:-.02em;line-height:1}
@@ -281,8 +284,8 @@ document.addEventListener("click", e => {
 }, true);
 // Pendant une partie verrouillée (L'Œil) : l'écran ne défile plus, ne zoome plus, ne rebondit plus
 const locked = () => !!document.querySelector(".qj-wrap.qj-lock");
-document.addEventListener("touchmove", e => { if (locked()) e.preventDefault(); }, { capture:true, passive:false });
-document.addEventListener("touchend", e => { if (locked() && e.target.closest && e.target.closest(".qj-grid")) e.preventDefault(); }, { capture:true, passive:false });
+document.addEventListener("touchmove", e => { if (locked() && !(e.target.closest && e.target.closest("[data-hn-rules-box]"))) e.preventDefault(); }, { capture:true, passive:false });
+document.addEventListener("touchend", e => { if (locked() && e.target.closest && e.target.closest(".qj-grid,.qj-hn")) e.preventDefault(); }, { capture:true, passive:false });
 ["gesturestart","gesturechange","dblclick"].forEach(t => document.addEventListener(t, e => { if (locked()) e.preventDefault(); }, { capture:true, passive:false }));
 function drawBoard(){
   if (!cur) return;
@@ -773,7 +776,8 @@ const HANOI = (() => {
     <h4>Le classement</h4><p>Le meilleur temps total gagne. À la fin, ouvre « Temps par tour » pour voir le détail, comparé à ton record.</p>
     <button type="button" class="qj-go" data-hn-rules-close="1" style="align-self:stretch">J'ai compris</button></div></div>`;
   const qBtn = `<button type="button" class="qj-hn-q" data-hn-rules="1" aria-label="Règles du jeu">?</button>`;
-  function stop(){ timers.forEach(clearTimeout); timers = []; cancelAnimationFrame(raf); state = "off"; pausedAt = 0; }
+  function lock(on){ const w = root && root.closest(".qj-wrap"); if (!w) return; if (on && !w.classList.contains("qj-lock")) w.scrollTop = 0; w.classList.toggle("qj-lock", on); }
+  function stop(){ timers.forEach(clearTimeout); timers = []; cancelAnimationFrame(raf); state = "off"; pausedAt = 0; lock(false); }
   function title(){
     state = "title"; const b = loadBest();
     root.innerHTML = qBtn + `<div class="qj-title"><b>Les Tours<br>de Hanoï</b><p>Une course en quatre tours : 3, 4, 5 puis 6 disques. Fais passer chaque tour à droite le plus vite possible. Jamais un grand disque sur un petit : à 3 erreurs, la course est perdue. Une tour au nombre minimum de coups retire du temps à ton chrono.</p>
@@ -815,14 +819,14 @@ const HANOI = (() => {
   function level(first){
     n = LEVELS[li]; pegs = [Array.from({ length: n }, (_, i) => n - i), [], []];
     sel = null; moves = 0; t0 = 0; state = "play";
-    frame(); msg(first ? "Le chrono démarre à ton premier toucher." : `${n} disques. Le chrono repart à ton premier toucher.`);
+    frame(); lock(true); msg(first ? "Le chrono démarre à ton premier toucher." : `${n} disques. Le chrono repart à ton premier toucher.`);
     cancelAnimationFrame(raf); raf = requestAnimationFrame(tick);
   }
   function animateMove(from, el){
     if (!el || !from || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const to = el.getBoundingClientRect(), bd = $("#qj-hn").getBoundingClientRect();
     const dx = from.left - to.left, dy = from.top - to.top, y = Math.min(dy, bd.top + 6 - to.top);
-    try{ el.animate([{ transform:`translate(${dx}px,${dy}px)` }, { transform:`translate(${dx}px,${y}px)`, offset:.3 }, { transform:`translate(0,${y}px)`, offset:.7 }, { transform:"translate(0,0)" }], { duration: 240, easing: "ease-out" }); }catch(e){}
+    try{ el.animate([{ transform:`translate(${dx}px,${dy}px)` }, { transform:`translate(${dx}px,${y}px)`, offset:.3 }, { transform:`translate(0,${y}px)`, offset:.7 }, { transform:"translate(0,0)" }], { duration: 160, easing: "ease-out" }); }catch(e){}
   }
   function tap(p){
     if (state !== "play" || pausedAt) return;
@@ -834,6 +838,8 @@ const HANOI = (() => {
     }
     if (p === sel){ sel = null; paint(); return; }
     if (pegs[p].length && top(p) < top(sel)){ mistake(p); return; }
+    // Si tu enchaînes plus vite que l'animation précédente, on la termine d'abord : sinon le disque « saute »
+    try{ root.querySelectorAll(".qj-hn-d").forEach(d => d.getAnimations && d.getAnimations().forEach(a => a.finish())); }catch(e){}
     const src = root.querySelector(`.qj-hn-peg[data-p="${sel}"] .qj-hn-st .qj-hn-d:last-child`), from = src && src.getBoundingClientRect();
     pegs[p].push(pegs[sel].pop()); sel = null; moves++; paint();
     animateMove(from, root.querySelector(`.qj-hn-peg[data-p="${p}"] .qj-hn-st .qj-hn-d:last-child`));
@@ -843,7 +849,8 @@ const HANOI = (() => {
   }
   function mistake(p){
     lives--;
-    const b = root.querySelector(`.qj-hn-peg[data-p="${p}"]`); if (b){ b.classList.remove("qj-shake"); void b.offsetWidth; b.classList.add("qj-shake"); }
+    // Le piquet clignote en rouge sans bouger (un piquet qui tremble fait rater la tape suivante)
+    const b = root.querySelector(`.qj-hn-peg[data-p="${p}"]`); if (b){ b.classList.remove("qj-ko"); void b.offsetWidth; b.classList.add("qj-ko"); }
     const L = $("#qj-hn-lives"); if (L){ L.innerHTML = [0,1,2].map(i => heart(i < lives)).join(""); L.children[lives]?.classList.add("qj-hn-lost"); }
     bip(150, .3, "sawtooth", .06); vib(60);
     if (lives <= 0){ sel = null; paint(); msg("Troisième erreur…", "hot"); fail(); return; }
@@ -862,7 +869,7 @@ const HANOI = (() => {
     if (li < LEVELS.length) later(() => level(false), 1500); else later(finish, 900);
   }
   function fail(){
-    state = "over"; cancelAnimationFrame(raf);
+    state = "over"; cancelAnimationFrame(raf); lock(false);
     later(() => {
       if (state !== "over") return;
       root.insertAdjacentHTML("beforeend", `<div class="qj-over" data-qj-over="1" role="dialog" aria-label="Course perdue"><h2>Course perdue.</h2>
@@ -872,7 +879,7 @@ const HANOI = (() => {
     }, 700);
   }
   function finish(){
-    state = "over";
+    state = "over"; lock(false);
     const chelem = bonusLog.every(b => b > 0) ? CHELEM : 0;
     const t = Math.max(0, total() - chelem), best = loadBest(), isBest = !best || t < best.total;
     if (isBest) saveBest({ total: t, splits: splits.slice() });
