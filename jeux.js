@@ -61,9 +61,11 @@ const CSS = `
 .qj-over .qj-rec{color:#CC3F27;font-weight:700}
 .qj-over .qj-cta{color:#3B1F17;font-weight:600;margin-top:8px;visibility:hidden}
 /* L'Œil */
-.qj-grid{position:relative;width:100%;aspect-ratio:1;display:grid;gap:5px}
-.qj-grid button{border:0;padding:0;border-radius:10%;cursor:pointer;transition:transform .08s}
-.qj-grid button:active{transform:scale(.94)}
+.qj-grid{position:relative;width:100%;aspect-ratio:1;display:grid;gap:5px;touch-action:none;-webkit-tap-highlight-color:transparent;border-radius:12px}
+.qj-grid button{border:0;padding:0;border-radius:10%;cursor:pointer;touch-action:none;-webkit-tap-highlight-color:transparent}
+.qj-grid.qj-ko{animation:qj-ko .35s ease-out}
+@keyframes qj-ko{from{box-shadow:0 0 0 6px #CC3F27}to{box-shadow:0 0 0 6px rgba(204,63,39,0)}}
+.qj-wrap.qj-lock{overflow:hidden;overscroll-behavior:none;touch-action:none}
 .qj-shake{animation:qj-shake .3s}
 @keyframes qj-shake{20%{transform:translateX(-8px)}40%{transform:translateX(7px)}60%{transform:translateX(-5px)}80%{transform:translateX(3px)}}
 .qj-grid button.qj-reveal{box-shadow:0 0 0 4px #fff,0 0 0 7px #3B1F17;z-index:1;animation:qj-pulse .8s ease-in-out infinite}
@@ -277,6 +279,11 @@ document.addEventListener("click", e => {
   const b = e.target.closest && e.target.closest('[data-qj="close"]'); if (!b) return;
   e.stopPropagation(); closeGame();
 }, true);
+// Pendant une partie verrouillée (L'Œil) : l'écran ne défile plus, ne zoome plus, ne rebondit plus
+const locked = () => !!document.querySelector(".qj-wrap.qj-lock");
+document.addEventListener("touchmove", e => { if (locked()) e.preventDefault(); }, { capture:true, passive:false });
+document.addEventListener("touchend", e => { if (locked() && e.target.closest && e.target.closest(".qj-grid")) e.preventDefault(); }, { capture:true, passive:false });
+["gesturestart","gesturechange","dblclick"].forEach(t => document.addEventListener(t, e => { if (locked()) e.preventDefault(); }, { capture:true, passive:false }));
 function drawBoard(){
   if (!cur) return;
   const { G, board } = cur;
@@ -327,15 +334,23 @@ const OEIL = (() => {
   const G = { id:"oeil", title:"L'Œil", short:"L'Œil", key:"qj_oeil_best", Board: makeBoard("oeil"), unit: s => `${s} case${s > 1 ? "s" : ""}` };
   const sizeFor = s => Math.min(8, 2 + Math.floor(s / 3));
   const deltaFor = s => Math.max(1.5, 22 * Math.pow(.9, s));
-  function stop(){ cancelAnimationFrame(raf); timers.forEach(clearTimeout); timers = []; state = "off"; }
+  const wrapOf = () => root && root.closest(".qj-wrap");
+  function lock(on){ const w = wrapOf(); if (!w) return; if (on) w.scrollTop = 0; w.classList.toggle("qj-lock", on); }
+  function stop(){ cancelAnimationFrame(raf); timers.forEach(clearTimeout); timers = []; state = "off"; lock(false); }
   function title(){ state = "title"; root.innerHTML = titleHTML("L'Œil", "Une case n'a pas tout à fait la même couleur que les autres. Trouve-la, puis la suivante… 60 secondes. Une erreur coûte 3 secondes.", lsGet(G.key), G.unit); }
   function round(){
     n = sizeFor(score); delta = deltaFor(score); odd = Math.floor(Math.random() * n * n);
     const h = Math.floor(Math.random() * 360), s = 45 + Math.random() * 35, l = 38 + Math.random() * 22, dl = (l > 50 ? -1 : 1) * delta;
     const base = `hsl(${h} ${s}% ${l}%)`, diff = `hsl(${h} ${s}% ${l + dl}%)`;
     const g = root.querySelector(".qj-grid");
-    g.style.gridTemplateColumns = `repeat(${n},1fr)`; g.style.gap = (n > 5 ? 4 : 6) + "px";
-    g.innerHTML = Array.from({ length: n * n }, (_, i) => `<button type="button" data-i="${i}" style="background:${i === odd ? diff : base}" aria-label="Case ${i + 1}"></button>`).join("");
+    // On garde les mêmes cases d'une manche à l'autre (on ne change que les couleurs) : plus léger pour le téléphone
+    let bs = g.querySelectorAll("button");
+    if (bs.length !== n * n){
+      g.style.gridTemplateColumns = `repeat(${n},1fr)`; g.style.gap = (n > 5 ? 4 : 6) + "px";
+      g.innerHTML = Array.from({ length: n * n }, (_, i) => `<button type="button" data-i="${i}" aria-label="Case ${i + 1}"></button>`).join("");
+      bs = g.querySelectorAll("button");
+    }
+    for (let i = 0; i < bs.length; i++) bs[i].style.background = i === odd ? diff : base;
     lastDelta = delta;
   }
   const left = () => DUR - (performance.now() - t0) / 1000 - penalty;
@@ -352,7 +367,7 @@ const OEIL = (() => {
     stop(); state = "play"; score = 0; penalty = 0;
     root.innerHTML = `<div class="qj-hud"><div><div class="qj-k">Trouvées</div><div class="qj-v" id="qj-sc">0</div></div><div style="text-align:right"><div class="qj-k">Temps</div><div class="qj-v" id="qj-tm">${DUR}</div></div></div>
       <div class="qj-bar"><i></i></div><div class="qj-grid"></div><p class="qj-msg">Record : ${G.unit(lsGet(G.key))}</p>`;
-    round(); t0 = performance.now(); raf = requestAnimationFrame(tick);
+    lock(true); round(); t0 = performance.now(); raf = requestAnimationFrame(tick);
   }
   function hit(i){
     if (state !== "play") return;
@@ -360,12 +375,13 @@ const OEIL = (() => {
     if (i === odd){ score++; root.querySelector("#qj-sc").textContent = score; bip(600 + Math.min(900, score * 25), .06, "triangle"); round(); }
     else {
       penalty += PEN; bip(160, .25, "sawtooth", .08); vib(40);
-      g.classList.remove("qj-shake"); void g.offsetWidth; g.classList.add("qj-shake");
+      // Un éclair rouge autour de la grille, sans la faire bouger (une grille qui tremble fait rater la case suivante)
+      g.classList.remove("qj-ko"); void g.offsetWidth; g.classList.add("qj-ko");
       g.insertAdjacentHTML("beforeend", `<span class="qj-pen">−${PEN} s</span>`); timers.push(setTimeout(() => g.querySelector(".qj-pen")?.remove(), 700));
     }
   }
   function end(){
-    state = "over"; cancelAnimationFrame(raf);
+    state = "over"; cancelAnimationFrame(raf); lock(false);
     root.querySelector("#qj-tm").textContent = "0"; root.querySelector(".qj-bar i").style.transform = "scaleX(0)";
     root.querySelector(`.qj-grid button[data-i="${odd}"]`)?.classList.add("qj-reveal");
     bip(220, .4, "sawtooth", .07);
