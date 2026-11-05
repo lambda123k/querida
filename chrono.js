@@ -163,7 +163,7 @@ function openChrono(){
   if (Q.layerCount()) Q.clearLayers();
   closeChrono();
   wrap = document.createElement("div"); wrap.className = "qc-wrap"; wrap.setAttribute("role", "dialog"); wrap.setAttribute("aria-label", "Le Chrono");
-  wrap.innerHTML = `<div class="qc-in"><div class="qc-head"><h1>Le Chrono</h1><button type="button" class="qc-close" data-qc="close" aria-label="Fermer">×</button></div>
+  wrap.innerHTML = `<div class="qc-in"><div class="qc-head"><h1>Le Chrono</h1><span style="display:flex;gap:8px"><button type="button" class="qc-close" data-qc="again" aria-label="Recommencer la partie"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" style="display:block;margin:auto"><path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button type="button" class="qc-close" data-qc="close" aria-label="Fermer">×</button></span></div>
     <div class="qc-game" id="qc-game" role="application" aria-live="polite" aria-label="Touche pour lancer puis arrêter le chronomètre"></div>
     <div class="qc-board" id="qc-board"></div></div>`;
   document.body.appendChild(wrap); document.body.style.overflow = "hidden";
@@ -176,6 +176,7 @@ document.addEventListener("click", e => {
   const b = e.target.closest("[data-qc]"); if (!b) return;
   e.stopPropagation();
   if (b.dataset.qc === "close") closeChrono();
+  if (b.dataset.qc === "again" && wrap){ cancelAnimationFrame(raf); L = level(1); passed = 0; newBest = false; run = []; lastResult = null; state = "arm"; render(); }
   if (b.dataset.qc === "row"){ openRow = openRow === b.dataset.v ? null : b.dataset.v; drawBoard(); }
 }, true);
 

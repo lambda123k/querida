@@ -145,6 +145,7 @@ document.addEventListener("click", e => {
   if (v === "close") closeArcade();
   if (v === "play") Tour.open();
   if (v === "back") Tour.close();
+  if (v === "again") Tour.again();
 }, true);
 function toast(msg){
   document.getElementById("qa-toast")?.remove();
@@ -291,7 +292,7 @@ const Tour = (() => {
   function open(){
     close();
     root = document.createElement("div"); root.className = "qa-game"; root.setAttribute("role", "application"); root.setAttribute("aria-label", "La Tour : touche pour poser l'étage");
-    root.innerHTML = `<div class="qa-bar"><button type="button" data-qa="back">← Arcade</button><span class="qa-best">Record : ${best}</span></div><div class="qa-stage"><canvas></canvas></div>`;
+    root.innerHTML = `<div class="qa-bar"><button type="button" data-qa="back">← Arcade</button><span style="display:flex;align-items:center;gap:12px"><span class="qa-best">Record : ${best}</span><button type="button" data-qa="again" aria-label="Recommencer la partie" style="width:40px"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" style="display:block;margin:auto"><path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></span></div><div class="qa-stage"><canvas></canvas></div>`;
     document.body.appendChild(root);
     cv = root.querySelector("canvas"); g = cv.getContext("2d");
     resize(); ro = new ResizeObserver(resize); ro.observe(root.querySelector(".qa-stage"));
@@ -307,7 +308,8 @@ const Tour = (() => {
     if (root) root.remove(); root = null;
     renderArcade();
   }
-  return { open, close };
+  function again(){ if (!root) return; state = "play"; reset(); }
+  return { open, close, again };
 })();
 
 /* Inscription dans l'Arcade (hub.js) */

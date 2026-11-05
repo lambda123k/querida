@@ -261,7 +261,7 @@ function openGame(G){
     if (Q.layerCount()) Q.clearLayers();
     closeGame();
     const wrap = document.createElement("div"); wrap.className = "qj-wrap"; wrap.setAttribute("role", "dialog"); wrap.setAttribute("aria-label", G.title);
-    wrap.innerHTML = `<div class="qj-in"><div class="qj-head"><h1>${G.title}</h1><button type="button" class="qj-close" data-qj="close" aria-label="Fermer">×</button></div>
+    wrap.innerHTML = `<div class="qj-in"><div class="qj-head"><h1>${G.title}</h1><span style="display:flex;gap:8px"><button type="button" class="qj-close" data-qj="again" aria-label="Recommencer la partie"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" style="display:block;margin:auto"><path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button type="button" class="qj-close" data-qj="close" aria-label="Fermer">×</button></span></div>
       <div class="qj-game" id="qj-game"></div><div class="qj-board" id="qj-board"></div></div>`;
     document.body.appendChild(wrap); document.body.style.overflow = "hidden";
     cur = { G, wrap, root: wrap.querySelector("#qj-game"), boardEl: wrap.querySelector("#qj-board"), board: null };
@@ -279,8 +279,10 @@ function closeGame(){
   try{ window.dispatchEvent(new Event("qh-games")); }catch(e){}
 }
 document.addEventListener("click", e => {
-  const b = e.target.closest && e.target.closest('[data-qj="close"]'); if (!b) return;
-  e.stopPropagation(); closeGame();
+  const b = e.target.closest && e.target.closest('[data-qj="close"],[data-qj="again"]'); if (!b) return;
+  e.stopPropagation();
+  if (b.dataset.qj === "again"){ try{ if (cur && cur.G.restart){ cur.G.stop(); cur.G.restart(); } }catch(err){} return; }
+  closeGame();
 }, true);
 // Pendant une partie verrouillée (L'Œil) : l'écran ne défile plus, ne zoome plus, ne rebondit plus
 const locked = () => !!document.querySelector(".qj-wrap.qj-lock");
@@ -404,7 +406,7 @@ const OEIL = (() => {
       if (e.target.closest("[data-qj-go]")){ e.preventDefault(); start(); return; }
       const b = e.target.closest(".qj-grid button"); if (!b) return; e.preventDefault(); hit(+b.dataset.i);
     }); };
-  G.stop = stop;
+  G.stop = stop; G.restart = start;
   return G;
 })();
 
@@ -545,7 +547,7 @@ const DIFF = (() => {
       if (e.target.closest("[data-qj-go]")){ e.preventDefault(); start(); return; }
       if (e.target.closest(".qj-stage")){ e.preventDefault(); tap(e); }
     }); };
-  G.stop = stop;
+  G.stop = stop; G.restart = start;
   return G;
 })();
 
@@ -618,7 +620,7 @@ const CHIF = (() => {
       if (e.target.closest("[data-qj-go]")){ e.preventDefault(); start(); return; }
       const b = e.target.closest(".qj-pad button"); if (!b || b.disabled) return; e.preventDefault(); key(b.dataset.d);
     }); };
-  G.stop = stop;
+  G.stop = stop; G.restart = start;
   return G;
 })();
 
@@ -719,7 +721,7 @@ const ACC = (() => {
       if (b.dataset.a === "same") answer(false); else if (b.dataset.a === "diff") answer(true);
       else if (b.dataset.a === "again" && state === "ask" && replays < 1){ replays++; play(); }
     }); };
-  G.stop = () => { stop(); try{ if (a) a.suspend(); }catch(e){} };
+  G.stop = () => { stop(); try{ if (a) a.suspend(); }catch(e){} }; G.restart = start;
   return G;
 })();
 
@@ -929,7 +931,7 @@ const HANOI = (() => {
       if (e.target.closest(".qj-hn-det")) return;
       const b = e.target.closest(".qj-hn-peg"); if (!b) return; e.preventDefault(); tap(+b.dataset.p);
     }); };
-  G.stop = stop;
+  G.stop = stop; G.restart = start;
   return G;
 })();
 
@@ -1097,7 +1099,7 @@ const SAVANT = (() => {
       if (e.target.closest("[data-qj-go]")){ start(); return; }
       const b = e.target.closest("[data-sv]"); if (b) answer(+b.dataset.sv);
     }); };
-  G.stop = stop;
+  G.stop = stop; G.restart = start;
   return G;
 })();
 

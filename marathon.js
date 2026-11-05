@@ -128,7 +128,7 @@ function openGame(){
   if (Q.layerCount()) Q.clearLayers();
   closeGame();
   wrap = document.createElement("div"); wrap.className = "qm-wrap"; wrap.setAttribute("role", "dialog"); wrap.setAttribute("aria-label", "Le Marathon du pouce");
-  wrap.innerHTML = `<div class="qm-in"><div class="qm-head"><h1>Le Marathon du pouce</h1><button type="button" class="qm-close" data-qm="close" aria-label="Fermer">×</button></div>
+  wrap.innerHTML = `<div class="qm-in"><div class="qm-head"><h1>Le Marathon du pouce</h1><span style="display:flex;gap:8px"><button type="button" class="qm-close" data-qm="again" aria-label="Recommencer la partie"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" style="display:block;margin:auto"><path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button type="button" class="qm-close" data-qm="close" aria-label="Fermer">×</button></span></div>
     <div class="qm-game" id="qm-game">
       <div style="width:100%"><div class="qm-bar" id="qm-bar"><i id="qm-fill"></i></div><div class="qm-hud"><span id="qm-time">10,0 s</span><span id="qm-rec">Record : ${best}</span></div></div>
       <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><div class="qm-count" id="qm-count">0</div><div class="qm-cps" id="qm-cps">10 secondes, tous les doigts permis</div></div>
@@ -147,6 +147,7 @@ document.addEventListener("click", e => {
   const b = e.target.closest && e.target.closest("[data-qm]"); if (!b) return;
   e.stopPropagation();
   if (b.dataset.qm === "close") closeGame();
+  if (b.dataset.qm === "again" && wrap){ cancelAnimationFrame(raf); reset(); }
 }, true);
 
 let actx = null;
