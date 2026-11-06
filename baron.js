@@ -52,6 +52,9 @@ const errText = e => {
   if (m.includes("doucement")) return "Doucement, une corvée à la fois !";
   if (m.includes("pas assez de pièces")) return "Pas encore assez de pièces.";
   if (m.includes("vends d'abord")) return "Vends d'abord ta première récolte.";
+  if (m.includes("déjà livrée")) return "Trop tard, quelqu'un l'a livrée avant toi !";
+  if (m.includes("commande expirée")) return "Cette commande a expiré.";
+  if (m.includes("il te manque")) return "Il te manque des produits pour cette commande.";
   if (m.includes("jeton inconnu")) return "Ta clé de ferme n'est plus valable.";
   if (/fetch|network|Failed/i.test(m)) return "Pas de connexion. Réessaie dans un instant.";
   return "Oups, ça n'a pas marché. Réessaie.";
@@ -216,6 +219,49 @@ const CSS = `
 .bn-quest.ready{border-color:#E8A500;animation:bn-ready 1.2s ease-in-out infinite}
 @keyframes bn-ready{50%{box-shadow:0 0 0 6px rgba(232,165,0,.18)}}
 .bn-quest.ready .bn-btn{background:#E8A500;color:#2A1A00}
+.bn-tabs{display:flex;background:var(--fill2);border-radius:13px;padding:3px;gap:3px;margin-top:-4px}
+.bn-tabs button{flex:1;border:0;background:none;border-radius:10px;padding:9px 6px;font:600 15px var(--f);color:var(--label2);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.bn-tabs button[aria-pressed="true"]{background:var(--card);color:var(--label);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.bn-tabs i{font-style:normal;background:#E8A500;color:#2A1A00;border-radius:999px;padding:1px 7px;font-size:12px;margin-left:2px}
+.bn-crier{background:linear-gradient(135deg,#FCEBD6,#FBE3D3);color:#3B1F17;border-radius:18px;padding:14px;display:flex;gap:12px;align-items:center}
+.bn-crier .big{font-size:34px}
+.bn-crier b{display:block;font-size:16px}
+.bn-crier small{display:block;font-size:13px;color:#7A5A4C;margin-top:2px}
+.bn-order{background:var(--card);border-radius:18px;padding:12px 14px;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;flex-direction:column;gap:10px;border:2px solid transparent}
+.bn-order.ok{border-color:#E8A500}
+.bn-order.won{opacity:.6}
+.bn-order .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.bn-order .top b{font-size:18px;color:var(--accent);font-variant-numeric:tabular-nums}
+.bn-order .top small{color:var(--label2);font-size:13px}
+.bn-order .its{display:flex;flex-wrap:wrap;gap:6px}
+.bn-order .it{display:inline-flex;align-items:center;gap:4px;background:var(--fill);border-radius:10px;padding:5px 9px;font-size:14px;font-variant-numeric:tabular-nums}
+.bn-order .it.miss{background:rgba(217,45,32,.1);color:#B42318}
+.bn-order .it.have{background:rgba(47,125,78,.12);color:#2F7D4E}
+.bn-order .it .star{font-size:11px}
+.bn-stall{display:grid;grid-template-columns:32px 1fr auto;grid-template-areas:"ico txt pr" "ico sp acts";align-items:center;gap:6px 10px;padding:12px 14px}
+.bn-stall + .bn-stall{border-top:.5px solid var(--sep)}
+.bn-stall .ico{grid-area:ico;font-size:28px;width:32px;text-align:center;align-self:start;margin-top:2px}
+.bn-stall .txt{grid-area:txt;min-width:0}
+.bn-stall .txt b{display:block;font-size:16px}
+.bn-stall .txt small{display:block;color:var(--label2);font-size:12px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bn-stall .pr{grid-area:pr;text-align:right}
+.bn-stall .pr b{display:block;font-size:16px;font-variant-numeric:tabular-nums}
+.bn-stall .pr small{display:block;font:700 12px var(--f)}
+.bn-stall .up{color:#2F7D4E}.bn-stall .down{color:#D92D20}.bn-stall .flat{color:var(--label2)}
+.bn-stall svg{grid-area:sp;width:100%;height:28px}
+.bn-stall .acts{grid-area:acts;display:flex;gap:6px}
+.bn-stall .acts .bn-btn{height:32px;font-size:13px;padding:0 11px;border-radius:9px}
+.bn-sheet{position:fixed;inset:0;z-index:92;display:flex;align-items:flex-end;justify-content:center;background:rgba(20,8,4,.4);animation:bn-fade .2s ease}
+.bn-sheet .box{background:var(--card);color:var(--label);width:100%;max-width:520px;border-radius:24px 24px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 18px);animation:bn-sheetup .3s cubic-bezier(.2,1.1,.4,1) both;display:flex;flex-direction:column;gap:14px}
+@keyframes bn-sheetup{from{transform:translateY(100%)}}
+.bn-sheet h2{margin:0;font-family:var(--f-display);font-weight:400;font-size:28px}
+.bn-sheet .sub{margin:-8px 0 0;color:var(--label2);font-size:14px}
+.bn-qty{display:flex;gap:8px;flex-wrap:wrap}
+.bn-qty button{flex:1;min-width:60px;height:44px;border-radius:12px;border:2px solid var(--sep);background:var(--bg);color:var(--label);font:700 15px var(--f);cursor:pointer}
+.bn-qty button[aria-pressed="true"]{border-color:var(--accent);background:var(--fill);color:var(--accent)}
+.bn-qty button[disabled]{opacity:.35}
+.bn-total{display:flex;justify-content:space-between;font-size:16px}
+.bn-total b{font-variant-numeric:tabular-nums}
 .bn-buy{background:var(--card);border-radius:18px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
 .bn-buy .ico{font-size:30px}
 .bn-buy .txt{flex:1;min-width:0}
@@ -279,7 +325,7 @@ async function refresh(first){
   try{
     setState(await rpc("baron_state", { p_token: getToken() }));
     if (alive()) drawFarm();
-    if (first){ welcome(); setTimeout(rollGolden, 4000); }
+    if (first){ welcome(); setTimeout(rollGolden, 4000); setTimeout(() => loadMarket(true), 1500); }
   }catch(e){
     const m = String(e && e.message || "");
     if (m.includes("jeton inconnu")){ setToken(null); S = null; if (alive()) showPick(); return; }
@@ -443,11 +489,19 @@ function stockHTML(){
       <button class="bn-btn small" data-bn="sell" data-k="${s.resource}" data-q="${s.qty}">Vendre · ${fmtN(gain)} 🪙</button>
     </div>`; }).join("")}</div>`;
 }
+let view = "farm", M = null, mFetched = 0, mBusy = false, sheet = null;
+function tabsHTML(){
+  const n = M ? M.orders.filter(o => !o.winner && canDeliver(o)).length : 0;
+  return `<div class="bn-tabs" role="tablist">
+    <button data-bn="view" data-v="farm" aria-pressed="${view === "farm"}">${MAIN[farm().resource]} Ma ferme</button>
+    <button data-bn="view" data-v="market" aria-pressed="${view === "market"}">🏪 Le marché${n ? ` <i>${n}</i>` : ""}</button></div>`;
+}
 function drawFarm(){
+  if (view === "market") return drawMarket();
   if (!alive() || !S || !farm()) return;
   const f = farm(), r = RES[f.resource], p = S.player;
   const w = weather();
-  rootEl.innerHTML = `<div class="bn">
+  rootEl.innerHTML = `<div class="bn">${tabsHTML()}
     <div class="bn-head"><h1>Ma ferme</h1><div class="bn-purse" id="bn-purse">🪙 <span>${fmtN(p.coins)}</span></div></div>
     <div class="bn-who"><span class="bn-chip">${r.e} ${esc(r.who)}</span><span>${f.units} ${f.units > 1 ? r.units : r.unit} · ${perRate({ rate: Number(f.rate_per_h) })}</span></div>
     ${questHTML()}
@@ -507,7 +561,7 @@ setInterval(() => {
       const el = document.querySelector(`.bn-chore[data-id="${c.id}"]`); if (el){ el.classList.add("bye"); setTimeout(() => el.remove(), 500); }
     });
     if (!alive() || !S || !farm() || document.visibilityState !== "visible") return;
-    if (chores.length < 2 && t >= nextSpawn){ spawnChore(); nextSpawn = t + 15000 + Math.random() * 10000; }
+    if (view === "farm" && chores.length < 2 && t >= nextSpawn){ spawnChore(); nextSpawn = t + 15000 + Math.random() * 10000; }
     const cb = document.getElementById("bn-combo"); if (cb){ cb.classList.toggle("off", !comboOn()); if (comboOn()) cb.textContent = comboText(); }
   }catch(e){}
 }, 1000);
@@ -540,11 +594,122 @@ async function doChore(el){
 }
 // Redessine le stock et l'achat sans toucher à la scène (les corvées restent en place)
 function refreshPanels(){
+  if (view === "market"){ drawMarket(); return; }
   const list = rootEl && rootEl.querySelector(".bn-list"); if (list) list.outerHTML = stockHTML();
   const buy = document.getElementById("bn-buy"); if (buy) buy.outerHTML = buyHTML();
   const purse = document.querySelector("#bn-purse span"); if (purse) purse.textContent = fmtN(S.player.coins);
   const qu = document.getElementById("bn-quest"); if (qu) qu.outerHTML = questHTML();
   updateEnergy();
+}
+
+/* =================== Le marché =================== */
+const stockOf = k => { const st = S && S.stocks.find(x => x.resource === k); return st ? Number(st.qty) : 0; };
+const canDeliver = o => Object.entries(o.items).every(([k, q]) => stockOf(k) >= q);
+const buyCost = (p, q) => Math.ceil(p * (Math.pow(1.001, q) - 1) / 0.001);
+const sellGain = (p, q) => Math.floor(p * Number(S.sell_rate || 0.7) * (1 - Math.pow(0.999, q)) / 0.001);
+const maxBuy = (p, coins) => Math.max(0, Math.min(5000, Math.floor(Math.log(1 + coins * 0.001 / p) / Math.log(1.001))));
+const pfmt = n => Number(n).toLocaleString("fr-FR", { maximumFractionDigits: Number(n) < 20 ? 2 : 1 });
+async function loadMarket(force){
+  if (mBusy || (!force && Date.now() - mFetched < 4000)) return;
+  mBusy = true;
+  try{
+    M = await rpc("baron_market_view", { p_token: getToken() }); mFetched = Date.now();
+    if (alive() && view === "market" && !sheet) drawMarket();
+    else if (alive()){ const tb = rootEl.querySelector(".bn-tabs"); if (tb) tb.outerHTML = tabsHTML(); }   // pastille des commandes livrables
+  }
+  catch(e){ if (view === "market" && alive() && !M) rootEl.innerHTML = `<div class="bn">${tabsHTML()}<p class="bn-err">${esc(errText(e))}</p></div>`; }
+  mBusy = false;
+}
+setInterval(() => { if (alive() && S && document.visibilityState === "visible" && (view === "market" || Date.now() - mFetched > 60000)) loadMarket(); }, 15000);
+function spark(hist, price, base){
+  const pts = (hist || []).map(h => Number(h[1])); pts.push(Number(price));
+  if (pts.length < 2) pts.unshift(Number(base));
+  const lo = Math.min(...pts, base * 0.95), hi = Math.max(...pts, base * 1.05), w = 160, h = 28;
+  const xy = pts.map((v, i) => `${(i / (pts.length - 1) * w).toFixed(1)},${(h - 2 - (v - lo) / (hi - lo) * (h - 4)).toFixed(1)}`);
+  const col = pts[pts.length - 1] >= pts[0] ? "#2F7D4E" : "#D92D20";
+  const by = (h - 2 - (base - lo) / (hi - lo) * (h - 4)).toFixed(1);
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><line x1="0" y1="${by}" x2="${w}" y2="${by}" stroke="currentColor" stroke-opacity=".18" stroke-dasharray="2 3"/><polyline points="${xy.join(" ")}" fill="none" stroke="${col}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+function orderHTML(o){
+  const ok = !o.winner && canDeliver(o), left = new Date(o.expires_at).getTime() - Date.now();
+  const its = Object.entries(o.items).map(([k, q]) => {
+    const have = stockOf(k), cls = o.winner ? "" : have >= q ? "have" : "miss";
+    return `<span class="it ${cls}">${RES[k].e} ${fmtN(q)}${k === M.star ? ` <span class="star">⭐</span>` : ""}${!o.winner && have < q ? ` <small>(${fmtN(have)})</small>` : ""}</span>`;
+  }).join("");
+  const foot = o.winner
+    ? `<small>${o.mine ? "🏆 Tu l'as livrée !" : `✅ Livrée par ${esc(o.winner)}`}</small>`
+    : `<button class="bn-btn ${ok ? "" : "ghost"}" data-bn="deliver" data-id="${o.id}" ${ok ? "" : "disabled"}>${ok ? `Livrer · +${fmtN(o.reward)} 🪙` : "Il te manque des produits"}</button>`;
+  return `<div class="bn-order ${ok ? "ok" : ""} ${o.winner ? "won" : ""}"><div class="top"><b>+${fmtN(o.reward)} 🪙</b><small>${o.winner ? "" : `encore ${fmtDur(left)}`}</small></div>
+    <div class="its">${its}</div>${foot}</div>`;
+}
+function drawMarket(){
+  if (!alive() || !S || !farm()) return;
+  if (!M){ rootEl.innerHTML = `<div class="bn">${tabsHTML()}<div class="bn-load">Le marché ouvre ses étals…</div></div>`; loadMarket(true); return; }
+  const p = S.player, star = RES[M.star];
+  const stalls = ORDER.map(k => {
+    const r = RES[k], m = M.prices[k], price = Number(m.price), ago = Number(m.ago);
+    const ch = ago ? (price - ago) / ago * 100 : 0, cls = ch > 0.5 ? "up" : ch < -0.5 ? "down" : "flat";
+    const who = M.producers && M.producers[k] ? `de ${esc(M.producers[k])}` : "pas encore de producteur";
+    const have = stockOf(k);
+    return `<div class="bn-stall"><span class="ico">${r.e}</span>
+      <div class="txt"><b>${r.label}</b><small>${who}${have ? ` · tu en as ${fmtN(have)}` : ""}</small></div>
+      ${spark(m.history, price, m.base)}
+      <div class="pr"><b>${pfmt(price)} 🪙</b><small class="${cls}">${cls === "up" ? "▲" : cls === "down" ? "▼" : "■"} ${Math.abs(ch).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} %</small></div>
+      <div class="acts"><button class="bn-btn small" data-bn="mbuy" data-k="${k}">Acheter</button>${have ? `<button class="bn-btn small ghost" data-bn="msell" data-k="${k}">Vendre</button>` : ""}</div>
+    </div>`;
+  }).join("");
+  rootEl.innerHTML = `<div class="bn">${tabsHTML()}
+    <div class="bn-head"><h1>Le marché</h1><div class="bn-purse" id="bn-purse">🪙 <span>${fmtN(p.coins)}</span></div></div>
+    <div class="bn-crier"><span class="big">📣</span><div><b>Le crieur : commandes du village</b><small>Le premier qui livre empoche tout. Star du jour : ${star.e} ${star.label}, comptée double ⭐</small></div></div>
+    ${M.orders.map(orderHTML).join("")}
+    <div class="bn-sec">Les étals · prix sur 1 h</div>
+    <div class="bn-list">${stalls}</div>
+    <p class="bn-sub" style="font-size:13px;text-align:center">Acheter fait monter le prix, vendre le fait baisser. Il revient doucement vers son prix normal (la ligne pointillée).</p>
+  </div>`;
+}
+/* Feuille d'achat / vente */
+function openSheet(mode, k){
+  const r = RES[k], price = Number(M.prices[k].price), coins = Number(S.player.coins), have = stockOf(k);
+  const max = mode === "buy" ? maxBuy(price, coins) : have;
+  if (!max){ toast(mode === "buy" ? "Pas assez de pièces." : "Tu n'en as pas."); return; }
+  const opts = [...new Set([10, 50, 100, 500].filter(q => q < max).concat([max]))].slice(-4);
+  sheet = { mode, k, q: opts.includes(10) && max > 10 ? 10 : max, opts, max, price };
+  drawSheet();
+}
+function drawSheet(){
+  document.querySelector(".bn-sheet")?.remove(); if (!sheet) return;
+  const { mode, k, q, opts, max, price } = sheet, r = RES[k];
+  const total = mode === "buy" ? buyCost(price, q) : sellGain(price, q);
+  document.body.insertAdjacentHTML("beforeend", `<div class="bn-sheet" data-bn="sheet-close"><div class="box" role="dialog" aria-modal="true">
+    <h2>${mode === "buy" ? "Acheter" : "Vendre"} ${r.e} ${r.label.toLowerCase()}</h2>
+    <p class="sub">${pfmt(price)} pièces l'unité${mode === "sell" ? ` · vente à ${Math.round(Number(S.sell_rate || 0.7) * 100)} %` : ""} · le prix ${mode === "buy" ? "monte" : "baisse"} un peu à chaque unité</p>
+    <div class="bn-qty">${opts.map(o => `<button data-bn="sq" data-q="${o}" aria-pressed="${o === q}">${o === max && o !== 10 && o !== 50 && o !== 100 && o !== 500 ? `Max ${fmtN(o)}` : fmtN(o)}</button>`).join("")}</div>
+    <div class="bn-total"><span>${fmtN(q)} ${r.label.toLowerCase()}</span><b>${mode === "buy" ? "−" : "+"}${fmtN(total)} 🪙</b></div>
+    <button class="bn-btn" data-bn="sheet-ok">${mode === "buy" ? "Acheter" : "Vendre"}</button>
+  </div></div>`);
+}
+async function sheetOk(){
+  if (!sheet || busy) return; busy = true;
+  const { mode, k, q } = sheet; sheet = null; document.querySelector(".bn-sheet")?.remove();
+  try{
+    const res = await rpc(mode === "buy" ? "baron_buy" : "baron_sell", { p_token: getToken(), p_resource: k, p_qty: q });
+    setState(res.state); sound("coin"); buzz(12);
+    toast(mode === "buy" ? `Acheté : ${fmtN(q)} ${RES[k].e} pour ${fmtN(res.cost)} pièces` : `Vendu ! +${fmtN(res.earned)} pièces`);
+    await loadMarket(true); drawMarket();
+  }catch(e){ toast(esc(errText(e))); }
+  busy = false;
+}
+async function deliver(id, btn){
+  if (busy) return; busy = true;
+  try{
+    const res = await rpc("baron_order_deliver", { p_token: getToken(), p_order: +id });
+    setState(res.state); M = res.market; mFetched = Date.now();
+    const b = btn.getBoundingClientRect(); floatText(b.left + b.width / 2, b.top, `+${fmtN(res.reward)} 🪙`, true);
+    sound("gold"); buzz([10, 40, 10, 40]);
+    toast(`📣 Commande livrée ! +${fmtN(res.reward)} pièces`, "gold");
+    drawMarket();
+  }catch(e){ toast(esc(errText(e))); loadMarket(true); }
+  busy = false;
 }
 
 /* =================== Achat d'unités =================== */
@@ -765,6 +930,13 @@ document.addEventListener("click", e => {
   else if (a === "chore") doChore(t);
   else if (a === "buy") buyUnit();
   else if (a === "quest") claimQuest(t);
+  else if (a === "view"){ view = t.dataset.v; chores = []; drawFarm(); if (view === "market") loadMarket(true); else refresh(); buzz(5); }
+  else if (a === "mbuy") openSheet("buy", t.dataset.k);
+  else if (a === "msell") openSheet("sell", t.dataset.k);
+  else if (a === "sq"){ sheet.q = +t.dataset.q; drawSheet(); }
+  else if (a === "sheet-ok") sheetOk();
+  else if (a === "sheet-close" && e.target === t){ sheet = null; t.remove(); }
+  else if (a === "deliver") deliver(t.dataset.id, t);
   else if (a === "ann-close" && (t.tagName === "BUTTON" || e.target === t)) document.querySelector(".bn-ann")?.remove();
   else if (a === "close") closeBaron();
   else if (a === "arcade"){ closeBaron(); document.querySelector(".qh-btn")?.click(); }
