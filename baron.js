@@ -36,7 +36,16 @@ const un = r => r.fem ? "une" : "un", nouv = r => r.fem ? "Nouvelle" : "Nouveau"
 const MAIN = { oeufs:"🐔", ble:"🌾", lait:"🐄", bois:"🌳", laine:"🐑", miel:"🐝" };
 const ORDER = ["oeufs","ble","lait","bois","laine","miel"];
 const perRate = r => r.rate >= 1 ? `${r.rate} / h` : `1 / ${Math.round(1 / r.rate)} h`;
-const fmtN = n => Math.floor(n).toLocaleString("fr-FR");
+// Gros nombres abrégés façon jeu : 9 999, puis 12,5K, 160K, 1,2M, 3,4B, 5T…
+const fmtN = n => {
+  n = Math.floor(Number(n) || 0); const a = Math.abs(n);
+  if (a < 10000) return n.toLocaleString("fr-FR");
+  const U = [[1e15, "Q"], [1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "K"]];
+  for (const [v, u] of U) if (a >= v){
+    const x = n / v; return (Math.abs(x) < 100 ? Math.floor(x * 10) / 10 : Math.floor(x)).toLocaleString("fr-FR") + u;
+  }
+  return String(n);
+};
 const fmtDur = ms => {
   if (ms <= 0) return "maintenant";
   const m = Math.round(ms / 60000); if (m < 60) return `${m} min`;
@@ -55,6 +64,9 @@ const errText = e => {
   if (m.includes("déjà livrée")) return "Trop tard, quelqu'un l'a livrée avant toi !";
   if (m.includes("commande expirée")) return "Cette commande a expiré.";
   if (m.includes("il te manque")) return "Il te manque des produits pour cette commande.";
+  if (m.includes("marché plein")) return "Le marché est plein : personne n'en veut pour l'instant.";
+  if (m.includes("rupture")) return "Rupture : personne n'en a vendu au marché.";
+  if (m.includes("pas assez au marché")) return "Il n'y en a plus autant au marché.";
   if (m.includes("jeton inconnu")) return "Ta clé de ferme n'est plus valable.";
   if (/fetch|network|Failed/i.test(m)) return "Pas de connexion. Réessaie dans un instant.";
   return "Oups, ça n'a pas marché. Réessaie.";
@@ -262,6 +274,29 @@ const CSS = `
 .bn-qty button[disabled]{opacity:.35}
 .bn-total{display:flex;justify-content:space-between;font-size:16px}
 .bn-total b{font-variant-numeric:tabular-nums}
+.bn-stall .txt small.lv{display:flex;align-items:center;gap:6px;font-weight:600}
+.bn-stall .txt small.lv i{display:block;width:44px;height:5px;border-radius:999px;background:var(--fill2);overflow:hidden;flex:none}
+.bn-stall .txt small.lv i b{display:block;height:100%;background:var(--accent);border-radius:999px}
+.bn-baron{background:linear-gradient(135deg,#FFE7A3,#F6C945);color:#2A1A00;border-radius:22px;padding:18px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 16px rgba(232,165,0,.3)}
+.bn-baron .big{font-size:52px;line-height:1;animation:bn-shine 1.6s ease-in-out infinite alternate}
+.bn-baron small{display:block;font:700 12px var(--f);text-transform:uppercase;letter-spacing:.06em;opacity:.7}
+.bn-baron b{display:block;font-family:var(--f-display);font-weight:400;font-size:34px;line-height:1.05}
+.bn-baron span{display:block;font-size:14px;margin-top:3px}
+.bn-rank{display:grid;grid-template-columns:28px 1fr auto;gap:2px 10px;align-items:center;padding:12px 14px}
+.bn-rank + .bn-rank{border-top:.5px solid var(--sep)}
+.bn-rank .n{grid-row:span 2;font:800 18px var(--f);color:var(--label2);text-align:center}
+.bn-rank.me{background:var(--fill)}
+.bn-rank b{font-size:16px}
+.bn-rank .chip{font:700 11px var(--f);background:var(--fill2);color:var(--accent);border-radius:999px;padding:2px 8px;margin-left:6px;vertical-align:2px}
+.bn-rank .chip.baron{background:#F6C945;color:#2A1A00}
+.bn-rank .f{font:800 16px var(--f);font-variant-numeric:tabular-nums;text-align:right}
+.bn-rank small{grid-column:2 / 4;color:var(--label2);font-size:12px;font-variant-numeric:tabular-nums}
+.bn-titles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.bn-title{background:var(--card);border-radius:16px;padding:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.bn-title .e{font-size:26px}
+.bn-title small{display:block;color:var(--label2);font-size:12px;font-weight:600;margin-top:4px}
+.bn-title b{display:block;font-size:16px;margin-top:2px}
+.bn-title span{display:block;color:var(--label2);font-size:12px;margin-top:1px;font-variant-numeric:tabular-nums}
 .bn-buy{background:var(--card);border-radius:18px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
 .bn-buy .ico{font-size:30px}
 .bn-buy .txt{flex:1;min-width:0}
@@ -325,7 +360,7 @@ async function refresh(first){
   try{
     setState(await rpc("baron_state", { p_token: getToken() }));
     if (alive()) drawFarm();
-    if (first){ welcome(); setTimeout(rollGolden, 4000); setTimeout(() => loadMarket(true), 1500); }
+    if (first){ welcome(); setTimeout(rollGolden, 4000); setTimeout(() => loadMarket(true), 1500); setTimeout(() => loadRank(true).then(() => { if (view === "farm" && iAmBaron()) drawFarm(); }), 2500); }
   }catch(e){
     const m = String(e && e.message || "");
     if (m.includes("jeton inconnu")){ setToken(null); S = null; if (alive()) showPick(); return; }
@@ -480,29 +515,32 @@ function stockHTML(){
   if (!S.stocks.length) return `<div class="bn-list"><div class="bn-empty">Ton stock est vide. Ramasse ta production !</div></div>`;
   return `<div class="bn-list">${S.stocks.map(s => {
     const r = RES[s.resource], price = Number(S.market[s.resource] || r.price);
-    const unit = price * rate, gain = Math.floor(price * rate * (1 - Math.pow(0.99, s.qty)) / 0.01);
+    const room = mRoom(s.resource), q = Math.min(Number(s.qty), room), unit = price * rate, gain = q > 0 ? sellGain(s.resource, q) : 0;
     const exp = s.next_expiry ? new Date(s.next_expiry).getTime() - Date.now() : null;
     return `<div class="bn-line"><span class="ico">${r.e}</span>
       <div class="txt"><b>${fmtN(s.qty)} ${esc(r.label.toLowerCase())}</b>
         <small>${unit.toLocaleString("fr-FR", { maximumFractionDigits:1 })} pièces l'unité au marché</small>
         ${exp !== null ? `<small class="${exp < 3 * 3600000 ? "warn" : ""}">Les premiers se périment dans ${fmtDur(exp)}</small>` : ""}</div>
-      <button class="bn-btn small" data-bn="sell" data-k="${s.resource}" data-q="${s.qty}">Vendre · ${fmtN(gain)} 🪙</button>
+      ${q > 0 ? `<button class="bn-btn small" data-bn="sell" data-k="${s.resource}" data-q="${q}">Vendre${q < s.qty ? ` ${fmtN(q)}` : ""} · ${fmtN(gain)} 🪙</button>`
+              : `<button class="bn-btn small ghost" disabled>Marché plein</button>`}
     </div>`; }).join("")}</div>`;
 }
 let view = "farm", M = null, mFetched = 0, mBusy = false, sheet = null;
 function tabsHTML(){
   const n = M ? M.orders.filter(o => !o.winner && canDeliver(o)).length : 0;
   return `<div class="bn-tabs" role="tablist">
-    <button data-bn="view" data-v="farm" aria-pressed="${view === "farm"}">${MAIN[farm().resource]} Ma ferme</button>
-    <button data-bn="view" data-v="market" aria-pressed="${view === "market"}">🏪 Le marché${n ? ` <i>${n}</i>` : ""}</button></div>`;
+    <button data-bn="view" data-v="farm" aria-pressed="${view === "farm"}">${MAIN[farm().resource]} Ferme</button>
+    <button data-bn="view" data-v="market" aria-pressed="${view === "market"}">🏪 Marché${n ? ` <i>${n}</i>` : ""}</button>
+    <button data-bn="view" data-v="rank" aria-pressed="${view === "rank"}">🏆 Classement</button></div>`;
 }
 function drawFarm(){
   if (view === "market") return drawMarket();
+  if (view === "rank") return drawRank();
   if (!alive() || !S || !farm()) return;
   const f = farm(), r = RES[f.resource], p = S.player;
   const w = weather();
   rootEl.innerHTML = `<div class="bn">${tabsHTML()}
-    <div class="bn-head"><h1>Ma ferme</h1><div class="bn-purse" id="bn-purse">🪙 <span>${fmtN(p.coins)}</span></div></div>
+    <div class="bn-head"><h1>Ma ferme${iAmBaron() ? " 👑" : ""}</h1><div class="bn-purse" id="bn-purse">🪙 <span>${fmtN(p.coins)}</span></div></div>
     <div class="bn-who"><span class="bn-chip">${r.e} ${esc(r.who)}</span><span>${f.units} ${f.units > 1 ? r.units : r.unit} · ${perRate({ rate: Number(f.rate_per_h) })}</span></div>
     ${questHTML()}
     <div class="bn-scene" id="bn-scene">${sceneSVG()}
@@ -595,6 +633,7 @@ async function doChore(el){
 // Redessine le stock et l'achat sans toucher à la scène (les corvées restent en place)
 function refreshPanels(){
   if (view === "market"){ drawMarket(); return; }
+  if (view === "rank") return;
   const list = rootEl && rootEl.querySelector(".bn-list"); if (list) list.outerHTML = stockHTML();
   const buy = document.getElementById("bn-buy"); if (buy) buy.outerHTML = buyHTML();
   const purse = document.querySelector("#bn-purse span"); if (purse) purse.textContent = fmtN(S.player.coins);
@@ -605,9 +644,15 @@ function refreshPanels(){
 /* =================== Le marché =================== */
 const stockOf = k => { const st = S && S.stocks.find(x => x.resource === k); return st ? Number(st.qty) : 0; };
 const canDeliver = o => Object.entries(o.items).every(([k, q]) => stockOf(k) >= q);
-const buyCost = (p, q) => Math.ceil(p * (Math.pow(1.001, q) - 1) / 0.001);
-const sellGain = (p, q) => Math.floor(p * Number(S.sell_rate || 0.7) * (1 - Math.pow(0.999, q)) / 0.001);
-const maxBuy = (p, coins) => Math.max(0, Math.min(5000, Math.floor(Math.log(1 + coins * 0.001 / p) / Math.log(1.001))));
+// Marché à stocks : prix normal à mi-stock, jusqu'à ×4 en rupture, ×0,35 quand c'est plein (comme le serveur)
+const mp = k => M && M.prices && M.prices[k];
+const priceAt = (k, st) => { const m = mp(k); if (!m) return Number((S.market || {})[k] || RES[k].price);
+  const cap = Number(m.cap); return Number(m.base) * Math.min(4, Math.max(0.35, Math.pow((cap / 2) / Math.max(st, cap * 0.05), 0.6))); };
+const mStock = k => mp(k) ? Math.max(0, Math.floor(Number(mp(k).stock))) : 0;
+const mRoom = k => mp(k) ? Math.max(0, Math.floor(Number(mp(k).cap) - Number(mp(k).stock))) : Infinity;
+const buyCost = (k, q) => Math.ceil(q * priceAt(k, Number(mp(k).stock) - q / 2));
+const sellGain = (k, q) => Math.floor(q * priceAt(k, (mp(k) ? Number(mp(k).stock) : 0) + q / 2) * Number(S.sell_rate || 0.7));
+const maxBuy = (k, coins) => { let lo = 0, hi = mStock(k); while (lo < hi){ const m = Math.ceil((lo + hi) / 2); if (buyCost(k, m) <= coins) lo = m; else hi = m - 1; } return lo; };
 const pfmt = n => Number(n).toLocaleString("fr-FR", { maximumFractionDigits: Number(n) < 20 ? 2 : 1 });
 async function loadMarket(force){
   if (mBusy || (!force && Date.now() - mFetched < 4000)) return;
@@ -650,12 +695,14 @@ function drawMarket(){
     const r = RES[k], m = M.prices[k], price = Number(m.price), ago = Number(m.ago);
     const ch = ago ? (price - ago) / ago * 100 : 0, cls = ch > 0.5 ? "up" : ch < -0.5 ? "down" : "flat";
     const who = M.producers && M.producers[k] ? `de ${esc(M.producers[k])}` : "pas encore de producteur";
-    const have = stockOf(k);
+    const have = stockOf(k), st = mStock(k), room = mRoom(k), cap = Number(m.cap);
+    const lvl = st < 1 ? `<span class="down">Rupture !</span>` : room < 1 ? `<span class="down">Marché plein</span>` : `${fmtN(st)} au marché`;
     return `<div class="bn-stall"><span class="ico">${r.e}</span>
-      <div class="txt"><b>${r.label}</b><small>${who}${have ? ` · tu en as ${fmtN(have)}` : ""}</small></div>
+      <div class="txt"><b>${r.label}</b><small>${who}${have ? ` · tu en as ${fmtN(have)}` : ""}</small>
+        <small class="lv">${lvl}<i><b style="width:${Math.min(100, st / cap * 100).toFixed(0)}%"></b></i></small></div>
       ${spark(m.history, price, m.base)}
       <div class="pr"><b>${pfmt(price)} 🪙</b><small class="${cls}">${cls === "up" ? "▲" : cls === "down" ? "▼" : "■"} ${Math.abs(ch).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} %</small></div>
-      <div class="acts"><button class="bn-btn small" data-bn="mbuy" data-k="${k}">Acheter</button>${have ? `<button class="bn-btn small ghost" data-bn="msell" data-k="${k}">Vendre</button>` : ""}</div>
+      <div class="acts"><button class="bn-btn small" data-bn="mbuy" data-k="${k}" ${st < 1 ? "disabled" : ""}>${st < 1 ? "Rupture" : "Acheter"}</button>${have ? `<button class="bn-btn small ghost" data-bn="msell" data-k="${k}" ${room < 1 ? "disabled" : ""}>${room < 1 ? "Plein" : "Vendre"}</button>` : ""}</div>
     </div>`;
   }).join("");
   rootEl.innerHTML = `<div class="bn">${tabsHTML()}
@@ -664,14 +711,14 @@ function drawMarket(){
     ${M.orders.map(orderHTML).join("")}
     <div class="bn-sec">Les étals · prix sur 1 h</div>
     <div class="bn-list">${stalls}</div>
-    <p class="bn-sub" style="font-size:13px;text-align:center">Acheter fait monter le prix, vendre le fait baisser. Il revient doucement vers son prix normal (la ligne pointillée).</p>
+    <p class="bn-sub" style="font-size:13px;text-align:center">Le marché ne vend que ce que vous lui avez vendu : quand c'est rare, c'est cher. Il n'achète que s'il a de la place, et les villageois vident les étals petit à petit.</p>
   </div>`;
 }
 /* Feuille d'achat / vente */
 function openSheet(mode, k){
   const r = RES[k], price = Number(M.prices[k].price), coins = Number(S.player.coins), have = stockOf(k);
-  const max = mode === "buy" ? maxBuy(price, coins) : have;
-  if (!max){ toast(mode === "buy" ? "Pas assez de pièces." : "Tu n'en as pas."); return; }
+  const max = mode === "buy" ? maxBuy(k, coins) : Math.min(have, mRoom(k));
+  if (!max){ toast(mode === "buy" ? (mStock(k) < 1 ? "Rupture : personne n'en a vendu au marché." : "Pas assez de pièces.") : (have ? "Le marché est plein : personne n'en veut pour l'instant." : "Tu n'en as pas.")); return; }
   const opts = [...new Set([10, 50, 100, 500].filter(q => q < max).concat([max]))].slice(-4);
   sheet = { mode, k, q: opts.includes(10) && max > 10 ? 10 : max, opts, max, price };
   drawSheet();
@@ -679,10 +726,10 @@ function openSheet(mode, k){
 function drawSheet(){
   document.querySelector(".bn-sheet")?.remove(); if (!sheet) return;
   const { mode, k, q, opts, max, price } = sheet, r = RES[k];
-  const total = mode === "buy" ? buyCost(price, q) : sellGain(price, q);
+  const total = mode === "buy" ? buyCost(k, q) : sellGain(k, q);
   document.body.insertAdjacentHTML("beforeend", `<div class="bn-sheet" data-bn="sheet-close"><div class="box" role="dialog" aria-modal="true">
     <h2>${mode === "buy" ? "Acheter" : "Vendre"} ${r.e} ${r.label.toLowerCase()}</h2>
-    <p class="sub">${pfmt(price)} pièces l'unité${mode === "sell" ? ` · vente à ${Math.round(Number(S.sell_rate || 0.7) * 100)} %` : ""} · le prix ${mode === "buy" ? "monte" : "baisse"} un peu à chaque unité</p>
+    <p class="sub">${pfmt(price)} pièces l'unité${mode === "sell" ? ` · vente à ${Math.round(Number(S.sell_rate || 0.7) * 100)} %` : ""} · ${mode === "buy" ? `${fmtN(mStock(k))} disponibles` : `le marché en prend encore ${fmtN(mRoom(k))}`}</p>
     <div class="bn-qty">${opts.map(o => `<button data-bn="sq" data-q="${o}" aria-pressed="${o === q}">${o === max && o !== 10 && o !== 50 && o !== 100 && o !== 500 ? `Max ${fmtN(o)}` : fmtN(o)}</button>`).join("")}</div>
     <div class="bn-total"><span>${fmtN(q)} ${r.label.toLowerCase()}</span><b>${mode === "buy" ? "−" : "+"}${fmtN(total)} 🪙</b></div>
     <button class="bn-btn" data-bn="sheet-ok">${mode === "buy" ? "Acheter" : "Vendre"}</button>
@@ -694,7 +741,7 @@ async function sheetOk(){
   try{
     const res = await rpc(mode === "buy" ? "baron_buy" : "baron_sell", { p_token: getToken(), p_resource: k, p_qty: q });
     setState(res.state); sound("coin"); buzz(12);
-    toast(mode === "buy" ? `Acheté : ${fmtN(q)} ${RES[k].e} pour ${fmtN(res.cost)} pièces` : `Vendu ! +${fmtN(res.earned)} pièces`);
+    toast(mode === "buy" ? `Acheté : ${fmtN(q)} ${RES[k].e} pour ${fmtN(res.cost)} pièces` : res.sold < q ? `Vendu ${fmtN(res.sold)} : le marché est plein pour le reste` : `Vendu ! +${fmtN(res.earned)} pièces`);
     await loadMarket(true); drawMarket();
   }catch(e){ toast(esc(errText(e))); }
   busy = false;
@@ -710,6 +757,53 @@ async function deliver(id, btn){
     drawMarket();
   }catch(e){ toast(esc(errText(e))); loadMarket(true); }
   busy = false;
+}
+
+/* =================== Classement =================== */
+let RK = null, rkFetched = 0, rkBusy = false;
+const meId = () => String((Q.me() || {}).id || "");
+const iAmBaron = () => !!(RK && RK.reign && RK.reign.player_id === meId());
+async function loadRank(force){
+  if (rkBusy || (!force && Date.now() - rkFetched < 5000)) return;
+  rkBusy = true;
+  try{ RK = await rpc("baron_ranking", {}); rkFetched = Date.now(); if (alive() && view === "rank") drawRank(); }
+  catch(e){ if (alive() && view === "rank" && !RK) rootEl.innerHTML = `<div class="bn">${tabsHTML()}<p class="bn-err">${esc(errText(e))}</p></div>`; }
+  rkBusy = false;
+}
+setInterval(() => { if (alive() && S && view === "rank" && document.visibilityState === "visible") loadRank(); }, 20000);
+const rankName = (f, i, isBaron) => isBaron ? "Baron" : f >= 50000 ? "Notable" : f >= 10000 ? "Marchand" : f >= 2000 ? "Fermier" : "Paysan";
+const since = t => fmtDur(Date.now() - new Date(t).getTime());
+function drawRank(){
+  if (!alive() || !S || !farm()) return;
+  if (!RK){ rootEl.innerHTML = `<div class="bn">${tabsHTML()}<div class="bn-load">Le crieur compte les pièces…</div></div>`; loadRank(true); return; }
+  const P = RK.players || [], reign = RK.reign, me = meId();
+  const king = reign && P.find(p => p.id === reign.player_id);
+  const rows = P.map((p, i) => {
+    const isB = reign && p.id === reign.player_id, rr = RES[p.specialty];
+    return `<div class="bn-rank ${p.id === me ? "me" : ""}"><span class="n">${isB ? "👑" : i + 1}</span>
+      <div><b>${rr.e} ${esc(p.name)}</b><span class="chip ${isB ? "baron" : ""}">${rankName(Number(p.fortune), i, isB)}</span></div>
+      <span class="f">${fmtN(p.fortune)} 🪙</span>
+      <small>🪙 ${fmtN(p.coins)} pièces · 📦 ${fmtN(p.stock_value)} en stock · ${MAIN[p.specialty]} ${fmtN(p.units)} (${fmtN(p.farm_value)})</small></div>`;
+  }).join("");
+  const best = (key, fmt) => { const w = P.slice().sort((a, b) => Number(b[key]) - Number(a[key]))[0]; return w && Number(w[key]) > 0 ? { name: w.name, v: fmt(Number(w[key])) } : null; };
+  const T = [
+    ["🚜", "Meilleur producteur", best("prod_value", v => `${fmtN(v)} pièces de production / h`)],
+    ["📣", "Roi des commandes", best("orders_won", v => `${fmtN(v)} commande${v > 1 ? "s" : ""} livrée${v > 1 ? "s" : ""}`)],
+    ["💰", "Meilleur marchand", best("market_earned", v => `${fmtN(v)} pièces gagnées au marché`)],
+    ["💪", "Gros bosseur", best("work", v => `${fmtN(v)} taps et corvées`)],
+  ].map(([e, t, w]) => `<div class="bn-title"><span class="e">${e}</span><small>${t}</small><b>${w ? esc(w.name) : "—"}</b><span>${w ? w.v : "Personne encore"}</span></div>`).join("");
+  const hist = (RK.history || []).map(h => `<div class="bn-line"><span class="ico">👑</span><div class="txt"><b>${esc(h.name)}</b><small>${h.ended_at ? `a régné ${fmtDur(new Date(h.ended_at) - new Date(h.started_at))}` : `règne depuis ${since(h.started_at)}`}</small></div></div>`).join("");
+  rootEl.innerHTML = `<div class="bn">${tabsHTML()}
+    <div class="bn-head"><h1>Classement</h1><div class="bn-purse" id="bn-purse">🪙 <span>${fmtN(S.player.coins)}</span></div></div>
+    ${king ? `<div class="bn-baron"><span class="big">👑</span><div><small>Le Baron du moment</small><b>${esc(king.name)}</b><span>${fmtN(king.fortune)} pièces de fortune · depuis ${since(reign.started_at)}</span></div></div>`
+           : `<div class="bn-baron"><span class="big">👑</span><div><small>Le trône est vide</small><b>Personne</b><span>Le premier à 1 000 pièces de fortune devient Baron.</span></div></div>`}
+    <div class="bn-sec">Les plus riches</div>
+    <div class="bn-list">${rows}</div>
+    <p class="bn-sub" style="font-size:13px;text-align:center">Fortune = pièces + valeur du stock + ce qu'ont coûté tes bêtes. Rangs : Paysan, Fermier (2 000), Marchand (10 000), Notable (50 000), et un seul Baron.</p>
+    <div class="bn-sec">Les titres</div>
+    <div class="bn-titles">${T}</div>
+    ${hist ? `<div class="bn-sec">Les règnes</div><div class="bn-list">${hist}</div>` : ""}
+  </div>`;
 }
 
 /* =================== Achat d'unités =================== */
@@ -861,7 +955,8 @@ async function sell(k, q){
     const purse = document.getElementById("bn-purse");
     if (purse){ purse.classList.add("bump"); const b = purse.getBoundingClientRect(); floatText(b.left + b.width / 2, b.bottom, `+${fmtN(res.earned)} 🪙`); }
     sound("coin"); buzz(15);
-    toast(`Vendu ! +${fmtN(res.earned)} pièces`);
+    toast(res.sold < q ? `Vendu ${fmtN(res.sold)} sur ${fmtN(q)} : le marché est plein pour le reste` : `Vendu ! +${fmtN(res.earned)} pièces`);
+    loadMarket(true);
     if (firstSale) setTimeout(() => announce("🎉", "Première vente !", `Bravo, tes premières pièces. Achète vite de ${RES[farm().resource].fem ? "nouvelles" : "nouveaux"} ${esc(RES[farm().resource].units)} juste sous ta ferme pour produire plus.`, "Super", "firstsale"), 900);
   }catch(e){ toast(esc(errText(e))); refresh(); }
   busy = false;
@@ -930,7 +1025,7 @@ document.addEventListener("click", e => {
   else if (a === "chore") doChore(t);
   else if (a === "buy") buyUnit();
   else if (a === "quest") claimQuest(t);
-  else if (a === "view"){ view = t.dataset.v; chores = []; drawFarm(); if (view === "market") loadMarket(true); else refresh(); buzz(5); }
+  else if (a === "view"){ view = t.dataset.v; chores = []; drawFarm(); if (view === "market") loadMarket(true); else if (view === "rank") loadRank(true); else refresh(); buzz(5); }
   else if (a === "mbuy") openSheet("buy", t.dataset.k);
   else if (a === "msell") openSheet("sell", t.dataset.k);
   else if (a === "sq"){ sheet.q = +t.dataset.q; drawSheet(); }
