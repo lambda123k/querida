@@ -33,6 +33,7 @@ const RES = {
   miel:  { label:"Miel",  e:"🍯", unit:"ruche",    units:"ruches",    who:"Apiculteur·rice",      animal:"🐝", walk:true,  rate:5,   price:120, fem:true, perish:null },
 };
 const un = r => r.fem ? "une" : "un", nouv = r => r.fem ? "Nouvelle" : "Nouveau", prem = r => r.fem ? "Ta première" : "Ton premier";
+const MAIN = { oeufs:"🐔", ble:"🌾", lait:"🐄", bois:"🌳", laine:"🐑", miel:"🐝" };
 const ORDER = ["oeufs","ble","lait","bois","laine","miel"];
 const perRate = r => r.rate >= 1 ? `${r.rate} / h` : `1 / ${Math.round(1 / r.rate)} h`;
 const fmtN = n => Math.floor(n).toLocaleString("fr-FR");
@@ -193,6 +194,28 @@ const CSS = `
 .bn-combo{position:absolute;right:10px;top:10px;background:#E8A500;color:#2A1A00;font:800 13px var(--f);border-radius:999px;padding:4px 10px;box-shadow:0 2px 6px rgba(0,0,0,.2);transition:opacity .4s,transform .3s;z-index:4}
 .bn-combo.off{opacity:0;transform:scale(.6)}
 .bn-combo.pop{animation:bn-bump .4s ease}
+.bn-main{position:absolute;left:28%;top:56%;transform:translate(-50%,-50%);border:0;background:none;padding:0;width:84px;height:84px;display:grid;place-items:center;font-size:58px;line-height:1;cursor:pointer;-webkit-tap-highlight-color:transparent;z-index:2;filter:drop-shadow(0 3px 2px rgba(0,0,0,.22));touch-action:manipulation}
+.bn-main::before{content:"";position:absolute;inset:6px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.55),transparent 70%)}
+.bn-main span{position:relative;display:block;transition:transform .08s}
+.bn-main.squash span{transform:scale(1.18,.82)}
+.bn-main.tired{filter:grayscale(.6) drop-shadow(0 3px 2px rgba(0,0,0,.22));opacity:.75}
+.bn-main.no span{animation:bn-no .3s ease}
+@keyframes bn-no{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.bn-hand{position:absolute;left:36%;top:66%;font-size:34px;pointer-events:none;z-index:3;animation:bn-hand 1.1s ease-in-out infinite}
+@keyframes bn-hand{50%{transform:translate(-8px,-10px) scale(.9)}}
+.bn-energy{position:absolute;left:10px;bottom:10px;z-index:4;display:flex;align-items:center;gap:6px;background:rgba(0,0,0,.32);color:#fff;font:700 12px var(--f);border-radius:999px;padding:4px 10px 4px 7px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);font-variant-numeric:tabular-nums}
+.bn-energy i{display:block;width:54px;height:6px;border-radius:999px;background:rgba(255,255,255,.3);overflow:hidden}
+.bn-energy i b{display:block;height:100%;background:#FFD24A;border-radius:999px;transition:width .3s}
+.bn-quest{background:var(--card);border-radius:18px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);border:2px solid transparent}
+.bn-quest .ico{font-size:26px}
+.bn-quest .txt{flex:1;min-width:0}
+.bn-quest .txt small{display:block;color:var(--label2);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.bn-quest .txt b{display:block;font-size:16px;margin:2px 0 6px}
+.bn-quest .bn-bar{height:7px}
+.bn-quest .rw{font:700 14px var(--f);color:var(--accent);white-space:nowrap}
+.bn-quest.ready{border-color:#E8A500;animation:bn-ready 1.2s ease-in-out infinite}
+@keyframes bn-ready{50%{box-shadow:0 0 0 6px rgba(232,165,0,.18)}}
+.bn-quest.ready .bn-btn{background:#E8A500;color:#2A1A00}
 .bn-buy{background:var(--card);border-radius:18px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
 .bn-buy .ico{font-size:30px}
 .bn-buy .txt{flex:1;min-width:0}
@@ -427,10 +450,14 @@ function drawFarm(){
   rootEl.innerHTML = `<div class="bn">
     <div class="bn-head"><h1>Ma ferme</h1><div class="bn-purse" id="bn-purse">🪙 <span>${fmtN(p.coins)}</span></div></div>
     <div class="bn-who"><span class="bn-chip">${r.e} ${esc(r.who)}</span><span>${f.units} ${f.units > 1 ? r.units : r.unit} · ${perRate({ rate: Number(f.rate_per_h) })}</span></div>
+    ${questHTML()}
     <div class="bn-scene" id="bn-scene">${sceneSVG()}
       ${w !== "soleil" ? `<div class="bn-cloud" style="top:6%;animation-duration:70s;animation-delay:-20s">☁️</div><div class="bn-cloud" style="top:16%;font-size:26px;animation-duration:95s;animation-delay:-60s">☁️</div>` : ""}
       ${w === "pluie" ? `<div class="bn-rain"></div>` : ""}
       ${animalsHTML(f)}
+      <button class="bn-main" id="bn-main" data-bn="tap" aria-label="Taper sur ta bête"><span>${MAIN[f.resource]}</span></button>
+      ${seen("tap") ? "" : `<span class="bn-hand" id="bn-hand">👆</span>`}
+      <span class="bn-energy" id="bn-energy">⚡ <span id="bn-en">30</span><i><b id="bn-enb" style="width:100%"></b></i></span>
       <div id="bn-items">${itemsHTML()}</div>
       <div id="bn-chores">${choresHTML()}</div>
       <span class="bn-combo ${comboOn() ? "" : "off"}" id="bn-combo">${comboText()}</span>
@@ -438,7 +465,6 @@ function drawFarm(){
     </div>
     ${gaugeHTML()}
     ${buyHTML()}
-    ${!p.first_sale_at ? `<div class="bn-hint"><span class="i">💡</span><span>Vends ta première récolte au marché : ça débloquera l'achat de ${r.fem ? "nouvelles" : "nouveaux"} ${esc(r.units)}.</span></div>` : ""}
     <div class="bn-sec">Mon stock</div>
     ${stockHTML()}
   </div>`;
@@ -517,15 +543,18 @@ function refreshPanels(){
   const list = rootEl && rootEl.querySelector(".bn-list"); if (list) list.outerHTML = stockHTML();
   const buy = document.getElementById("bn-buy"); if (buy) buy.outerHTML = buyHTML();
   const purse = document.querySelector("#bn-purse span"); if (purse) purse.textContent = fmtN(S.player.coins);
+  const qu = document.getElementById("bn-quest"); if (qu) qu.outerHTML = questHTML();
+  updateEnergy();
 }
 
 /* =================== Achat d'unités =================== */
 function buyHTML(){
-  const f = farm(), p = S.player; if (!p.first_sale_at) return `<div id="bn-buy" hidden></div>`;
-  const r = RES[f.resource], cost = Number(f.unit_cost || 500), ok = Number(p.coins) >= cost;
-  const plus = Number(f.rate_per_h) / f.units;
-  return `<div class="bn-buy" id="bn-buy"><span class="ico">${r.animal}</span>
-    <div class="txt"><b>${un(r) === "une" ? "Une" : "Un"} ${esc(r.unit)} de plus</b><small>+${perRate({ rate: plus })} · tu en as ${f.units}</small></div>
+  const f = farm(), p = S.player;
+  const r = RES[f.resource], cost = Number(f.unit_cost || 50), ok = Number(p.coins) >= cost;
+  const next = [10, 25, 50].find(m => m > f.units), mult = next === 10 ? 2 : next === 25 ? 4 : 8;
+  const pal = next ? `À ${next} ${esc(r.units)} : production ×${mult} (encore ${next - f.units})` : "Production ×8 : palier maximum !";
+  return `<div class="bn-buy" id="bn-buy"><span class="ico">${MAIN[f.resource]}</span>
+    <div class="txt"><b>${un(r) === "une" ? "Une" : "Un"} ${esc(r.unit)} de plus</b><small>Tu en as ${f.units} · ${pal}</small></div>
     <button class="bn-btn small" data-bn="buy" ${ok ? "" : "disabled"}>${fmtN(cost)} 🪙</button></div>`;
 }
 async function buyUnit(){
@@ -536,6 +565,81 @@ async function buyUnit(){
     const f = farm(), r = RES[f.resource];
     sound("gold"); buzz([10, 30, 10]);
     toast(`${r.animal} ${nouv(r)} ${esc(r.unit)} ! Tu en as ${f.units}`);
+  }catch(e){ toast(esc(errText(e))); refresh(); }
+  busy = false;
+}
+
+/* =================== Taper sur sa bête =================== */
+let tapQueue = 0, tapTimer = null, tapBusy = false;
+const energyNow = () => !S ? 0 : Math.max(0, Math.min(30, Number(S.energy || 0) + (Date.now() - fetchedAt) / 4000) - tapQueue);
+function updateEnergy(){
+  const e = energyNow(), n = document.getElementById("bn-en"), b = document.getElementById("bn-enb"), m = document.getElementById("bn-main");
+  if (n) n.textContent = Math.floor(e); if (b) b.style.width = (e / 30 * 100).toFixed(0) + "%";
+  if (m) m.classList.toggle("tired", e < 1);
+}
+setInterval(() => { try{ if (alive() && S) updateEnergy(); }catch(e){} }, 500);
+function tapMain(el, x, y){
+  if (!S) return;
+  if (energyNow() < 1){ el.classList.remove("no"); void el.offsetWidth; el.classList.add("no"); buzz(20);
+    toast("⚡ Plus d'énergie : elle revient toute seule (1 toutes les 4 s)"); return; }
+  tapQueue++;
+  if (!seen("tap")){ markSeen("tap"); document.getElementById("bn-hand")?.remove(); }
+  el.classList.add("squash"); setTimeout(() => el.classList.remove("squash"), 80);
+  floatText(x + (Math.random() * 30 - 15), y - 20, RES[farm().resource].e);
+  sound("pop"); buzz(6); updateEnergy();
+  clearTimeout(tapTimer); tapTimer = setTimeout(flushTaps, tapQueue >= 20 ? 0 : 500);
+}
+async function flushTaps(){
+  if (tapBusy || !tapQueue){ if (tapQueue) tapTimer = setTimeout(flushTaps, 300); return; }
+  tapBusy = true; const n = tapQueue;
+  try{
+    const res = await rpc("baron_tap", { p_token: getToken(), p_n: n });
+    tapQueue -= n;
+    if (res.state){ setState(res.state); }
+    else if (S){ S.energy = res.energy; fetchedAt = Date.now(); }
+    if (res.qty > 0){
+      const m = document.getElementById("bn-main"); if (m){ const b = m.getBoundingClientRect(); floatText(b.left + b.width / 2, b.top - 6, `+${res.qty} ${RES[res.resource].e}`, true); }
+    }
+    refreshPanels();
+  }catch(e){ tapQueue = 0; toast(esc(errText(e))); }
+  tapBusy = false;
+}
+
+/* =================== Objectifs =================== */
+function questProgress(q){
+  const c = S.counters || {}, f = farm();
+  const have = q.kind === "units" ? f.units : q.kind === "earned" ? Number(S.player.earned || 0) : q.kind === "chores" ? c.chores : Number(c[q.kind] || 0);
+  return Math.min(q.target, have || 0);
+}
+function questText(q){
+  const r = RES[farm().resource];
+  if (q.kind === "harvested") return `Ramasse ta production`;
+  if (q.kind === "taps") return `Tape ${q.target} fois sur ta bête`;
+  if (q.kind === "sold") return `Vends au marché`;
+  if (q.kind === "units") return `Aie ${q.target} ${esc(r.units)}`;
+  if (q.kind === "chores") return `Fais ${q.target} corvées`;
+  if (q.kind === "combo") return `Fais un combo ×${(1 + 0.2 * q.target).toLocaleString("fr-FR")}`;
+  if (q.kind === "earned") return `Gagne ${fmtN(q.target)} pièces au total`;
+  return "";
+}
+function questHTML(){
+  const q = S && S.quest; if (!q) return `<div id="bn-quest" hidden></div>`;
+  const have = questProgress(q), ok = have >= q.target;
+  return `<div class="bn-quest ${ok ? "ready" : ""}" id="bn-quest"><span class="ico">${ok ? "🎁" : "🎯"}</span>
+    <div class="txt"><small>Objectif ${q.idx} / 12</small><b>${questText(q)}</b>
+      <div class="bn-bar"><i style="width:${(have / q.target * 100).toFixed(0)}%"></i></div></div>
+    ${ok ? `<button class="bn-btn small" data-bn="quest">+${fmtN(q.reward)} 🪙</button>` : `<span class="rw">+${fmtN(q.reward)} 🪙</span>`}</div>`;
+}
+async function claimQuest(btn){
+  if (busy) return; busy = true;
+  try{
+    const res = await rpc("baron_quest_claim", { p_token: getToken() });
+    setState(res.state);
+    const b = btn.getBoundingClientRect(); floatText(b.left + b.width / 2, b.top, `+${fmtN(res.reward)} 🪙`, true);
+    sound("gold"); buzz([10, 30, 10]);
+    toast(res.state.quest ? `🎁 Objectif réussi ! +${fmtN(res.reward)} pièces` : "🏆 Tous les objectifs réussis !", "gold");
+    const pu = document.getElementById("bn-purse"); if (pu){ pu.classList.remove("bump"); void pu.offsetWidth; pu.classList.add("bump"); }
+    refreshPanels();
   }catch(e){ toast(esc(errText(e))); refresh(); }
   busy = false;
 }
@@ -593,7 +697,7 @@ async function sell(k, q){
     if (purse){ purse.classList.add("bump"); const b = purse.getBoundingClientRect(); floatText(b.left + b.width / 2, b.bottom, `+${fmtN(res.earned)} 🪙`); }
     sound("coin"); buzz(15);
     toast(`Vendu ! +${fmtN(res.earned)} pièces`);
-    if (firstSale) setTimeout(() => announce("🎉", "Première vente !", `Bravo, tes premières pièces. Tu peux maintenant acheter de ${RES[farm().resource].fem ? "nouvelles" : "nouveaux"} ${esc(RES[farm().resource].units)} juste sous ta ferme pour produire plus.`, "Super", "firstsale"), 900);
+    if (firstSale) setTimeout(() => announce("🎉", "Première vente !", `Bravo, tes premières pièces. Achète vite de ${RES[farm().resource].fem ? "nouvelles" : "nouveaux"} ${esc(RES[farm().resource].units)} juste sous ta ferme pour produire plus.`, "Super", "firstsale"), 900);
   }catch(e){ toast(esc(errText(e))); refresh(); }
   busy = false;
 }
@@ -638,9 +742,12 @@ function announce(big, title, text, ok, key){
 }
 function welcome(){
   const f = farm(); if (!f) return; const r = RES[f.resource];
-  if (seen("welcome")){ announce("💧", "Ça accélère !", "Tout pousse 10 fois plus vite. Des corvées apparaissent sur ta ferme : arrose, nourris, arrache les mauvaises herbes, chasse le renard… Chaque corvée rapporte tout de suite, et en enchaîner vite fait monter le combo jusqu'à ×2. Et après ta première vente, tu peux acheter de nouvelles bêtes.", "Je fonce", "rythme"); return; }
-  markSeen("rythme");
-  announce(r.e, "Bienvenue dans ta ferme", `${prem(r)} ${esc(r.unit)} produit ${perRate({ rate: Number(f.rate_per_h) })}. Tape ou glisse ton doigt sur les ${esc(r.label.toLowerCase())} pour les ramasser, puis vends-les au marché. Attention : au bout de 8 h, ta ferme est pleine et le reste est perdu. Fais aussi les corvées qui apparaissent (arroser, chasser le renard…) : elles rapportent tout de suite, et en enchaîner fait monter le combo. Et ouvre l'œil : parfois, un produit doré apparaît quelques secondes…`, "C'est parti", "welcome");
+  if (seen("welcome")){
+    announce("🚀", "Nouveau départ", `Tape sur ta bête pour produire tout de suite, suis les objectifs pour gagner des pièces, et achète des ${esc(r.units)} : elles coûtent bien moins cher. À 10, ta production double !`, "Je fonce", "debut");
+    markSeen("rythme"); return;
+  }
+  markSeen("rythme"); markSeen("debut");
+  announce(MAIN[f.resource], "Ta ferme t'attend", `Tape sur ta bête, ramasse, vends, achète d'autres ${esc(r.units)}. Le plus riche du groupe devient le Baron 👑`, "C'est parti", "welcome");
 }
 
 /* =================== Interactions =================== */
@@ -657,13 +764,18 @@ document.addEventListener("click", e => {
   else if (a === "gold") claimGolden(t);
   else if (a === "chore") doChore(t);
   else if (a === "buy") buyUnit();
+  else if (a === "quest") claimQuest(t);
   else if (a === "ann-close" && (t.tagName === "BUTTON" || e.target === t)) document.querySelector(".bn-ann")?.remove();
   else if (a === "close") closeBaron();
   else if (a === "arcade"){ closeBaron(); document.querySelector(".qh-btn")?.click(); }
 });
 // Glisser le doigt sur les produits pour les ramasser
 let sweeping = false;
-document.addEventListener("pointerdown", e => { if (e.target.closest && e.target.closest("#bn-scene")) sweeping = true; }, { passive:true });
+document.addEventListener("pointerdown", e => {
+  const m = e.target.closest && e.target.closest("#bn-main");
+  if (m){ tapMain(m, e.clientX, e.clientY); return; }
+  if (e.target.closest && e.target.closest("#bn-scene")) sweeping = true;
+}, { passive:true });
 document.addEventListener("pointerup", () => { sweeping = false; }, { passive:true });
 document.addEventListener("pointercancel", () => { sweeping = false; }, { passive:true });
 document.addEventListener("pointermove", e => {
