@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#FBF5EF">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" media="print" onload="this.media='all'">
 <link rel="apple-touch-icon" sizes="180x180" href="querida-icon-180.png?v=2">
 <link rel="icon" type="image/png" sizes="512x512" href="querida-icon-512.png?v=2">
 <script>
@@ -398,9 +398,23 @@ const Store = {
   caps: [], journal: [], client: null, ready: false, blobs: {},
   async init(){
     if (DEMO){ const s = demoSeed(); this.caps = s.caps; this.journal = s.journal; this.ready = true; return; }
-    await loadScript("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js");
-    this.client = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-    await this.refresh(); this.ready = true;
+    if (!window.supabase){
+      let err = null;
+      for (const u of ["https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js",
+                       "https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.min.js"]){
+        try{ await loadScript(u, 10000); if (window.supabase) break; }catch(e){ err = e; }
+      }
+      if (!window.supabase) throw err || new Error("Chargement impossible");
+    }
+    // les requêtes abandonnent au bout de 15 s (sauf les envois de photos et vidéos, qui peuvent être longs)
+    const tfetch = (u, o = {}) => {
+      if (String(u).includes("/storage/v1/") || o.signal) return fetch(u, o);
+      const c = new AbortController(), t = setTimeout(() => c.abort(), 15000);
+      return fetch(u, Object.assign({}, o, { signal: c.signal })).finally(() => clearTimeout(t));
+    };
+    this.client = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, { global: { fetch: tfetch } });
+    try{ await this.refresh(); }catch(e){ await new Promise(r => setTimeout(r, 1500)); await this.refresh(); }
+    this.ready = true;
   },
   async refresh(){
     if (DEMO) return;
@@ -464,7 +478,30 @@ function extFor(type = ""){
   if (type.includes("webm")) return "webm"; if (type.includes("mpeg")) return "mp3"; if (type.includes("ogg")) return "ogg";
   return "bin";
 }
-function loadScript(src){ return new Promise((ok, ko) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => ko(new Error("Chargement impossible : " + src)); document.head.appendChild(s); }); }
+/* Version publiée (remplie automatiquement à chaque mise en ligne) : sert à charger les bons fichiers
+   et à se mettre à jour toute seule quand une nouvelle version sort. */
+const BUILD = "__BUILD__";
+const BUILT = BUILD.indexOf("__") !== 0;
+function loadScript(src, ms = 12000){ return new Promise((ok, ko) => {
+  const s = document.createElement("script");
+  s.src = BUILT && !/^https?:/.test(src) ? src + (src.includes("?") ? "&" : "?") + "b=" + BUILD.slice(0, 7) : src;
+  const t = setTimeout(() => ko(new Error("Trop long : " + src)), ms);
+  s.onload = () => { clearTimeout(t); ok(); };
+  s.onerror = () => { clearTimeout(t); ko(new Error("Chargement impossible : " + src)); };
+  document.head.appendChild(s);
+}); }
+/* Mise à jour automatique : si une version plus récente est en ligne, on recharge (jamais en plein milieu de quelque chose). */
+async function checkUpdate(){
+  if (!BUILT) return;
+  try{
+    const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" }); if (!r.ok) return;
+    const j = await r.json(); if (!j.v || j.v === BUILD) return;
+    const busy = document.querySelector(".sheet,.asheet,.player,.qh-wrap,.bn-wrap,.qa-game,#qa-arcade") || (document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName));
+    if (busy) return;
+    const k = "q_upd_" + j.v; try{ if (sessionStorage.getItem(k)) return; sessionStorage.setItem(k, "1"); }catch(e){}
+    const u = new URL(location.href); u.searchParams.set("_v", j.v.slice(0, 7)); location.replace(u.toString());
+  }catch(e){}
+}
 
 /* ---------------- Notifications ---------------- */
 const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
@@ -604,7 +641,10 @@ function tabbar(){
 }
 function render(){
   if (qs.get("qr") && qs.get("qr") === CONFIG.CODE_ROMANE) return renderQR();
-  if (!Store.ready){ $app.innerHTML = `<div class="screen"><div class="center" style="padding-top:30vh"><div class="logo">${LOGO}</div></div></div>`; return; }
+  if (!Store.ready){ $app.innerHTML = `<div class="screen"><div class="center" style="padding-top:30vh"><div class="logo">${LOGO}</div><p class="sub" id="q-wait" style="opacity:0;transition:opacity .4s">Chargement…</p></div></div>`;
+    setTimeout(() => { const w = document.getElementById("q-wait"); if (w) w.style.opacity = "1"; }, 3000);
+    setTimeout(() => { const w = document.getElementById("q-wait"); if (w) w.innerHTML = `C'est long… <a href="#" onclick="location.reload();return false" style="color:var(--accent);font-weight:600">Réessayer</a>`; }, 12000);
+    return; }
   if (role === "ami" && !me) return renderWelcome();
   let html = "";
   if (role === "romane") html = tab === "souvenirs" ? viewSouvenirs() : tab === "carnet" ? viewCarnetRomane() : viewToday();
@@ -1246,7 +1286,8 @@ async function refreshIfStale(){
   lastRefresh = Date.now();
   try{ await Store.refresh(); calMonth = null; render(); }catch(e){}
 }
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshIfStale(); });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible"){ refreshIfStale(); checkUpdate(); } });
+setTimeout(checkUpdate, 2000);
 
 /* ---------------- Jeux cachés (amis et Romane) et énigme (amis seulement) ----------------
    L'énigme (enigme.js) n'est jamais chargée avec le lien de Romane. Si un fichier manque ou plante, l'appli continue normalement. */
@@ -1279,7 +1320,7 @@ if (role === "ami" || role === "romane"){
 window.addEventListener("pageshow", e => { if (e.persisted) refreshIfStale(); });
 render();
 Store.init().then(render).catch(err => {
-  $app.innerHTML = `<main class="screen"><div class="center" style="padding-top:20vh"><div class="logo">${LOGO}</div><b>Connexion impossible</b><p class="sub">Vérifie ta connexion internet, puis recharge la page.</p><p class="foot">${esc(err.message || "")}</p></div></main>`;
+  $app.innerHTML = `<main class="screen"><div class="center" style="padding-top:20vh"><div class="logo">${LOGO}</div><b>Connexion impossible</b><p class="sub">Vérifie ta connexion internet, puis réessaie.</p><button class="btn" style="max-width:240px;margin:16px auto 0" onclick="location.reload()">Réessayer</button><p class="foot">${esc(err.message || "")}</p></div></main>`;
 });
 </script>
 
