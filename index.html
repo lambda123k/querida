@@ -372,7 +372,8 @@ const IC = {
   chev: '<svg class="chev" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5l5 5-5 5"/></svg>',
   chevl: '<svg viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 1.5L2 8l6.5 6.5"/></svg>',
   chevr: '<svg viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 1.5L8 8l-6.5 6.5"/></svg>',
-  music: I('<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>')
+  music: I('<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>'),
+  crown: I('<path d="M3.5 8l4 4 4.5-6.5 4.5 6.5 4-4-1.8 10.5H5.3z"/><path d="M5.5 21h13"/>')
 };
 /* Logo : soleil sur la mer */
 const LOGO = '<svg viewBox="0 0 72 72" aria-hidden="true"><rect width="72" height="72" fill="#FBF5EF"/><path d="M16 44a20 20 0 0 1 40 0z" fill="#CC3F27"/><rect x="12" y="46" width="48" height="5" rx="2.5" fill="#1E4E9C"/><rect x="20" y="54" width="32" height="4" rx="2" fill="#1E4E9C" fill-opacity=".5"/></svg>';
@@ -599,7 +600,7 @@ function demoBar(){
 function tabbar(){
   const tabs = role === "romane"
     ? [["today","Aujourd'hui",IC.sun],["souvenirs","Souvenirs",IC.cal],["carnet","Carnet",IC.book]]
-    : [["depot","Capsules",IC.env],["carnet","Carnet",IC.book]];
+    : [["depot","Capsules",IC.env],["carnet","Carnet",IC.book],["baron","Le Baron",IC.crown]];
   return `<nav class="tabbar" aria-label="Onglets"><div class="in">${tabs.map(([k, l, ic]) => `<button class="tab" data-act="tab" data-v="${k}" ${tab === k ? 'aria-current="page"' : ""}>${ic}<span>${l}</span></button>`).join("")}</div></nav>`;
 }
 function render(){
@@ -608,7 +609,7 @@ function render(){
   if (role === "ami" && !me) return renderWelcome();
   let html = "";
   if (role === "romane") html = tab === "souvenirs" ? viewSouvenirs() : tab === "carnet" ? viewCarnetRomane() : viewToday();
-  else html = tab === "carnet" ? viewCarnetAmis() : viewDepot();
+  else html = tab === "carnet" ? viewCarnetAmis() : tab === "baron" ? `<div id="bn-root"></div>` : viewDepot();
   $app.innerHTML = demoBar() + `<main class="screen"><div class="topbar"><button class="helpbtn" data-act="help"><i>?</i>Comment ça marche</button></div>${html}</main>` + tabbar();
   if (!ls.get("hp_help_" + role) && !layers.length){ ls.set("hp_help_" + role, true); setTimeout(helpSheet, 400); }
 }
@@ -1273,6 +1274,7 @@ if (role === "ami" || role === "romane"){
     loadScript("jeux.js?v=9").catch(() => {});
     loadScript("hub.js?v=8").catch(() => {});
     loadScript("colis.js?v=1").catch(() => {});
+    if (role === "ami") loadScript("baron.js?v=1").catch(() => {});
   }catch(e){}
 }
 window.addEventListener("pageshow", e => { if (e.persisted) refreshIfStale(); });
