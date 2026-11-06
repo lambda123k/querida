@@ -64,6 +64,7 @@ const errText = e => {
   if (m.includes("déjà livrée")) return "Trop tard, quelqu'un l'a livrée avant toi !";
   if (m.includes("commande expirée")) return "Cette commande a expiré.";
   if (m.includes("il te manque")) return "Il te manque des produits pour cette commande.";
+  if (m.includes("niveau maximum")) return "Déjà au niveau maximum.";
   if (m.includes("marché plein")) return "Le marché est plein : personne n'en veut pour l'instant.";
   if (m.includes("rupture")) return "Rupture : personne n'en a vendu au marché.";
   if (m.includes("pas assez au marché")) return "Il n'y en a plus autant au marché.";
@@ -198,6 +199,7 @@ const CSS = `
 .bn-chore .ce{font-size:30px;line-height:1;width:46px;height:46px;display:grid;place-items:center;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.95) 0 52%,rgba(255,255,255,.35) 68%,transparent 72%);box-shadow:0 0 0 3px rgba(232,165,0,.85);animation:bn-wiggle 1.2s ease-in-out infinite}
 .bn-chore .cl{font:700 11px var(--f);background:#fff;color:#3B1F17;border-radius:999px;padding:2px 7px;box-shadow:0 1px 3px rgba(0,0,0,.25);white-space:nowrap}
 .bn-chore .cl i{font-style:normal;color:#CC3F27}
+.bn-chore .cg{color:#2F7D4E}
 .bn-chore.hit .ce{animation:bn-hit .25s ease}
 .bn-chore.done{animation:bn-got .5s ease forwards;pointer-events:none}
 .bn-chore.fox .ce{animation:bn-fox 1.4s ease-in-out infinite}
@@ -297,6 +299,16 @@ const CSS = `
 .bn-title small{display:block;color:var(--label2);font-size:12px;font-weight:600;margin-top:4px}
 .bn-title b{display:block;font-size:16px;margin-top:2px}
 .bn-title span{display:block;color:var(--label2);font-size:12px;margin-top:1px;font-variant-numeric:tabular-nums}
+.bn-ups{background:var(--card);border-radius:18px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.bn-up{display:grid;grid-template-columns:34px 1fr auto;gap:2px 10px;align-items:center;padding:12px 14px}
+.bn-up + .bn-up{border-top:.5px solid var(--sep)}
+.bn-up .ico{grid-row:span 3;font-size:26px;text-align:center;align-self:start}
+.bn-up b{font-size:15px}
+.bn-up .dots{font-size:10px;letter-spacing:2px;color:var(--accent);margin-left:6px;vertical-align:1px}
+.bn-up .eff{grid-column:2;color:var(--label2);font-size:13px}
+.bn-up .cost{grid-column:2;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.bn-up .cost .no{color:#D92D20}
+.bn-up .bn-btn{grid-column:3;grid-row:1 / span 3}
 .bn-buy{background:var(--card);border-radius:18px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
 .bn-buy .ico{font-size:30px}
 .bn-buy .txt{flex:1;min-width:0}
@@ -359,6 +371,7 @@ const alive = () => rootEl && document.body.contains(rootEl);
 async function refresh(first){
   try{
     setState(await rpc("baron_state", { p_token: getToken() }));
+    if (S.auto > 0 && farm()) toast(`🧑‍🌾 Ton fermier a ramassé ${fmtN(S.auto)} ${RES[farm().resource].e}`);
     if (alive()) drawFarm();
     if (first){ welcome(); setTimeout(rollGolden, 4000); setTimeout(() => loadMarket(true), 1500); setTimeout(() => loadRank(true).then(() => { if (view === "farm" && iAmBaron()) drawFarm(); }), 2500); }
   }catch(e){
@@ -557,27 +570,48 @@ function drawFarm(){
     </div>
     ${gaugeHTML()}
     ${buyHTML()}
+    ${upgradesHTML()}
     <div class="bn-sec">Mon stock</div>
     ${stockHTML()}
   </div>`;
   if (golden) showGolden();
 }
 /* =================== Corvées =================== */
+// 4 types de corvées côté serveur (durée de production gagnée : 4, 4, 6, 8 min) ; chaque ferme a les siennes
 const CHORES = {
-  arroser: { e:"🥀", done:"🌻", label:"Arroser",    need:1, life:22000, fx:"💧" },
-  nourrir: { e:"🌽", done:"😋", label:"Nourrir",    need:1, life:22000, fx:"🌽" },
-  herbes:  { e:"🌿", done:"✨", label:"Arracher",   need:3, life:24000, fx:"🌱" },
-  renard:  { e:"🦊", done:"💨", label:"Chasser",    need:2, life:12000, fx:"💥" },
+  arroser: { need:1, life:22000, min:4 },
+  nourrir: { need:1, life:22000, min:4 },
+  herbes:  { need:3, life:24000, min:6 },
+  renard:  { need:2, life:12000, min:8 },
 };
+const CHORE_SKIN = {
+  oeufs: { arroser:{ e:"🪣", done:"💧", label:"Remplir l'eau", fx:"💧" },        nourrir:{ e:"🌽", done:"🐔", label:"Donner le grain", fx:"🌽" },
+           herbes:{ e:"🪶", done:"✨", label:"Ramasser les plumes", fx:"🪶" },   renard:{ e:"🦊", done:"💨", label:"Chasser le renard", fx:"💥" } },
+  ble:   { arroser:{ e:"🥀", done:"🌾", label:"Arroser", fx:"💧" },              nourrir:{ e:"🐛", done:"✨", label:"Enlever les chenilles", fx:"🐛" },
+           herbes:{ e:"🌿", done:"✨", label:"Désherber", fx:"🌱" },             renard:{ e:"🐦", done:"💨", label:"Chasser les corbeaux", fx:"💥" } },
+  lait:  { arroser:{ e:"🪣", done:"💧", label:"Remplir l'abreuvoir", fx:"💧" },  nourrir:{ e:"🌾", done:"🐄", label:"Donner le foin", fx:"🌾" },
+           herbes:{ e:"💩", done:"✨", label:"Nettoyer l'étable", fx:"🧹" },     renard:{ e:"🪰", done:"💨", label:"Chasser les mouches", fx:"💥" } },
+  bois:  { arroser:{ e:"🌱", done:"🌳", label:"Arroser les pousses", fx:"💧" },  nourrir:{ e:"🪓", done:"✨", label:"Affûter la hache", fx:"⚡" },
+           herbes:{ e:"🌿", done:"✨", label:"Débroussailler", fx:"🌱" },        renard:{ e:"🦫", done:"💨", label:"Chasser le castor", fx:"💥" } },
+  laine: { arroser:{ e:"🪣", done:"💧", label:"Remplir l'abreuvoir", fx:"💧" },  nourrir:{ e:"✂️", done:"🧶", label:"Tondre", fx:"✂️" },
+           herbes:{ e:"🌵", done:"✨", label:"Arracher les chardons", fx:"🌱" }, renard:{ e:"🐺", done:"💨", label:"Chasser le loup", fx:"💥" } },
+  miel:  { arroser:{ e:"🌼", done:"🌸", label:"Planter des fleurs", fx:"🌸" },   nourrir:{ e:"💨", done:"🍯", label:"Enfumer la ruche", fx:"💨" },
+           herbes:{ e:"🕸️", done:"✨", label:"Enlever les toiles", fx:"🕸️" },   renard:{ e:"🐻", done:"💨", label:"Chasser l'ours", fx:"💥" } },
+};
+const chDef = kind => Object.assign({}, CHORES[kind], (CHORE_SKIN[farm() ? farm().resource : "oeufs"] || CHORE_SKIN.oeufs)[kind]);
+// ce que la corvée va rapporter (affiché sur l'étiquette)
+const choreGain = kind => { const f = farm(); if (!f) return 0;
+  const next = Date.now() - lastChore < 40000 ? Math.min(5, (S.combo || 0) + 1) : 0;
+  return Math.max(1, Math.round(Number(f.rate_per_h) * CHORES[kind].min / 60 * (1 + 0.2 * next))); };
 const CHORE_SLOTS = [[22,56],[48,58],[70,62],[36,74],[80,76],[16,72]];
 let chores = [], nextSpawn = Date.now() + 4000, lastChore = 0, choreBusy = false;
 const comboNow = () => (Date.now() - lastChore < 40000 && S) ? (S.combo || 0) : 0;
 const comboOn = () => comboNow() > 0;
 const comboText = () => `Combo ×${(1 + 0.2 * comboNow()).toLocaleString("fr-FR", { maximumFractionDigits:1 })}`;
 function choreHTML(c){
-  const d = CHORES[c.kind], left = d.need - c.taps;
+  const d = chDef(c.kind), left = d.need - c.taps;
   return `<button class="bn-chore ${c.kind === "renard" ? "fox" : ""}" data-bn="chore" data-id="${c.id}" style="left:${c.x}%;top:${c.y}%" aria-label="${d.label}">
-    <span class="ce">${d.e}</span><span class="cl">${d.label}${left > 1 ? ` <i>×${left}</i>` : ""}</span></button>`;
+    <span class="ce">${d.e}</span><span class="cl">${d.label}${left > 1 ? ` <i>×${left}</i>` : ""} <span class="cg">+${fmtN(choreGain(c.kind))} ${RES[farm().resource].e}</span></span></button>`;
 }
 function choresHTML(){ return chores.map(choreHTML).join(""); }
 function spawnChore(){
@@ -588,13 +622,14 @@ function spawnChore(){
   const c = { id: Math.random().toString(36).slice(2, 9), kind, x, y, taps: 0, born: Date.now() };
   chores.push(c);
   document.getElementById("bn-chores")?.insertAdjacentHTML("beforeend", choreHTML(c));
+  if (!seen("chore-tip")){ markSeen("chore-tip"); toast("✨ Une corvée ! Tape dessus : elle te donne des produits tout de suite"); }
   buzz(5);
 }
 setInterval(() => {
   try{
     const t = Date.now();
     // les corvées oubliées s'en vont (le renard file vite)
-    chores.filter(c => t - c.born > CHORES[c.kind].life).forEach(c => {
+    chores.filter(c => t - c.born > chDef(c.kind).life).forEach(c => {
       chores = chores.filter(x => x !== c);
       const el = document.querySelector(`.bn-chore[data-id="${c.id}"]`); if (el){ el.classList.add("bye"); setTimeout(() => el.remove(), 500); }
     });
@@ -605,14 +640,14 @@ setInterval(() => {
 }, 1000);
 async function doChore(el){
   const c = chores.find(x => x.id === el.dataset.id); if (!c) return;
-  const d = CHORES[c.kind];
+  const d = chDef(c.kind);
   c.taps++; el.classList.remove("hit"); void el.offsetWidth; el.classList.add("hit"); buzz(8); sound("pop");
   const b = el.getBoundingClientRect(); floatText(b.left + b.width / 2, b.top + 10, d.fx);
   if (c.taps < d.need){
     if (c.kind === "renard"){ // le renard détale un peu plus loin
       c.x = Math.max(12, Math.min(86, c.x + (Math.random() < .5 ? -22 : 22))); el.style.left = c.x + "%";
     }
-    const lab = el.querySelector(".cl"); if (lab) lab.innerHTML = `${d.label}${d.need - c.taps > 1 ? ` <i>×${d.need - c.taps}</i>` : ""}`;
+    const lab = el.querySelector(".cl"); if (lab) lab.innerHTML = `${d.label}${d.need - c.taps > 1 ? ` <i>×${d.need - c.taps}</i>` : ""} <span class="cg">+${fmtN(choreGain(c.kind))} ${RES[farm().resource].e}</span>`;
     return;
   }
   if (choreBusy){ c.taps--; return; }
@@ -804,6 +839,40 @@ function drawRank(){
     <div class="bn-titles">${T}</div>
     ${hist ? `<div class="bn-sec">Les règnes</div><div class="bn-list">${hist}</div>` : ""}
   </div>`;
+}
+
+/* =================== Améliorations =================== */
+const UPS = {
+  entrepot:  { e:"🏚️", name:"Entrepôt",   fx: l => `Ferme pleine en ${8 + 4 * l + fermH(farm().levels.fermier)} h → ${12 + 4 * l + fermH(farm().levels.fermier)} h` },
+  rendement: { e:"🌱", name:"Rendement",  fx: l => `Production +${20 * l} % → +${20 * (l + 1)} %` },
+  fermier:   { e:"🧑‍🌾", name:"Fermier",   fx: l => l ? `Ramasse tout seul · +${fermH(l)} h → +${fermH(l + 1)} h de place` : `Ramasse tout seul quand tu reviens, et +4 h de place` },
+  glaciere:  { e:"🧊", name:"Glacière",   fx: l => `Œufs et lait se gardent ×${1 + l} → ×${2 + l}` },
+  reseau:    { e:"📣", name:"Réputation", fx: l => `Primes des commandes +${10 * l} % → +${10 * (l + 1)} %` },
+  etal:      { e:"🏪", name:"Bel étal",   fx: l => `Vente au marché ${70 + 5 * l} % → ${75 + 5 * l} % du prix` },
+};
+const fermH = l => [0, 4, 8, 12, 24, 48][Math.max(0, Math.min(5, l || 0))];
+function upgradesHTML(){
+  const U = S.upgrades; if (!U || !U.length) return "";
+  const coins = Number(S.player.coins);
+  return `<div class="bn-sec">Améliorations</div><div class="bn-ups">${U.map(u => {
+    const d = UPS[u.kind], max = u.lvl >= 5, have = stockOf(u.resource), okC = coins >= u.coins, okR = have >= u.qty;
+    const dots = "●".repeat(u.lvl) + "○".repeat(5 - u.lvl);
+    return `<div class="bn-up"><span class="ico">${d.e}</span>
+      <div><b>${d.name}</b><span class="dots">${dots}</span></div>
+      <span class="eff">${max ? "Niveau maximum !" : d.fx(u.lvl)}</span>
+      ${max ? "<span></span>" : `<span class="cost"><span class="${okC ? "" : "no"}">${fmtN(u.coins)} 🪙</span> + <span class="${okR ? "" : "no"}">${fmtN(u.qty)} ${RES[u.resource].e}</span>${okR ? "" : ` <small style="color:var(--label2);font-weight:500">(tu en as ${fmtN(have)})</small>`}</span>`}
+      ${max ? "" : `<button class="bn-btn small" data-bn="up" data-k="${u.kind}" ${okC && okR ? "" : "disabled"}>Améliorer</button>`}
+    </div>`; }).join("")}</div>
+    <p class="bn-sub" style="font-size:12px;text-align:center;margin-top:-6px">Il te manque un produit ? Achète-le au marché, ou attends que son producteur en vende.</p>`;
+}
+async function doUpgrade(kind){
+  if (busy) return; busy = true;
+  try{
+    const res = await rpc("baron_upgrade", { p_token: getToken(), p_kind: kind });
+    setState(res.state); drawFarm(); sound("gold"); buzz([10, 30, 10]);
+    toast(`${UPS[kind].e} ${UPS[kind].name} niveau ${res.lvl} !`, "gold");
+  }catch(e){ toast(esc(errText(e))); refresh(); }
+  busy = false;
 }
 
 /* =================== Achat d'unités =================== */
@@ -1025,6 +1094,7 @@ document.addEventListener("click", e => {
   else if (a === "chore") doChore(t);
   else if (a === "buy") buyUnit();
   else if (a === "quest") claimQuest(t);
+  else if (a === "up") doUpgrade(t.dataset.k);
   else if (a === "view"){ view = t.dataset.v; chores = []; drawFarm(); if (view === "market") loadMarket(true); else if (view === "rank") loadRank(true); else refresh(); buzz(5); }
   else if (a === "mbuy") openSheet("buy", t.dataset.k);
   else if (a === "msell") openSheet("sell", t.dataset.k);
