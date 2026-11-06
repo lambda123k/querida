@@ -879,8 +879,8 @@ async function doUpgrade(kind){
 function buyHTML(){
   const f = farm(), p = S.player;
   const r = RES[f.resource], cost = Number(f.unit_cost || 50), ok = Number(p.coins) >= cost;
-  const next = [10, 25, 50].find(m => m > f.units), mult = next === 10 ? 2 : next === 25 ? 4 : 8;
-  const pal = next ? `À ${next} ${esc(r.units)} : production ×${mult} (encore ${next - f.units})` : "Production ×8 : palier maximum !";
+  const next = [10, 25, 50].find(m => m > f.units), mult = next === 10 ? "1,5" : next === 25 ? "2" : "3";
+  const pal = next ? `À ${next} ${esc(r.units)} : production ×${mult} (encore ${next - f.units})` : "Production ×3 : palier maximum !";
   return `<div class="bn-buy" id="bn-buy"><span class="ico">${MAIN[f.resource]}</span>
     <div class="txt"><b>${un(r) === "une" ? "Une" : "Un"} ${esc(r.unit)} de plus</b><small>Tu en as ${f.units} · ${pal}</small></div>
     <button class="bn-btn small" data-bn="buy" ${ok ? "" : "disabled"}>${fmtN(cost)} 🪙</button></div>`;
