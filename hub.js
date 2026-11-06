@@ -15,6 +15,8 @@ const R = () => window.QUERIDA_GAMES || {};
 
 const ic = (bg, inner) => `<svg viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="12" fill="${bg}"/>${inner}</svg>`;
 const CATALOG = [
+  { id:"baron",    name:"Le Baron",         what:"Ta ferme : deviens le plus riche", always:true,
+    icon: ic("#FFF3D6", `<path d="M0 34 Q24 29 48 33 V48 H0Z" fill="#8CC063"/><path d="M11 22 l5 5 8-10 8 10 5-5-2.5 12h-21z" fill="#E8A500" stroke="#B07A00" stroke-width="1.5" stroke-linejoin="round"/><circle cx="24" cy="16" r="2.2" fill="#CC3F27"/>`) },
   { id:"tour",     name:"La Tour",          what:"Empile les étages",            hint:"Une cloche, ça se sonne plusieurs fois de suite.",
     icon: ic("#FCEBD6", `<rect x="12" y="34" width="24" height="6" fill="#F2873B"/><rect x="14" y="27" width="20" height="6" fill="#1E4E9C"/><rect x="16" y="20" width="17" height="6" fill="#CC3F27"/><rect x="18" y="13" width="14" height="6" fill="#7A5A4C"/>`) },
   { id:"chrono",   name:"Le Chrono",        what:"Arrête le temps à l'instinct", hint:"Garde le doigt sur le compteur de jours.",
@@ -40,7 +42,7 @@ const PAD = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="cur
 const LOCK = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>`;
 
 function foundList(){ try{ return JSON.parse(localStorage.getItem("qh_found") || "[]"); }catch(e){ return []; } }
-function isFound(id){ if (foundList().includes(id)) return true; const g = R()[id]; try{ return !!(g && g.best && g.best()); }catch(e){ return false; } }
+function isFound(id){ if ((CATALOG.find(c => c.id === id) || {}).always) return true; if (foundList().includes(id)) return true; const g = R()[id]; try{ return !!(g && g.best && g.best()); }catch(e){ return false; } }
 const count = () => CATALOG.filter(c => isFound(c.id)).length;
 
 /* =================== Styles =================== */
@@ -250,8 +252,8 @@ function render(){
   const n = count(), total = CATALOG.length;
   const cards = CATALOG.map(c => {
     if (isFound(c.id)){
-      const g = R()[c.id]; let rec = ""; try{ rec = g && g.best ? g.best() : ""; }catch(e){}
-      return `<button type="button" class="qh-card" data-qh="play" data-v="${c.id}" ${g ? "" : "disabled"}>${c.icon.replace("<svg ", '<svg class="qh-ic" ')}<b>${c.name}</b><small>${c.what}</small><span class="qh-rec">${rec ? "Record : " + esc(rec) : "Pas encore joué"}</span></button>`;
+      const g = R()[c.id]; let rec = "", st = ""; try{ rec = g && g.best ? g.best() : ""; st = g && g.status ? g.status() : ""; }catch(e){}
+      return `<button type="button" class="qh-card" data-qh="play" data-v="${c.id}" ${g ? "" : "disabled"}>${c.icon.replace("<svg ", '<svg class="qh-ic" ')}<b>${c.name}</b><small>${c.what}</small><span class="qh-rec">${st ? esc(st) : rec ? "Record : " + esc(rec) : "Pas encore joué"}</span></button>`;
     }
     return `<div class="qh-card qh-lock"><span class="qh-q">${LOCK}</span><b>Jeu caché</b><small>${esc(c.hint)}</small></div>`;
   }).join("");

@@ -1,4 +1,5 @@
 /* Querida · Le Baron — jeu de farming et de marché entre amis (côté amis uniquement).
+   Se lance depuis l'Arcade (toujours visible, pas caché) et s'ouvre en plein écran.
    Étape 1 : l'écran Ferme.
    · Première ouverture : choix d'une spécialité parmi celles encore libres (6 places).
    · Ferme illustrée : ciel selon l'heure réelle, météo du jour, animaux qui se promènent.
@@ -82,6 +83,13 @@ function floatText(x, y, text, gold){
 
 /* =================== Styles =================== */
 const CSS = `
+.bn-wrap{position:fixed;inset:0;z-index:74;background:var(--bg);color:var(--label);overflow-y:auto;-webkit-overflow-scrolling:touch;font-family:var(--f);animation:bn-in .3s ease}
+@keyframes bn-in{from{opacity:0;transform:translateY(16px)}}
+.bn-wrap .bn-in{max-width:520px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 12px) 16px calc(env(safe-area-inset-bottom,0px) + 28px)}
+.bn-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.bn-top button{border:0;background:var(--fill2);color:var(--label);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.bn-top .bn-back{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:8px 14px 8px 10px;font:600 15px var(--f);color:var(--accent)}
+.bn-top .bn-x{width:40px;height:40px;border-radius:50%;font-size:20px}
 .bn{display:flex;flex-direction:column;gap:14px;padding-bottom:12px;-webkit-user-select:none;user-select:none}
 .bn h1{margin:0;font-family:var(--f-display);font-style:italic;font-weight:400;font-size:40px;line-height:1}
 .bn .bn-sub{margin:0;color:var(--label2);font-size:15px;line-height:1.4}
@@ -182,9 +190,29 @@ function livePending(){
   const v = Number(f.pending) + Number(f.rate_per_h) * (Date.now() - fetchedAt) / 3600000;
   return Math.min(Number(f.cap), v);
 }
-function setState(s){ S = s; fetchedAt = Date.now(); }
+function setState(s){ S = s; fetchedAt = Date.now(); try{ localStorage.setItem("bn_coins", String(s.player.coins)); }catch(e){} }
 
-/* =================== Montage dans l'onglet =================== */
+/* =================== Ouverture depuis l'Arcade =================== */
+function openBaron(){
+  closeBaron();
+  const w = document.createElement("div"); w.className = "bn-wrap"; w.setAttribute("role", "dialog"); w.setAttribute("aria-label", "Le Baron");
+  w.innerHTML = `<div class="bn-in"><div class="bn-top"><button type="button" class="bn-back" data-bn="arcade">‹ Arcade</button><button type="button" class="bn-x" data-bn="close" aria-label="Fermer">×</button></div><div id="bn-root"></div></div>`;
+  document.body.appendChild(w); document.body.style.overflow = "hidden";
+  mount();
+}
+function closeBaron(){
+  document.querySelector(".bn-wrap")?.remove(); rootEl = null;
+  try{ if (!Q.layerCount()) document.body.style.overflow = ""; }catch(e){ document.body.style.overflow = ""; }
+}
+const coinsLabel = () => {
+  if (S && S.player) return `${fmtN(S.player.coins)} pièces`;
+  try{ const c = localStorage.getItem("bn_coins"); if (c !== null) return `${fmtN(+c)} pièces`; }catch(e){}
+  return getToken() ? "" : "Choisis ta spécialité";
+};
+(window.QUERIDA_GAMES = window.QUERIDA_GAMES || {})["baron"] = { open: openBaron, status: coinsLabel };
+try{ window.dispatchEvent(new Event("qh-games")); }catch(e){}
+
+/* =================== Montage =================== */
 function mount(){
   const root = document.getElementById("bn-root");
   if (!root || root.dataset.bn === "1") return;
@@ -503,6 +531,8 @@ document.addEventListener("click", e => {
   else if (a === "sell") sell(t.dataset.k, +t.dataset.q);
   else if (a === "gold") claimGolden(t);
   else if (a === "ann-close" && (t.tagName === "BUTTON" || e.target === t)) document.querySelector(".bn-ann")?.remove();
+  else if (a === "close") closeBaron();
+  else if (a === "arcade"){ closeBaron(); document.querySelector(".qh-btn")?.click(); }
 });
 // Glisser le doigt sur les produits pour les ramasser
 let sweeping = false;
@@ -517,7 +547,6 @@ document.addEventListener("pointermove", e => {
   if (it.dataset.bn === "gold") claimGolden(it); else grab(it);
 }, { passive:true });
 
-mount();
 
 }catch(err){ /* Le Baron ne doit jamais gêner l'appli */ }
 })();
