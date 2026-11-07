@@ -1161,8 +1161,8 @@ async function send(){
   }catch(err){ d.busy = false; if (b){ b.disabled = false; b.textContent = "Déposer"; } setErr("L'envoi a échoué. Vérifie ta connexion et réessaie."); }
 }
 function myCapsuleSheet(c){
-  sheet({ title: TYPES[c.kind].label, right:`<button class="tbtn bold" data-act="close">OK</button>`, body:`<div class="group"><div class="rowi">${sq(c.kind)}<span class="t"><b>${esc(summary(c))}</b><small>${esc(MOMENTS[c.moment || "voyage"].label)}</small></span></div></div>
-    <p class="foot">${c.opened_at ? `${P()} l'a ouverte le ${fmtDate(new Date(c.opened_at).getTime())}.` : `${P()} ne l'a pas encore ouverte.`}</p>
+  sheet({ title: TYPES[c.kind].label, right:`<button class="tbtn bold" data-act="close">OK</button>`, body:`${capsuleBody(c)}
+    <p class="foot">${esc(MOMENTS[c.moment || "voyage"].label)}${c.opened_at ? "" : ` · ${P()} ne l'a pas encore ouverte.`}</p>
     <div class="group plain" id="del-zone"><button class="rowi danger" data-act="del-cap-ask" data-v="${c.id}" style="justify-content:center">Supprimer la capsule</button></div>` });
 }
 
