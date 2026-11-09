@@ -14,7 +14,7 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 const R = () => window.QUERIDA_GAMES || {};
 
 const ic = (bg, inner) => `<svg viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="12" fill="${bg}"/>${inner}</svg>`;
-const CATALOG = [
+const CATALOG = ([
   { id:"baron",    name:"Le Baron",         what:"Ta ferme : deviens le plus riche", always:true,
     icon: ic("#FFF3D6", `<path d="M0 34 Q24 29 48 33 V48 H0Z" fill="#8CC063"/><path d="M11 22 l5 5 8-10 8 10 5-5-2.5 12h-21z" fill="#E8A500" stroke="#B07A00" stroke-width="1.5" stroke-linejoin="round"/><circle cx="24" cy="16" r="2.2" fill="#CC3F27"/>`) },
   { id:"tour",     name:"La Tour",          what:"Empile les étages",            hint:"Une cloche, ça se sonne plusieurs fois de suite.",
@@ -37,7 +37,7 @@ const CATALOG = [
     icon: ic("#EFE7F7", `<circle cx="24" cy="21" r="11" fill="#7B5BB0"/><path d="M19 30h10v5a2 2 0 01-2 2h-6a2 2 0 01-2-2z" fill="#5B2A6E"/><text x="24" y="26" text-anchor="middle" font-family="Georgia,serif" font-style="italic" font-weight="700" font-size="15" fill="#fff">?</text>`) },
   { id:"hanoi",    name:"Les Tours de Hanoï", what:"Course contre la montre en 4 tours", hint:"Ici même : la manette du titre « Arcade » aime qu'on la touche 3 fois.",
     icon: ic("#E6F1EA", `<rect x="6" y="37" width="36" height="4" rx="2" fill="#7A5A4C"/><rect x="11" y="12" width="3" height="25" rx="1.5" fill="#C9B8AC"/><rect x="22.5" y="12" width="3" height="25" rx="1.5" fill="#C9B8AC"/><rect x="34" y="12" width="3" height="25" rx="1.5" fill="#C9B8AC"/><rect x="4" y="31" width="17" height="6" rx="2.5" fill="#2F7D4E"/><rect x="6.5" y="25" width="12" height="6" rx="2.5" fill="#E8B530"/><rect x="29" y="31" width="13" height="6" rx="2.5" fill="#CC3F27"/>`) },
-];
+]).filter(c => !(ROMANE && c.id === "baron"));   // Le Baron : jeu entre amis seulement
 const PAD = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8h10a5 5 0 015 5v1a4 4 0 01-7 2.6L14 15h-4l-1 1.6A4 4 0 012 14v-1a5 5 0 015-5z"/><path d="M8 11v3M6.5 12.5h3"/><circle cx="16" cy="11.5" r=".6" fill="currentColor"/><circle cx="17.6" cy="13.6" r=".6" fill="currentColor"/></svg>`;
 const LOCK = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>`;
 

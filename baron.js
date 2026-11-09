@@ -1,1128 +1,1552 @@
-/* Querida · Le Baron — jeu de farming et de marché entre amis (côté amis uniquement).
-   Se lance depuis l'Arcade (toujours visible, pas caché) et s'ouvre en plein écran.
-   Étape 1 : l'écran Ferme.
-   · Première ouverture : choix d'une spécialité parmi celles encore libres (6 places).
-   · Ferme illustrée : ciel selon l'heure réelle, météo du jour, animaux qui se promènent.
-   · Récolte : taper ou glisser sur les produits, ou « Tout récolter ». Produit doré ×50 de temps en temps.
-   · Stock (avec péremption des œufs et du lait) et vente instantanée au marché.
-   Tout ce qui compte (production, stock, pièces, produit doré) est calculé par le serveur Supabase
-   (fonctions baron_*, voir supabase/baron.sql) ; l'appli ne fait qu'afficher.
-   Préfixe « bn- » partout ; une erreur ici ne casse jamais l'appli. */
+/* Querida · Le Baron (version 2) — jeu de ferme idle et de marché entre amis (côté amis uniquement).
+   Se lance depuis l'Arcade. Mécanique façon Idle Miner : parcelles empilées, monte-charge, charrette, contremaîtres,
+   goulots d'étranglement ; et l'âme du Baron : un marché entre amis, les commandes du village, devenir le plus riche.
+   · La ferme est simulée sur le téléphone (production hors ligne calculée au retour) et sauvegardée sur Supabase.
+   · Le marché, le classement et les ventes entre joueurs passent par les fonctions baron2_* (supabase/baron2.sql).
+   · Tout l'équilibrage (prix, temps, primes) est dans BAL, en haut du moteur.
+   Préfixe « b2- » partout ; une erreur ici ne casse jamais l'appli. */
 (function(){
 "use strict";
 try{
+/* =================== MOTEUR (aucun affichage ici) ===================
+   Toute la ferme est simulée sur le téléphone, puis sauvegardée sur le serveur.
+   Flux façon Idle Miner : parcelles → dépôt de chaque parcelle → monte-charge → quai → charrette → grange. */
+const BX = (function(){
+const RAW = ["ble","oeufs","lait","fruits","miel","bois"];
+const CRAFT = ["pain","crepes","tarte","confiture","gateau"];
+const ALL = RAW.concat(CRAFT);
+const P = {
+  ble:    { label:"Blé",    e:"🌾", floor:10, place:"Champ de blé", short:"Champ", who:"Céréalier·ère",  act:{ id:"arroser",  label:"Arroser",         e:"💧", txt:"Le blé arrosé pousse 2× plus vite" } },
+  oeufs:  { label:"Œufs",   e:"🥚", floor:10, place:"Poulailler", short:"Poulailler",   who:"Éleveur·se",     act:{ id:"grain",    label:"Donner du grain", e:"🌽", txt:"Les poules bien nourries pondent 2× plus" } },
+  lait:   { label:"Lait",   e:"🥛", floor:10, place:"Étable", short:"Étable",       who:"Vacher·ère",     act:{ id:"traire",   label:"Traire",          e:"🪣", txt:"Traire à la main double le lait" } },
+  fruits: { label:"Fruits", e:"🍎", floor:10, place:"Verger", short:"Verger",       who:"Arboriculteur·rice", act:{ id:"tailler", label:"Tailler",        e:"✂️", txt:"Des arbres taillés donnent 2× plus de fruits" } },
+  miel:   { label:"Miel",   e:"🍯", floor:10, place:"Rucher", short:"Rucher",       who:"Apiculteur·rice", act:{ id:"enfumer",  label:"Enfumer",         e:"💨", txt:"Des abeilles calmes laissent récolter 2× plus" } },
+  bois:   { label:"Bois",   e:"🪵", floor:10, place:"Forêt", short:"Coupe",        who:"Bûcheron·ne",    act:{ id:"affuter",  label:"Affûter les haches", e:"🪓", txt:"Des haches affûtées coupent 2× plus vite" } },
+  pain:      { label:"Pain",             e:"🍞", floor:30, rec:{ ble:1, lait:1 },                   t:60 },
+  crepes:    { label:"Crêpes",           e:"🥞", floor:45, rec:{ ble:1, oeufs:1, lait:1 },          t:90 },
+  tarte:     { label:"Tarte aux fruits", e:"🥧", floor:45, rec:{ ble:1, fruits:1, oeufs:1 },        t:120 },
+  confiture: { label:"Confiture",        e:"🫙", floor:30, rec:{ fruits:1, miel:1 },                t:90 },
+  gateau:    { label:"Gâteau",           e:"🍰", floor:65, rec:{ ble:1, oeufs:1, lait:1, miel:1 },  t:180 },
+};
 
+/* ---------- Réglages (tout l'équilibrage est ici) ---------- */
+const MILES = [10, 25, 50, 100, 150, 200, 300, 400, 500, 750, 1000];
+const miles = L => { let n = 0; for (const m of MILES) if (L >= m) n++; return n; };
+const PALIERS = [3, 6, 9, 12];                 // parcelles 4, 7, 10, 13 : gros paliers (argent ×6, bois ×4)
+const isPalier = i => PALIERS.includes(i);
+const BAL = {
+  cycle: 5,                                     // secondes de travail par tape (sans contremaître)
+  boostDur: 60, boostCd: 240,                   // corvée : ×2 pendant 1 min, toutes les 4 min
+  parcelRate: (i, L) => 0.3 * Math.pow(5, i) * L * Math.pow(2, miles(L)),          // unités / s
+  parcelCost: (i, L) => 4 * Math.pow(8, i) * Math.pow(1.13, L - 1),                // niveau L → L+1
+  parcelUnlock: i => i === 0 ? 0 : 60 * Math.pow(10, i - 1) * (isPalier(i) ? 6 : 1),
+  parcelWood: i => i < 2 ? 0 : Math.round(12 * Math.pow(8, i - 2) * (isPalier(i) ? 4 : 1)),
+  parcelMgr: i => 25 * Math.pow(12, i),
+  elevRate: L => 1.4 * Math.pow(1.2, L - 1) * Math.pow(2, miles(L)),
+  elevCost: L => 10 * Math.pow(1.21, L - 1),
+  cartRate: L => 1.2 * Math.pow(1.2, L - 1) * Math.pow(2, miles(L)),
+  cartCost: L => 12 * Math.pow(1.21, L - 1),
+  elevMgr: 40, cartMgr: 60,
+  elevTrip: 6, cartTrip: 8,                     // durée d'un aller-retour (pour l'affichage « par trajet »)
+  pendCap: r => Math.max(40, r * 120),          // dépôt d'une parcelle : 2 min de production
+  quaiCap: r => Math.max(60, r * 60),             // r = débit de la charrette
+  barnCap: L => Math.round(400 * Math.pow(2.6, L - 1)),
+  barnCost: L => 120 * Math.pow(3.3, L - 1),
+  barnWood: L => L < 2 ? 0 : Math.round(10 * Math.pow(3.2, L - 2)),
+  ovenBuild: { coins: 400, wood: 25 },
+  ovenCost: L => 1500 * Math.pow(4.5, L - 1),   // niveau L → L+1
+  ovenWood: L => Math.round(40 * Math.pow(3, L - 1)),
+  ovenMax: 8,
+  ovenSlots: L => Math.min(4, L),
+  ovenSpeed: L => Math.pow(0.82, Math.max(0, L - 4)),
+  ovenBatch: (L, eff) => Math.max(20, Math.round(eff * 90 * (1 + 0.5 * (L - 1)))),
+  farmCost: k => ({ coins: 2e6 * Math.pow(25, k - 1), wood: Math.round(4000 * Math.pow(10, k - 1)) }), // k-ième exploitation en plus
+  farmNeeds: 5,                                 // parcelles nécessaires dans ta ferme principale
+  slotMs: 20 * 60 * 1000,                       // commandes renouvelées toutes les 20 min
+  orders: 4,
+  orderSecs: [150, 360], recipeSecs: [60, 150], // quantité = X s de ta production
+  bonusMins: [10, 20], recipeBonus: 1.4,        // prime = X min de production (moyenne du groupe ou la tienne)
+  reserveMult: 3, reserveSecs: 60,              // réserve du village : 3× le prix plancher, limitée
+  startWood: 40, startCoins: 0,
+};
+
+/* ---------- État ---------- */
+function newFarm(){ return { parcels:[{ lvl:1, mgr:false, run:0, pend:0 }], elev:{ lvl:1, mgr:false, run:0 }, cart:{ lvl:1, mgr:false, run:0 }, quai:0, boost:0, boostCd:0, lost:0 }; }
+function newState(spec, now){
+  const stock = {}; ALL.forEach(k => stock[k] = 0); stock.bois = BAL.startWood;
+  const farms = {}; farms[spec] = newFarm();
+  return { v:1, spec, cur:spec, coins:BAL.startCoins, stock, farms, barn:1, oven:{ lvl:0, slots:[] },
+    orders:{ slot:0, list:[], prog:{} }, reserve:{ slot:0, used:{} },
+    stats:{ produced:0, invested:0, baked:0, orders:0, sold:0, bought:0, earned:0, villageSold:0 },
+    seen:{}, last:now, credit_seen:0, created:now };
+}
+const stockUnits = s => ALL.reduce((a, k) => a + (s.stock[k] || 0), 0);
+const barnCap = s => BAL.barnCap(s.barn);
+const barnFree = s => Math.max(0, barnCap(s) - stockUnits(s));
+
+/* ---------- Rythmes ---------- */
+function farmRates(f, now){
+  const boost = f.boost > now ? 2 : 1;
+  let P = 0; f.parcels.forEach((p, i) => P += BAL.parcelRate(i, p.lvl) * boost);
+  return { P, E: BAL.elevRate(f.elev.lvl), C: BAL.cartRate(f.cart.lvl), boost };
+}
+// production réelle possible (en unités / s), le maillon le plus faible de chaque ferme
+function effRate(s, now){
+  let t = 0; for (const k in s.farms){ const r = farmRates(s.farms[k], now || 0); t += Math.min(r.P / r.boost, r.E, r.C); }
+  return t;
+}
+const prodValue = s => effRate(s, 0) * 10;      // pièces / s au prix plancher
+
+/* ---------- Simulation ---------- */
+function stepFarm(s, key, f, dt, now){
+  const boost = f.boost > now ? 2 : 1;
+  // la charrette : quai → grange
+  const ca = f.cart.mgr ? dt : Math.min(dt, f.cart.run); f.cart.run = Math.max(0, f.cart.run - dt);
+  if (ca > 0){
+    const mv = Math.min(BAL.cartRate(f.cart.lvl) * ca, f.quai, barnFree(s));
+    if (mv > 0){ f.quai -= mv; s.stock[key] += mv; s.stats.produced += mv; }
+  }
+  // le monte-charge : dépôts → quai
+  const er = BAL.elevRate(f.elev.lvl);
+  const ea = f.elev.mgr ? dt : Math.min(dt, f.elev.run); f.elev.run = Math.max(0, f.elev.run - dt);
+  if (ea > 0){
+    let tot = 0; f.parcels.forEach(p => tot += p.pend);
+    const take = Math.min(er * ea, tot, Math.max(0, BAL.quaiCap(BAL.cartRate(f.cart.lvl)) - f.quai));
+    if (take > 0 && tot > 0){ const k = take / tot; f.parcels.forEach(p => p.pend -= p.pend * k); f.quai += take; }
+  }
+  // les parcelles
+  f.parcels.forEach((p, i) => {
+    const a = p.mgr ? dt : Math.min(dt, p.run); p.run = Math.max(0, p.run - dt);
+    if (a <= 0) return;
+    const r = BAL.parcelRate(i, p.lvl) * boost, cap = BAL.pendCap(r);
+    const nv = p.pend + r * a;
+    if (nv > cap){ f.lost += nv - cap; p.pend = cap; } else p.pend = nv;
+  });
+}
+function step(s, dt, now){ for (const k in s.farms) stepFarm(s, k, s.farms[k], dt, now); return ovenTick(s, now); }
+// rattrapage hors ligne (ou après un onglet en veille)
+function catchUp(s, now){
+  let from = s.last || now; if (now <= from){ s.last = now; return 0; }
+  const total = Math.min((now - from) / 1000, 7 * 86400);
+  const before = s.stats.produced;
+  let left = total, t = from;
+  while (left > 0){
+    const dt = Math.min(left, total > 600 ? 20 : 1);
+    t += dt * 1000; step(s, dt, t); left -= dt;
+  }
+  s.last = now; return s.stats.produced - before;
+}
+
+/* ---------- Actions ---------- */
+const nice = n => { if (n < 100) return Math.ceil(n); const p = Math.pow(10, Math.floor(Math.log10(n)) - 1); return Math.ceil(n / p) * p; };
+const nextParcelCost = f => { const i = f.parcels.length; return { coins: nice(BAL.parcelUnlock(i)), wood: BAL.parcelWood(i), palier: isPalier(i) }; };
+function canPay(s, c){ return s.coins >= (c.coins || 0) && s.stock.bois >= (c.wood || 0); }
+function pay(s, c, key){
+  if (!canPay(s, c)) return false;
+  s.coins -= c.coins || 0; s.stock.bois -= c.wood || 0;
+  // le bois de ta propre forêt ne compte pas comme une dépense de patrimoine
+  s.stats.invested += (c.coins || 0) + (c.wood || 0) * 10;
+  return true;
+}
+const costs = {
+  parcel: (f, i) => ({ coins: nice(BAL.parcelCost(i, f.parcels[i].lvl)) }),
+  parcelMgr: (f, i) => ({ coins: nice(BAL.parcelMgr(i)) }),
+  elev: f => ({ coins: nice(BAL.elevCost(f.elev.lvl)) }),
+  cart: f => ({ coins: nice(BAL.cartCost(f.cart.lvl)) }),
+  elevMgr: () => ({ coins: BAL.elevMgr }), cartMgr: () => ({ coins: BAL.cartMgr }),
+  barn: s => ({ coins: nice(BAL.barnCost(s.barn)), wood: BAL.barnWood(s.barn) }),
+  oven: s => s.oven.lvl === 0 ? { coins: BAL.ovenBuild.coins, wood: BAL.ovenBuild.wood } : { coins: nice(BAL.ovenCost(s.oven.lvl)), wood: BAL.ovenWood(s.oven.lvl) },
+  farm: s => { const c = BAL.farmCost(Object.keys(s.farms).length); return { coins: nice(c.coins), wood: c.wood }; },
+};
+// combien de niveaux d'un coup (×1, ×10, max) et pour quel prix
+function bulk(costAt, startLvl, n, coins){
+  let tot = 0, k = 0;
+  while (true){
+    const c = nice(costAt(startLvl + k));
+    if (n === "max" ? tot + c > coins : k >= n) break;
+    tot += c; k++;
+    if (k > 1000) break;
+  }
+  return { n: k, coins: tot };
+}
+
+/* ---------- Le four ---------- */
+function ovenTick(s, now){
+  const o = s.oven; if (!o.lvl) return [];
+  const done = [];
+  o.slots.forEach((sl, i) => {
+    if (sl && now >= sl.t0 + sl.dur){ s.stock[sl.rec] += sl.qty; s.stats.baked += sl.qty; done.push(sl); o.slots[i] = null; }
+  });
+  return done;
+}
+const ovenBatch = s => BAL.ovenBatch(s.oven.lvl, effRate(s, 0));
+const ovenDur = (s, rec) => Math.round(P[rec].t * BAL.ovenSpeed(s.oven.lvl)) * 1000;
+const canBake = (s, rec) => { let m = Infinity; for (const k in P[rec].rec) m = Math.min(m, Math.floor(s.stock[k] / P[rec].rec[k])); return m; };
+
+/* ---------- Commandes du village ---------- */
+function rng(seed){ let a = seed >>> 0; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const hash = str => { let h = 2166136261; for (let i = 0; i < str.length; i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+const CHARS = {
+  boulanger:  { name:"Le boulanger",   e:"👨‍🍳", wants:["pain","ble"] },
+  aubergiste: { name:"L'aubergiste",   e:"🧔", wants:["crepes","oeufs","lait"] },
+  patissiere: { name:"La pâtissière",  e:"👩‍🍳", wants:["gateau","tarte"] },
+  epiciere:   { name:"L'épicière",     e:"👵", wants:["confiture","fruits","miel"] },
+  charpentier:{ name:"Le charpentier", e:"👷", wants:["bois"] },
+};
+const charFor = (k, r) => { const c = Object.keys(CHARS).filter(id => CHARS[id].wants.includes(k)); return c[Math.floor(r() * c.length)] || "epiciere"; };
+function genOrders(s, slot, playerId, groupProd){
+  const r = rng(hash(playerId + ":" + slot));
+  const eff = Math.max(effRate(s, 0), 0.5);
+  const own = eff * 10, prime = Math.max(groupProd || 0, own);
+  const others = RAW.filter(k => k !== s.spec);
+  const recipes = s.oven.lvl ? CRAFT : [];
+  const pick = a => a[Math.floor(r() * a.length)];
+  const between = (a, b) => a + r() * (b - a);
+  const prods = [pick(others), recipes.length ? pick(recipes) : pick(others), s.spec, pick(recipes.length && r() < .5 ? recipes : RAW)];
+  const used = new Set();
+  return prods.slice(0, BAL.orders).map((k, i) => {
+    if (used.has(k)) k = pick(ALL.filter(x => !used.has(x) && (recipes.length || !P[x].rec)));
+    used.add(k);
+    const rec = !!P[k].rec, n = rec ? Object.keys(P[k].rec).length : 1;
+    const qty = Math.max(10, nice(eff * (rec ? between(...BAL.recipeSecs) / n : between(...BAL.orderSecs))));
+    const bonus = nice(prime * 60 * between(...BAL.bonusMins) * (rec ? BAL.recipeBonus : 1));
+    return { id: slot + "-" + i, k, qty, bonus, who: charFor(k, r) };
+  });
+}
+function ensureOrders(s, now, playerId, groupProd){
+  const slot = Math.floor(now / BAL.slotMs);
+  if (s.orders.slot !== slot){ s.orders = { slot, list: genOrders(s, slot, playerId, groupProd), prog:{} }; return true; }
+  return false;
+}
+// livrer (en plusieurs fois possible) : marchandise payée au prix plancher, prime à la fin
+function deliver(s, id){
+  const o = s.orders.list.find(x => x.id === id); if (!o) return null;
+  const done = s.orders.prog[id] || 0, need = o.qty - done;
+  const give = Math.min(need, Math.floor(s.stock[o.k]));
+  if (give <= 0) return null;
+  s.stock[o.k] -= give; s.orders.prog[id] = done + give;
+  let paid = give * P[o.k].floor, complete = false;
+  if (s.orders.prog[id] >= o.qty){ paid += o.bonus; complete = true; s.stats.orders++; }
+  s.coins += paid; s.stats.earned += paid;
+  return { give, paid, complete };
+}
+
+/* ---------- Réserve du village (le plafond) ---------- */
+function reserveLeft(s, k, now){
+  const slot = Math.floor(now / BAL.slotMs);
+  if (s.reserve.slot !== slot) s.reserve = { slot, used:{} };
+  const lim = Math.max(30, nice(effRate(s, 0) * BAL.reserveSecs / (P[k].rec ? 3 : 1)));
+  return Math.max(0, lim - (s.reserve.used[k] || 0));
+}
+const reservePrice = k => P[k].floor * BAL.reserveMult;
+
+/* ---------- Fortune ---------- */
+function fortune(s){
+  let st = 0; ALL.forEach(k => st += (s.stock[k] || 0) * P[k].floor);
+  return Math.floor(s.coins + st + s.stats.invested * 0.5);
+}
+// ce qui se découvre petit à petit
+function unlocked(s, what){
+  const f = s.farms[s.spec], np = f.parcels.length;
+  switch (what){
+    case "grange": return s.stats.produced > 0 || s.coins > 0;
+    case "mgr": return s.stats.earned >= 15 || np > 1 || f.parcels[0].lvl > 2;
+    case "boost": return f.parcels[0].lvl >= 3 || np > 1;
+    case "marche": return np >= 2;
+    case "village": return np >= 3;
+    case "four": return np >= 3;
+    case "farm2": return np >= BAL.farmNeeds;
+  }
+  return true;
+}
+// le maillon lent de la ferme
+function bottleneck(s, key, now){
+  const f = s.farms[key], r = farmRates(f, now);
+  if (barnFree(s) < 1) return "barn";
+  const anyMgr = f.parcels.some(p => p.mgr) || f.elev.mgr || f.cart.mgr;
+  if (!anyMgr) return null;
+  const cap = f.quai >= BAL.quaiCap(r.C) * 0.9;
+  if (r.C < Math.min(r.P, r.E) * 0.95 || cap) return "cart";
+  if (r.E < r.P * 0.95) return "elev";
+  return null;
+}
+
+return { RAW, CRAFT, ALL, P, BAL, CHARS, MILES, isPalier, newState, newFarm, step, catchUp, farmRates, effRate, prodValue,
+  stockUnits, barnCap, barnFree, costs, canPay, pay, bulk, nextParcelCost, nice, ovenTick, ovenBatch, ovenDur, canBake,
+  ensureOrders, genOrders, deliver, reserveLeft, reservePrice, fortune, unlocked, bottleneck };
+})();
+
+try{ window.BARON_ENGINE = BX; }catch(e){}
 const Q = window.QUERIDA;
 if (!Q || Q.role() !== "ami") return;
 
+/* =================== Petits outils =================== */
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const db = () => Q.store().client;
-const KEY = "bn_token";
-const getToken = () => { try{ return JSON.parse(localStorage.getItem(KEY) || "null"); }catch(e){ return null; } };
-const setToken = t => { try{ localStorage.setItem(KEY, JSON.stringify(t)); }catch(e){} };
-const seen = k => { try{ return localStorage.getItem("bn_seen_" + k) === "1"; }catch(e){ return true; } };
-const markSeen = k => { try{ localStorage.setItem("bn_seen_" + k, "1"); }catch(e){} };
-
-/* Ressources (miroir de baron_resources, pour l'affichage) */
-const RES = {
-  oeufs: { label:"Œufs",  e:"🥚", unit:"poule",    units:"poules",    who:"Éleveur·se de poules", animal:"🐔", walk:true,  rate:60,  price:10,  fem:true, perish:24 },
-  ble:   { label:"Blé",   e:"🌾", unit:"champ",    units:"champs",    who:"Céréalier·ère",        animal:"🌾", walk:false, rate:50,  price:12,  fem:false, perish:null },
-  lait:  { label:"Lait",  e:"🥛", unit:"vache",    units:"vaches",    who:"Vacher·ère",           animal:"🐄", walk:true,  rate:30,  price:20,  fem:true, perish:12 },
-  bois:  { label:"Bois",  e:"🪵", unit:"bûcheron", units:"bûcherons", who:"Bûcheron·ne",          animal:"🌲", walk:false, rate:20,  price:30,  fem:false, perish:null },
-  laine: { label:"Laine", e:"🧶", unit:"mouton",   units:"moutons",   who:"Berger·ère",           animal:"🐑", walk:true,  rate:10,  price:60,  fem:false, perish:null },
-  miel:  { label:"Miel",  e:"🍯", unit:"ruche",    units:"ruches",    who:"Apiculteur·rice",      animal:"🐝", walk:true,  rate:5,   price:120, fem:true, perish:null },
-};
-const un = r => r.fem ? "une" : "un", nouv = r => r.fem ? "Nouvelle" : "Nouveau", prem = r => r.fem ? "Ta première" : "Ton premier";
-const MAIN = { oeufs:"🐔", ble:"🌾", lait:"🐄", bois:"🌳", laine:"🐑", miel:"🐝" };
-const ORDER = ["oeufs","ble","lait","bois","laine","miel"];
-const perRate = r => r.rate >= 1 ? `${r.rate} / h` : `1 / ${Math.round(1 / r.rate)} h`;
-// Gros nombres abrégés façon jeu : 9 999, puis 12,5K, 160K, 1,2M, 3,4B, 5T…
-const fmtN = n => {
-  n = Math.floor(Number(n) || 0); const a = Math.abs(n);
-  if (a < 10000) return n.toLocaleString("fr-FR");
-  const U = [[1e15, "Q"], [1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "K"]];
-  for (const [v, u] of U) if (a >= v){
-    const x = n / v; return (Math.abs(x) < 100 ? Math.floor(x * 10) / 10 : Math.floor(x)).toLocaleString("fr-FR") + u;
+const P = BX.P, BAL = BX.BAL;
+const now = () => Date.now();
+// gros nombres abrégés : 9 999, 12,5K, 1,2M, 3,4B, 5T…
+function fmtN(n, dec){
+  n = Number(n) || 0; const a = Math.abs(n);
+  if (a < 1000){
+    if (dec && a < 100 && Math.abs(n - Math.round(n)) > 0.05) return (Math.round(n * 10) / 10).toLocaleString("fr-FR");
+    return Math.floor(n + 1e-9).toLocaleString("fr-FR");
   }
-  return String(n);
-};
-const fmtDur = ms => {
-  if (ms <= 0) return "maintenant";
-  const m = Math.round(ms / 60000); if (m < 60) return `${m} min`;
-  const h = Math.floor(m / 60), r = m % 60; return r ? `${h} h ${String(r).padStart(2,"0")}` : `${h} h`;
-};
-const errText = e => {
-  const m = String((e && (e.message || e.error_description)) || e || "");
-  if (m.includes("spécialité déjà prise")) return "Quelqu'un vient de prendre cette spécialité. Choisis-en une autre.";
-  if (m.includes("partie complète")) return "Les 6 places sont prises.";
-  if (m.includes("déjà inscrit")) return "Tu as déjà une ferme, mais ce téléphone n'a pas ta clé. Demande à Naïm de te la redonner.";
-  if (m.includes("stock insuffisant")) return "Tu n'as plus assez en stock.";
-  if (m.includes("trop tard")) return "Trop tard, il s'est envolé !";
-  if (m.includes("doucement")) return "Doucement, une corvée à la fois !";
-  if (m.includes("pas assez de pièces")) return "Pas encore assez de pièces.";
-  if (m.includes("vends d'abord")) return "Vends d'abord ta première récolte.";
-  if (m.includes("déjà livrée")) return "Trop tard, quelqu'un l'a livrée avant toi !";
-  if (m.includes("commande expirée")) return "Cette commande a expiré.";
-  if (m.includes("il te manque")) return "Il te manque des produits pour cette commande.";
-  if (m.includes("niveau maximum")) return "Déjà au niveau maximum.";
-  if (m.includes("marché plein")) return "Le marché est plein : personne n'en veut pour l'instant.";
-  if (m.includes("rupture")) return "Rupture : personne n'en a vendu au marché.";
-  if (m.includes("pas assez au marché")) return "Il n'y en a plus autant au marché.";
-  if (m.includes("jeton inconnu")) return "Ta clé de ferme n'est plus valable.";
-  if (/fetch|network|Failed/i.test(m)) return "Pas de connexion. Réessaie dans un instant.";
-  return "Oups, ça n'a pas marché. Réessaie.";
-};
-const rpc = async (fn, args) => { const { data, error } = await db().rpc(fn, args); if (error) throw error; return data; };
+  const U = [[1e18, "Qi"], [1e15, "Q"], [1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "K"]];
+  for (const [v, u] of U) if (a >= v){ const x = n / v; return (x < 100 ? Math.floor(x * 10) / 10 : Math.floor(x)).toLocaleString("fr-FR") + u; }
+  return String(Math.floor(n));
+}
+const fmtP = p => p >= 100 ? fmtN(p) : (Math.round(p * 10) / 10).toLocaleString("fr-FR", { minimumFractionDigits: p < 10 ? 1 : 0 });
+const fmtT = ms => { const s = Math.max(0, Math.ceil(ms / 1000)); const m = Math.floor(s / 60), r = s % 60; if (m >= 60) return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`; return `${m}:${String(r).padStart(2, "0")}`; };
+const fmtAgo = t => { const m = Math.round((now() - t) / 60000); if (m < 1) return "à l'instant"; if (m < 60) return `il y a ${m} min`; const h = Math.round(m / 60); if (h < 24) return `il y a ${h} h`; return `il y a ${Math.round(h / 24)} j`; };
+const COIN = `<i class="b2-coin" aria-hidden="true"></i>`;
+const WOOD = `<span class="b2-e" aria-hidden="true">🪵</span>`;
+const price = c => `${c.coins ? `${COIN}${fmtN(c.coins)}` : ""}${c.wood ? ` ${WOOD}${fmtN(c.wood)}` : ""}`;
+const seen = k => S && S.seen && S.seen[k];
+const markSeen = k => { if (S){ S.seen[k] = 1; dirty = true; } };
 
-/* =================== Petits effets =================== */
 let actx = null;
 function sound(kind){
   try{
     if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
     const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
-    const f = kind === "coin" ? [988, 1319] : kind === "gold" ? [784, 1568] : [660, 880];
-    o.type = kind === "coin" ? "square" : "sine";
-    o.frequency.setValueAtTime(f[0], t); o.frequency.setValueAtTime(f[1], t + 0.06);
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(kind === "coin" ? 0.05 : 0.09, t + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + (kind === "gold" ? 0.5 : 0.18));
-    o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + 0.55);
+    const f = { coin:[988, 1319], up:[523, 784], tap:[440, 520], done:[659, 988], err:[220, 180] }[kind] || [660, 880];
+    o.type = kind === "coin" ? "square" : kind === "err" ? "sawtooth" : "triangle";
+    o.frequency.setValueAtTime(f[0], t); o.frequency.setValueAtTime(f[1], t + 0.07);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(kind === "coin" ? 0.035 : 0.06, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + (kind === "done" ? 0.4 : 0.18));
+    o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + 0.45);
   }catch(e){}
 }
 const buzz = ms => { try{ navigator.vibrate && navigator.vibrate(ms); }catch(e){} };
 function toast(html, kind){
-  document.getElementById("bn-toast")?.remove();
-  document.body.insertAdjacentHTML("beforeend", `<div id="bn-toast" class="bn-toast ${kind || ""}" role="status">${html}</div>`);
-  requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById("bn-toast")?.classList.add("on")));
-  clearTimeout(toast.t); toast.t = setTimeout(() => { const t = document.getElementById("bn-toast"); if (t){ t.classList.remove("on"); setTimeout(() => t.remove(), 400); } }, 2600);
+  const w = wrapEl || document.body;
+  w.querySelector("#b2-toast")?.remove();
+  w.insertAdjacentHTML("beforeend", `<div id="b2-toast" class="b2-toast ${kind || ""}" role="status">${html}</div>`);
+  requestAnimationFrame(() => requestAnimationFrame(() => w.querySelector("#b2-toast")?.classList.add("on")));
+  clearTimeout(toast.t); toast.t = setTimeout(() => { const t = w.querySelector("#b2-toast"); if (t){ t.classList.remove("on"); setTimeout(() => t.remove(), 400); } }, 2800);
 }
-function floatText(x, y, text, gold){
-  const d = document.createElement("div");
-  d.className = "bn-float" + (gold ? " gold" : ""); d.textContent = text;
-  d.style.left = x + "px"; d.style.top = y + "px";
-  document.body.appendChild(d); setTimeout(() => d.remove(), 1000);
+// des pièces qui volent jusqu'au porte-monnaie
+function coinsFly(fromEl, n){
+  try{
+    const hud = wrapEl && wrapEl.querySelector('[data-live="coins"]'); if (!hud || !fromEl) return;
+    const a = fromEl.getBoundingClientRect(), b = hud.getBoundingClientRect();
+    const k = Math.min(8, Math.max(3, n || 5));
+    for (let i = 0; i < k; i++){
+      const c = document.createElement("i"); c.className = "b2-coin b2-fly";
+      c.style.left = (a.left + a.width / 2 - 9 + (Math.random() - .5) * 40) + "px"; c.style.top = (a.top + a.height / 2 - 9) + "px";
+      c.style.setProperty("--dx", (b.left - a.left - a.width / 2 + 10) + "px"); c.style.setProperty("--dy", (b.top - a.top - a.height / 2 + 4) + "px");
+      c.style.animationDelay = (i * 55) + "ms";
+      document.body.appendChild(c); setTimeout(() => c.remove(), 1100 + i * 55);
+    }
+    setTimeout(() => { hud.closest(".b2-pill")?.classList.remove("bump"); void hud.offsetWidth; hud.closest(".b2-pill")?.classList.add("bump"); }, 650);
+  }catch(e){}
 }
+function floatText(el, text, cls){
+  try{
+    const r = el.getBoundingClientRect(), d = document.createElement("div");
+    d.className = "b2-float " + (cls || ""); d.textContent = text;
+    d.style.left = (r.left + r.width / 2) + "px"; d.style.top = (r.top + 6) + "px";
+    document.body.appendChild(d); setTimeout(() => d.remove(), 1100);
+  }catch(e){}
+}
+function bounce(el){ if (!el) return; el.classList.remove("b2-pop"); void el.offsetWidth; el.classList.add("b2-pop"); }
 
-/* =================== Styles =================== */
-const CSS = `
-.bn-wrap{position:fixed;inset:0;z-index:74;background:var(--bg);color:var(--label);overflow-y:auto;-webkit-overflow-scrolling:touch;font-family:var(--f);animation:bn-in .3s ease}
-@keyframes bn-in{from{opacity:0;transform:translateY(16px)}}
-.bn-wrap .bn-in{max-width:520px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 12px) 16px calc(env(safe-area-inset-bottom,0px) + 28px)}
-.bn-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
-.bn-top button{border:0;background:var(--fill2);color:var(--label);cursor:pointer;-webkit-tap-highlight-color:transparent}
-.bn-top .bn-back{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:8px 14px 8px 10px;font:600 15px var(--f);color:var(--accent)}
-.bn-top .bn-x{width:40px;height:40px;border-radius:50%;font-size:20px}
-.bn{display:flex;flex-direction:column;gap:14px;padding-bottom:12px;-webkit-user-select:none;user-select:none}
-.bn h1{margin:0;font-family:var(--f-display);font-style:italic;font-weight:400;font-size:40px;line-height:1}
-.bn .bn-sub{margin:0;color:var(--label2);font-size:15px;line-height:1.4}
-.bn-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
-.bn-purse{display:flex;align-items:center;gap:6px;background:var(--card);border-radius:999px;padding:7px 13px;font:700 17px var(--f);font-variant-numeric:tabular-nums;box-shadow:0 1px 3px rgba(0,0,0,.08);white-space:nowrap}
-.bn-purse.bump{animation:bn-bump .5s ease}
-@keyframes bn-bump{40%{transform:scale(1.15)}}
-.bn-who{display:flex;align-items:center;gap:8px;color:var(--label2);font-size:14px;margin-top:-6px}
-.bn-chip{background:var(--fill2);color:var(--accent);border-radius:999px;padding:3px 10px;font-weight:600;font-size:13px}
-/* Scène */
-.bn-scene{position:relative;border-radius:22px;overflow:hidden;aspect-ratio:16/11;touch-action:none;box-shadow:0 2px 10px rgba(60,20,10,.12)}
-.bn-scene svg.bn-bg{position:absolute;inset:0;width:100%;height:100%;display:block}
-.bn-animal{position:absolute;font-size:30px;line-height:1;transform:translate(-50%,-50%);pointer-events:none;filter:drop-shadow(0 2px 1px rgba(0,0,0,.15))}
-.bn-animal.w{animation:bn-walk var(--d,14s) ease-in-out infinite alternate;animation-delay:var(--dl,0s)}
-.bn-animal.s{animation:bn-sway 3.5s ease-in-out infinite alternate;animation-delay:var(--dl,0s);transform-origin:50% 100%}
-.bn-animal.f{animation:bn-fly 6s ease-in-out infinite;animation-delay:var(--dl,0s);font-size:20px}
-@keyframes bn-walk{0%{transform:translate(-50%,-50%) translateX(var(--a,-40px)) scaleX(1)}49%{transform:translate(-50%,-50%) translateX(var(--b,40px)) scaleX(1)}50%{transform:translate(-50%,-50%) translateX(var(--b,40px)) scaleX(-1)}100%{transform:translate(-50%,-50%) translateX(var(--a,-40px)) scaleX(-1)}}
-@keyframes bn-sway{from{transform:translate(-50%,-50%) rotate(-4deg)}to{transform:translate(-50%,-50%) rotate(4deg)}}
-@keyframes bn-fly{0%,100%{transform:translate(-50%,-50%) translate(0,0)}25%{transform:translate(-50%,-50%) translate(22px,-14px)}50%{transform:translate(-50%,-50%) translate(-8px,-24px)}75%{transform:translate(-50%,-50%) translate(-24px,-6px)}}
-.bn-item{position:absolute;transform:translate(-50%,-50%);font-size:26px;line-height:1;border:0;background:none;padding:6px;cursor:pointer;-webkit-tap-highlight-color:transparent;animation:bn-pop .35s ease both;filter:drop-shadow(0 2px 1px rgba(0,0,0,.2))}
-.bn-item .n{position:absolute;right:-2px;bottom:-2px;font:700 11px var(--f);background:var(--card);color:var(--label);border-radius:999px;padding:1px 5px;box-shadow:0 1px 2px rgba(0,0,0,.2)}
-@keyframes bn-pop{from{transform:translate(-50%,-50%) scale(0)}}
-.bn-item.got{animation:bn-got .45s ease forwards;pointer-events:none}
-@keyframes bn-got{to{transform:translate(-50%,-160%) scale(1.3);opacity:0}}
-.bn-item.gold{font-size:34px;filter:drop-shadow(0 0 8px #FFD24A) drop-shadow(0 0 3px #FFB800) sepia(1) saturate(4) hue-rotate(5deg);animation:bn-pop .35s ease both,bn-shine .8s ease-in-out infinite alternate}
-@keyframes bn-shine{to{transform:translate(-50%,-50%) scale(1.15)}}
-.bn-rain{position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(transparent 0 60%,rgba(255,255,255,.55) 60% 100%);background-size:2px 22px;opacity:.35;animation:bn-rain .5s linear infinite;mask-image:linear-gradient(#000,transparent 85%);-webkit-mask-image:linear-gradient(#000,transparent 85%)}
-@keyframes bn-rain{to{background-position:0 22px}}
-.bn-cloud{position:absolute;font-size:34px;opacity:.9;animation:bn-cloud linear infinite;pointer-events:none}
-@keyframes bn-cloud{from{transform:translateX(-80px)}to{transform:translateX(480px)}}
-.bn-scene .bn-tag{position:absolute;left:10px;top:10px;background:rgba(0,0,0,.28);color:#fff;font:600 12px var(--f);border-radius:999px;padding:4px 9px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
-/* Jauge + bouton */
-.bn-gauge{background:var(--card);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.bn-gauge .row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:15px}
-.bn-gauge .row b{font-size:17px;font-variant-numeric:tabular-nums}
-.bn-gauge .row span{color:var(--label2);font-size:14px;text-align:right}
-.bn-bar{height:10px;border-radius:999px;background:var(--fill2);overflow:hidden}
-.bn-bar i{display:block;height:100%;border-radius:999px;background:var(--accent);transition:width .6s ease}
-.bn-gauge.full .bn-bar i{background:#D92D20;animation:bn-blink 1s ease-in-out infinite alternate}
-.bn-gauge.full .row span{color:#D92D20;font-weight:600}
-@keyframes bn-blink{to{opacity:.55}}
-.bn-btn{display:flex;align-items:center;justify-content:center;gap:8px;height:52px;border-radius:15px;border:0;background:var(--accent);color:var(--on-accent);font:600 17px var(--f);width:100%;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.bn-btn:active{transform:scale(.98)}
-.bn-btn[disabled]{opacity:.45;cursor:default;transform:none}
-.bn-btn.ghost{background:var(--fill2);color:var(--accent)}
-.bn-btn.small{height:38px;border-radius:11px;font-size:15px;width:auto;padding:0 14px}
-/* Stock */
-.bn-sec{font:600 13px var(--f);text-transform:uppercase;letter-spacing:.06em;color:var(--label2);margin:6px 4px -6px}
-.bn-list{background:var(--card);border-radius:18px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.bn-line{display:flex;align-items:center;gap:12px;padding:12px 14px}
-.bn-line + .bn-line{border-top:.5px solid var(--sep)}
-.bn-line .ico{font-size:28px;width:34px;text-align:center}
-.bn-line .txt{flex:1;min-width:0}
-.bn-line .txt b{display:block;font-size:16px;font-variant-numeric:tabular-nums}
-.bn-line .txt small{display:block;color:var(--label2);font-size:13px;margin-top:2px}
-.bn-line .txt small.warn{color:#D92D20}
-.bn-empty{padding:16px;color:var(--label2);font-size:15px;text-align:center}
-.bn-hint{background:var(--soft);border-radius:16px;padding:12px 14px;font-size:14px;line-height:1.45;display:flex;gap:10px;align-items:flex-start}
-.bn-hint .i{font-size:20px}
-/* Choix de spécialité */
-.bn-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.bn-card{background:var(--card);border:2px solid transparent;border-radius:18px;padding:14px 12px;text-align:left;display:flex;flex-direction:column;gap:4px;font:inherit;color:var(--label);cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.06);-webkit-tap-highlight-color:transparent}
-.bn-card .big{font-size:36px;line-height:1.1}
-.bn-card b{font-size:17px}
-.bn-card small{color:var(--label2);font-size:13px;line-height:1.35}
-.bn-card.on{border-color:var(--accent);background:var(--fill)}
-.bn-card[disabled]{opacity:.5;cursor:default;filter:grayscale(.7)}
-.bn-card .taken{color:var(--accent);font-weight:600}
-.bn-err{color:#D92D20;font-size:14px;text-align:center;min-height:1em}
-.bn-load{padding:40px 0;text-align:center;color:var(--label2)}
-/* Annonce */
-.bn-ann{position:fixed;inset:0;z-index:90;display:grid;place-items:center;background:rgba(20,8,4,.45);padding:24px;animation:bn-fade .25s ease}
-.bn-ann .box{background:var(--card);color:var(--label);border-radius:24px;max-width:380px;width:100%;padding:22px 20px 18px;text-align:center;animation:bn-up .45s cubic-bezier(.2,1.4,.4,1) both;box-shadow:0 10px 40px rgba(0,0,0,.3)}
-.bn-ann .big{font-size:54px;line-height:1;margin-bottom:8px}
-.bn-ann h2{margin:0 0 8px;font-family:var(--f-display);font-weight:400;font-size:30px}
-.bn-ann p{margin:0 0 16px;color:var(--label2);font-size:15px;line-height:1.45}
-@keyframes bn-fade{from{opacity:0}}
-@keyframes bn-up{from{transform:translateY(30px) scale(.9);opacity:0}}
-.bn-toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 12px);transform:translate(-50%,-140%);z-index:95;background:var(--label);color:var(--bg);font:600 15px var(--f);border-radius:999px;padding:10px 18px;box-shadow:0 6px 20px rgba(0,0,0,.25);transition:transform .35s cubic-bezier(.2,1.3,.4,1);white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
-.bn-toast.on{transform:translate(-50%,0)}
-.bn-toast.gold{background:#E8A500;color:#2A1A00}
-.bn-float{position:fixed;z-index:96;transform:translate(-50%,-50%);font:800 18px var(--f);color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.55);pointer-events:none;animation:bn-floatup 1s ease-out forwards}
-.bn-float.gold{color:#FFD24A;font-size:24px}
-@keyframes bn-floatup{to{transform:translate(-50%,-260%);opacity:0}}
-.bn-chore{position:absolute;transform:translate(-50%,-50%);border:0;background:none;padding:4px;cursor:pointer;-webkit-tap-highlight-color:transparent;display:flex;flex-direction:column;align-items:center;gap:2px;animation:bn-pop .35s ease both;z-index:3}
-.bn-chore .ce{font-size:30px;line-height:1;width:46px;height:46px;display:grid;place-items:center;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.95) 0 52%,rgba(255,255,255,.35) 68%,transparent 72%);box-shadow:0 0 0 3px rgba(232,165,0,.85);animation:bn-wiggle 1.2s ease-in-out infinite}
-.bn-chore .cl{font:700 11px var(--f);background:#fff;color:#3B1F17;border-radius:999px;padding:2px 7px;box-shadow:0 1px 3px rgba(0,0,0,.25);white-space:nowrap}
-.bn-chore .cl i{font-style:normal;color:#CC3F27}
-.bn-chore .cg{color:#2F7D4E}
-.bn-chore.hit .ce{animation:bn-hit .25s ease}
-.bn-chore.done{animation:bn-got .5s ease forwards;pointer-events:none}
-.bn-chore.fox .ce{animation:bn-fox 1.4s ease-in-out infinite}
-.bn-chore.bye{animation:bn-bye .5s ease forwards;pointer-events:none}
-@keyframes bn-wiggle{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(6deg) scale(1.06)}}
-@keyframes bn-hit{50%{transform:scale(.8) rotate(-12deg)}}
-@keyframes bn-fox{0%,100%{transform:translateX(-4px)}50%{transform:translateX(4px) translateY(-3px)}}
-@keyframes bn-bye{to{opacity:0;transform:translate(-50%,-50%) scale(.4)}}
-.bn-combo{position:absolute;right:10px;top:10px;background:#E8A500;color:#2A1A00;font:800 13px var(--f);border-radius:999px;padding:4px 10px;box-shadow:0 2px 6px rgba(0,0,0,.2);transition:opacity .4s,transform .3s;z-index:4}
-.bn-combo.off{opacity:0;transform:scale(.6)}
-.bn-combo.pop{animation:bn-bump .4s ease}
-.bn-main{position:absolute;left:28%;top:56%;transform:translate(-50%,-50%);border:0;background:none;padding:0;width:84px;height:84px;display:grid;place-items:center;font-size:58px;line-height:1;cursor:pointer;-webkit-tap-highlight-color:transparent;z-index:2;filter:drop-shadow(0 3px 2px rgba(0,0,0,.22));touch-action:manipulation}
-.bn-main::before{content:"";position:absolute;inset:6px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.55),transparent 70%)}
-.bn-main span{position:relative;display:block;transition:transform .08s}
-.bn-main.squash span{transform:scale(1.18,.82)}
-.bn-main.tired{filter:grayscale(.6) drop-shadow(0 3px 2px rgba(0,0,0,.22));opacity:.75}
-.bn-main.no span{animation:bn-no .3s ease}
-@keyframes bn-no{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
-.bn-hand{position:absolute;left:36%;top:66%;font-size:34px;pointer-events:none;z-index:3;animation:bn-hand 1.1s ease-in-out infinite}
-@keyframes bn-hand{50%{transform:translate(-8px,-10px) scale(.9)}}
-.bn-energy{position:absolute;left:10px;bottom:10px;z-index:4;display:flex;align-items:center;gap:6px;background:rgba(0,0,0,.32);color:#fff;font:700 12px var(--f);border-radius:999px;padding:4px 10px 4px 7px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);font-variant-numeric:tabular-nums}
-.bn-energy i{display:block;width:54px;height:6px;border-radius:999px;background:rgba(255,255,255,.3);overflow:hidden}
-.bn-energy i b{display:block;height:100%;background:#FFD24A;border-radius:999px;transition:width .3s}
-.bn-quest{background:var(--card);border-radius:18px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);border:2px solid transparent}
-.bn-quest .ico{font-size:26px}
-.bn-quest .txt{flex:1;min-width:0}
-.bn-quest .txt small{display:block;color:var(--label2);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
-.bn-quest .txt b{display:block;font-size:16px;margin:2px 0 6px}
-.bn-quest .bn-bar{height:7px}
-.bn-quest .rw{font:700 14px var(--f);color:var(--accent);white-space:nowrap}
-.bn-quest.ready{border-color:#E8A500;animation:bn-ready 1.2s ease-in-out infinite}
-@keyframes bn-ready{50%{box-shadow:0 0 0 6px rgba(232,165,0,.18)}}
-.bn-quest.ready .bn-btn{background:#E8A500;color:#2A1A00}
-.bn-tabs{display:flex;background:var(--fill2);border-radius:13px;padding:3px;gap:3px;margin-top:-4px}
-.bn-tabs button{flex:1;border:0;background:none;border-radius:10px;padding:9px 6px;font:600 15px var(--f);color:var(--label2);cursor:pointer;-webkit-tap-highlight-color:transparent}
-.bn-tabs button[aria-pressed="true"]{background:var(--card);color:var(--label);box-shadow:0 1px 3px rgba(0,0,0,.12)}
-.bn-tabs i{font-style:normal;background:#E8A500;color:#2A1A00;border-radius:999px;padding:1px 7px;font-size:12px;margin-left:2px}
-.bn-crier{background:linear-gradient(135deg,#FCEBD6,#FBE3D3);color:#3B1F17;border-radius:18px;padding:14px;display:flex;gap:12px;align-items:center}
-.bn-crier .big{font-size:34px}
-.bn-crier b{display:block;font-size:16px}
-.bn-crier small{display:block;font-size:13px;color:#7A5A4C;margin-top:2px}
-.bn-order{background:var(--card);border-radius:18px;padding:12px 14px;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;flex-direction:column;gap:10px;border:2px solid transparent}
-.bn-order.ok{border-color:#E8A500}
-.bn-order.won{opacity:.6}
-.bn-order .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.bn-order .top b{font-size:18px;color:var(--accent);font-variant-numeric:tabular-nums}
-.bn-order .top small{color:var(--label2);font-size:13px}
-.bn-order .its{display:flex;flex-wrap:wrap;gap:6px}
-.bn-order .it{display:inline-flex;align-items:center;gap:4px;background:var(--fill);border-radius:10px;padding:5px 9px;font-size:14px;font-variant-numeric:tabular-nums}
-.bn-order .it.miss{background:rgba(217,45,32,.1);color:#B42318}
-.bn-order .it.have{background:rgba(47,125,78,.12);color:#2F7D4E}
-.bn-order .it .star{font-size:11px}
-.bn-stall{display:grid;grid-template-columns:32px 1fr auto;grid-template-areas:"ico txt pr" "ico sp acts";align-items:center;gap:6px 10px;padding:12px 14px}
-.bn-stall + .bn-stall{border-top:.5px solid var(--sep)}
-.bn-stall .ico{grid-area:ico;font-size:28px;width:32px;text-align:center;align-self:start;margin-top:2px}
-.bn-stall .txt{grid-area:txt;min-width:0}
-.bn-stall .txt b{display:block;font-size:16px}
-.bn-stall .txt small{display:block;color:var(--label2);font-size:12px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bn-stall .pr{grid-area:pr;text-align:right}
-.bn-stall .pr b{display:block;font-size:16px;font-variant-numeric:tabular-nums}
-.bn-stall .pr small{display:block;font:700 12px var(--f)}
-.bn-stall .up{color:#2F7D4E}.bn-stall .down{color:#D92D20}.bn-stall .flat{color:var(--label2)}
-.bn-stall svg{grid-area:sp;width:100%;height:28px}
-.bn-stall .acts{grid-area:acts;display:flex;gap:6px}
-.bn-stall .acts .bn-btn{height:32px;font-size:13px;padding:0 11px;border-radius:9px}
-.bn-sheet{position:fixed;inset:0;z-index:92;display:flex;align-items:flex-end;justify-content:center;background:rgba(20,8,4,.4);animation:bn-fade .2s ease}
-.bn-sheet .box{background:var(--card);color:var(--label);width:100%;max-width:520px;border-radius:24px 24px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 18px);animation:bn-sheetup .3s cubic-bezier(.2,1.1,.4,1) both;display:flex;flex-direction:column;gap:14px}
-@keyframes bn-sheetup{from{transform:translateY(100%)}}
-.bn-sheet h2{margin:0;font-family:var(--f-display);font-weight:400;font-size:28px}
-.bn-sheet .sub{margin:-8px 0 0;color:var(--label2);font-size:14px}
-.bn-qty{display:flex;gap:8px;flex-wrap:wrap}
-.bn-qty button{flex:1;min-width:60px;height:44px;border-radius:12px;border:2px solid var(--sep);background:var(--bg);color:var(--label);font:700 15px var(--f);cursor:pointer}
-.bn-qty button[aria-pressed="true"]{border-color:var(--accent);background:var(--fill);color:var(--accent)}
-.bn-qty button[disabled]{opacity:.35}
-.bn-total{display:flex;justify-content:space-between;font-size:16px}
-.bn-total b{font-variant-numeric:tabular-nums}
-.bn-stall .txt small.lv{display:flex;align-items:center;gap:6px;font-weight:600}
-.bn-stall .txt small.lv i{display:block;width:44px;height:5px;border-radius:999px;background:var(--fill2);overflow:hidden;flex:none}
-.bn-stall .txt small.lv i b{display:block;height:100%;background:var(--accent);border-radius:999px}
-.bn-baron{background:linear-gradient(135deg,#FFE7A3,#F6C945);color:#2A1A00;border-radius:22px;padding:18px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 16px rgba(232,165,0,.3)}
-.bn-baron .big{font-size:52px;line-height:1;animation:bn-shine 1.6s ease-in-out infinite alternate}
-.bn-baron small{display:block;font:700 12px var(--f);text-transform:uppercase;letter-spacing:.06em;opacity:.7}
-.bn-baron b{display:block;font-family:var(--f-display);font-weight:400;font-size:34px;line-height:1.05}
-.bn-baron span{display:block;font-size:14px;margin-top:3px}
-.bn-rank{display:grid;grid-template-columns:28px 1fr auto;gap:2px 10px;align-items:center;padding:12px 14px}
-.bn-rank + .bn-rank{border-top:.5px solid var(--sep)}
-.bn-rank .n{grid-row:span 2;font:800 18px var(--f);color:var(--label2);text-align:center}
-.bn-rank.me{background:var(--fill)}
-.bn-rank b{font-size:16px}
-.bn-rank .chip{font:700 11px var(--f);background:var(--fill2);color:var(--accent);border-radius:999px;padding:2px 8px;margin-left:6px;vertical-align:2px}
-.bn-rank .chip.baron{background:#F6C945;color:#2A1A00}
-.bn-rank .f{font:800 16px var(--f);font-variant-numeric:tabular-nums;text-align:right}
-.bn-rank small{grid-column:2 / 4;color:var(--label2);font-size:12px;font-variant-numeric:tabular-nums}
-.bn-titles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.bn-title{background:var(--card);border-radius:16px;padding:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.bn-title .e{font-size:26px}
-.bn-title small{display:block;color:var(--label2);font-size:12px;font-weight:600;margin-top:4px}
-.bn-title b{display:block;font-size:16px;margin-top:2px}
-.bn-title span{display:block;color:var(--label2);font-size:12px;margin-top:1px;font-variant-numeric:tabular-nums}
-.bn-ups{background:var(--card);border-radius:18px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.bn-up{display:grid;grid-template-columns:34px 1fr auto;gap:2px 10px;align-items:center;padding:12px 14px}
-.bn-up + .bn-up{border-top:.5px solid var(--sep)}
-.bn-up .ico{grid-row:span 3;font-size:26px;text-align:center;align-self:start}
-.bn-up b{font-size:15px}
-.bn-up .dots{font-size:10px;letter-spacing:2px;color:var(--accent);margin-left:6px;vertical-align:1px}
-.bn-up .eff{grid-column:2;color:var(--label2);font-size:13px}
-.bn-up .cost{grid-column:2;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
-.bn-up .cost .no{color:#D92D20}
-.bn-up .bn-btn{grid-column:3;grid-row:1 / span 3}
-.bn-buy{background:var(--card);border-radius:18px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.bn-buy .ico{font-size:30px}
-.bn-buy .txt{flex:1;min-width:0}
-.bn-buy .txt b{display:block;font-size:16px}
-.bn-buy .txt small{display:block;color:var(--label2);font-size:13px;margin-top:2px}
-@media (prefers-reduced-motion: reduce){.bn-animal,.bn-cloud,.bn-rain,.bn-chore .ce{animation:none!important}}
-`;
-const st = document.createElement("style"); st.id = "bn-style"; st.textContent = CSS; document.head.appendChild(st);
+/* =================== Serveur =================== */
+const db = () => Q.store().client;
+const TOKEN = "bn2_token";
+const getToken = () => { try{ return localStorage.getItem(TOKEN) || null; }catch(e){ return null; } };
+const setToken = t => { try{ t ? localStorage.setItem(TOKEN, t) : localStorage.removeItem(TOKEN); }catch(e){} };
+const rpc = async (fn, args) => { const { data, error } = await db().rpc(fn, args); if (error) throw error; return data; };
+let chain = Promise.resolve();
+const queue = fn => { const p = chain.then(fn); chain = p.catch(() => {}); return p; };
+const errText = e => {
+  const m = String((e && (e.message || e.error_description)) || e || "");
+  if (m.includes("spécialité prise")) return "Quelqu'un vient de prendre cette spécialité. Choisis-en une autre.";
+  if (m.includes("partie complète")) return "Les 6 places sont prises.";
+  if (m.includes("déjà inscrit")) return "Tu as déjà une ferme, mais ce téléphone n'a pas ta clé. Demande à Naïm de te la redonner.";
+  if (m.includes("offre changée")) return "Cette offre vient de changer. Regarde les nouvelles offres.";
+  if (m.includes("ta propre offre")) return "C'est ta propre offre : retire-la plutôt.";
+  if (m.includes("jeton inconnu")) return "Ta clé de ferme n'est plus valable.";
+  if (/fetch|network|Failed|Load failed/i.test(m)) return "Pas de connexion. Réessaie dans un instant.";
+  return "Ça n'a pas marché. Réessaie.";
+};
 
 /* =================== État =================== */
-let S = null;               // dernier état renvoyé par le serveur
-let fetchedAt = 0;          // Date.now() à la réception
-let collected = 0;          // produits ramassés au doigt, pas encore envoyés au serveur
-let harvestTimer = null, busy = false, golden = null, rootEl = null, picking = null, pickData = null;
+let S = null, ME = null, W = { players:[], listings:[], trades:[], at:0 };
+let dirty = false, lastSave = 0, lastTick = 0, saving = false, loopT = null, wrapEl = null, view = "farm";
+let mkt = { k: null, period: "24h" };
 
-function farm(){ return S && S.farms && S.farms[0]; }
-function livePending(){
-  const f = farm(); if (!f) return 0;
-  const v = Number(f.pending) + Number(f.rate_per_h) * (Date.now() - fetchedAt) / 3600000;
-  return Math.min(Number(f.cap), v);
+function publicStats(){
+  return { fortune: BX.fortune(S), prod: Math.round(BX.prodValue(S) * 100) / 100, baked: Math.floor(S.stats.baked), orders: S.stats.orders,
+    traded: Math.floor(S.stats.sold + S.stats.bought), farms: Object.keys(S.farms), parcels: S.farms[S.spec].parcels.length };
 }
-function setState(s){ S = s; fetchedAt = Date.now(); try{ localStorage.setItem("bn_coins", String(s.player.coins)); }catch(e){} }
+function applyCredits(list){
+  const msgs = [];
+  (list || []).slice().sort((a, b) => a.id - b.id).forEach(c => {
+    if (+c.id <= (S.credit_seen || 0)) return;
+    S.coins += +c.coins || 0; S.stats.sold += +c.coins || 0; S.stats.earned += +c.coins || 0;
+    S.credit_seen = +c.id; dirty = true;
+    msgs.push(c);
+  });
+  if (msgs.length){
+    const tot = msgs.reduce((a, c) => a + (+c.coins || 0), 0);
+    const c = msgs[msgs.length - 1];
+    toast(msgs.length === 1 ? `${esc(c.buyer || "Quelqu'un")} t'a acheté ${fmtN(c.qty)} ${P[c.product]?.e || ""} : +${COIN}${fmtN(tot)}` : `${msgs.length} ventes au marché : +${COIN}${fmtN(tot)}`, "gold");
+    sound("coin");
+  }
+}
+function fixState(s){
+  BX.ALL.forEach(k => { if (typeof s.stock[k] !== "number") s.stock[k] = 0; });
+  s.stats = Object.assign({ produced:0, invested:0, baked:0, orders:0, sold:0, bought:0, earned:0, villageSold:0 }, s.stats || {});
+  s.seen = s.seen || {}; s.oven = s.oven || { lvl:0, slots:[] }; s.orders = s.orders || { slot:0, list:[], prog:{} };
+  s.reserve = s.reserve || { slot:0, used:{} }; if (!s.farms[s.cur]) s.cur = s.spec;
+  return s;
+}
+async function load(){
+  const r = await queue(() => rpc("baron2_load", { p_token: getToken() }));
+  ME = r.me;
+  S = fixState(r.state && r.state.farms ? r.state : BX.newState(ME.specialty, now()));
+  const gained = BX.catchUp(S, now());
+  applyCredits(r.credits);
+  lastTick = now();
+  return gained;
+}
+async function save(force){
+  if (!S || saving) return;
+  if (!force && !dirty && now() - lastSave < 60000) return;
+  saving = true; dirty = false;
+  try{
+    const r = await queue(() => rpc("baron2_save", { p_token: getToken(), p_state: S, p_stats: publicStats() }));
+    lastSave = now(); applyCredits(r && r.credits);
+  }catch(e){ dirty = true; }
+  saving = false;
+}
+async function loadWorld(force){
+  if (!force && now() - W.at < 25000) return;
+  try{
+    const r = await rpc("baron2_world", {});
+    W = { players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
+    if (S && BX.ensureOrders(S, now(), ME.id, groupProd())) dirty = true;
+    if (wrapEl && (view === "market" || view === "village")) draw();
+  }catch(e){}
+}
+const groupProd = () => {
+  const p = W.players.map(x => +(x.stats && x.stats.prod) || 0).filter(x => x > 0);
+  return p.length ? p.reduce((a, b) => a + b, 0) / p.length : 0;
+};
+const nameOf = id => (W.players.find(p => p.id === id) || {}).name || "Un voisin";
 
-/* =================== Ouverture depuis l'Arcade =================== */
+/* =================== Styles =================== */
+const STYLE = `
+.b2-wrap{--sky1:#9ED6EE;--sky2:#FFE3BC;--grass:#86C35A;--grass2:#5E9E3C;--wood:#B07240;--wood2:#7C4A24;--woodl:#DDA468;
+  --paper:#FFF4E0;--paper2:#F7E3C2;--ink:#3B1F17;--ink2:#7A5A4C;--ink3:rgba(59,31,23,.45);--red:#CC3F27;--red2:#9E3320;--gold:#F2B33D;--gold2:#C98A12;
+  --up:#2F9E57;--up2:#1F7A40;--down:#D9442B;--board:#20372C;--board2:#2A4538;--chalk:#EFEADB;--chalk2:rgba(239,234,219,.6);
+  --round:ui-rounded,"SF Pro Rounded","Nunito",system-ui,-apple-system,sans-serif;--disp:"Instrument Serif",ui-serif,Georgia,serif;
+  position:fixed;inset:0;z-index:74;background:#F3E3C7;color:var(--ink);font-family:var(--f,system-ui);overflow:hidden;
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;animation:b2-in .3s ease;display:flex;flex-direction:column}
+@keyframes b2-in{from{opacity:0;transform:translateY(14px)}}
+.b2-wrap button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;-webkit-tap-highlight-color:transparent}
+.b2-wrap :focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.b2-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.b2-col{max-width:520px;margin:0 auto;position:relative}
+.b2-pad{padding:14px 16px 24px}
+
+/* barre du haut : argent et bois toujours visibles */
+.b2-hud{position:relative;z-index:5;padding:calc(env(safe-area-inset-top,0px) + 8px) 12px 8px;background:linear-gradient(#5B3519,#6E4222);box-shadow:0 2px 0 #3E220F,0 6px 14px rgba(0,0,0,.18)}
+.b2-hud .b2-col{display:flex;align-items:center;gap:8px}
+.b2-hbtn{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,.12)!important;color:#FBEFE0!important;font-size:20px!important;display:grid;place-items:center;flex:none}
+.b2-pill{display:flex;align-items:center;gap:6px;background:#2E1A0C;border-radius:999px;padding:5px 12px 5px 6px;color:#FFF3DE;font:800 17px var(--round);font-variant-numeric:tabular-nums;box-shadow:inset 0 2px 3px rgba(0,0,0,.4)}
+.b2-pill.bump{animation:b2-bump .45s ease}
+@keyframes b2-bump{40%{transform:scale(1.14)}}
+.b2-pill .b2-coin{width:22px;height:22px}
+.b2-pill .b2-e{font-size:18px}
+.b2-hud .b2-sp{flex:1}
+.b2-coin{display:inline-block;width:15px;height:15px;border-radius:50%;vertical-align:-2px;margin-right:3px;flex:none;
+  background:radial-gradient(circle at 35% 30%,#FFE9A6 0 18%,#F6C543 30%,#D9940F 75%);box-shadow:inset 0 0 0 2px #B97A0C,inset 0 0 0 3.5px #FFD15C}
+.b2-e{font-size:14px;margin-right:2px}
+.b2-fly{position:fixed;z-index:95;width:18px;height:18px;pointer-events:none;animation:b2-fly .9s cubic-bezier(.5,-.3,.7,1) forwards}
+@keyframes b2-fly{0%{transform:translate(0,0) scale(.6);opacity:0}15%{transform:translate(0,-28px) scale(1.1);opacity:1}100%{transform:translate(var(--dx),var(--dy)) scale(.7);opacity:.9}}
+.b2-float{position:fixed;z-index:95;transform:translateX(-50%);font:900 18px var(--round);color:#fff;text-shadow:0 2px 0 var(--up2),0 0 8px rgba(0,0,0,.25);pointer-events:none;animation:b2-up 1.05s ease forwards}
+.b2-float.gold{color:#FFE08A;text-shadow:0 2px 0 #9B6700}
+@keyframes b2-up{to{transform:translate(-50%,-46px);opacity:0}}
+.b2-pop{animation:b2-pop .32s cubic-bezier(.3,1.6,.5,1)}
+@keyframes b2-pop{40%{transform:scale(.92)}70%{transform:scale(1.05)}}
+
+/* barre d'onglets (planche de bois) */
+.b2-tabs{position:relative;z-index:5;background:linear-gradient(#7C4A24,#5E3517);box-shadow:0 -2px 0 #9A6334 inset,0 -6px 14px rgba(0,0,0,.15);padding:6px 6px calc(env(safe-area-inset-bottom,0px) + 6px)}
+.b2-tabs .b2-col{display:flex;gap:4px}
+.b2-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;padding:6px 2px 5px;border-radius:12px;color:#F5DFC2!important;font:700 12px var(--round)!important;position:relative}
+.b2-tab .i{font-size:23px;line-height:1.1;filter:saturate(.85)}
+.b2-tab.on{background:#F3E3C7!important;color:var(--ink)!important;box-shadow:0 3px 0 #C9A57A}
+.b2-tab.locked{opacity:.45}
+.b2-tab.locked .i{filter:grayscale(1)}
+.b2-tab .dot{position:absolute;top:4px;right:calc(50% - 20px);width:10px;height:10px;border-radius:50%;background:var(--red);box-shadow:0 0 0 2px #6E4222}
+
+/* boutons de jeu */
+.b2-btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;border-radius:12px!important;padding:8px 12px;font:800 14px var(--round)!important;white-space:nowrap;
+  background:var(--up)!important;color:#fff!important;box-shadow:0 3px 0 var(--up2);transition:transform .08s}
+.b2-btn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--up2)}
+.b2-btn .b2-coin{width:14px;height:14px}
+.b2-btn.no{background:#BFA88C!important;box-shadow:0 3px 0 #9C8468;color:#F7EEE2!important}
+.b2-btn.gold{background:var(--gold)!important;color:#4A2C00!important;box-shadow:0 3px 0 var(--gold2)}
+.b2-btn.red{background:var(--red)!important;box-shadow:0 3px 0 var(--red2)}
+.b2-btn.ghost{background:rgba(59,31,23,.08)!important;color:var(--ink)!important;box-shadow:none}
+.b2-btn.big{padding:13px 18px;font-size:16px!important;border-radius:16px!important;width:100%}
+.b2-btn[disabled]{opacity:.55;pointer-events:none}
+
+/* ======== FERME ======== */
+.b2-farm{background:#5B3A21}
+.b2-sky{position:relative;height:232px;overflow:hidden;background:linear-gradient(var(--sky1),var(--sky2) 78%)}
+.b2-sky .sun{position:absolute;left:22px;top:18px;width:46px;height:46px;border-radius:50%;background:radial-gradient(#FFF3B0,#FFC94D 60%,rgba(255,201,77,0) 72%);box-shadow:0 0 30px 8px rgba(255,214,110,.55)}
+.b2-cloud{position:absolute;height:18px;background:#fff;border-radius:20px;opacity:.85;animation:b2-cloud linear infinite}
+.b2-cloud::before,.b2-cloud::after{content:"";position:absolute;background:#fff;border-radius:50%}
+.b2-cloud::before{width:24px;height:24px;left:10px;top:-11px}.b2-cloud::after{width:18px;height:18px;left:28px;top:-7px}
+@keyframes b2-cloud{from{transform:translateX(-90px)}to{transform:translateX(560px)}}
+.b2-hills{position:absolute;left:0;right:0;bottom:44px;height:70px}
+.b2-ground{position:absolute;left:0;right:0;bottom:0;height:50px;background:linear-gradient(var(--grass) 0 30%,var(--grass2) 30% 36%,#C9965E 36% 100%)}
+.b2-road{position:absolute;left:0;right:0;bottom:8px;height:18px;background:repeating-linear-gradient(90deg,#B98552 0 18px,#B07D4A 18px 30px);border-top:2px solid #9C6A3B}
+.b2-barn{position:absolute;right:10px;bottom:30px;width:150px}
+.b2-barn svg{display:block;width:100%}
+.b2-gauge{position:absolute;right:16px;bottom:166px;width:138px}
+.b2-gbar{height:12px;border-radius:999px;background:rgba(59,31,23,.25);overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,.25)}
+.b2-gbar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#F6C543,#F2873B);transition:width .5s}
+.b2-gbar.full i{background:var(--down);animation:b2-blink 1s infinite}
+@keyframes b2-blink{50%{opacity:.55}}
+.b2-glab{display:flex;justify-content:space-between;font:800 11.5px var(--round);color:var(--ink);margin-bottom:3px;text-shadow:0 1px 0 rgba(255,255,255,.6)}
+.b2-cartlane{position:absolute;left:60px;right:150px;bottom:14px;height:44px}
+.b2-cart{position:absolute;left:0;bottom:0;width:62px;animation:b2-cart 8s ease-in-out infinite}
+.b2-cart svg{display:block;width:100%}
+.b2-cart .wheel{transform-box:fill-box;transform-origin:center;animation:b2-spin .8s linear infinite}
+@keyframes b2-cart{0%,6%{left:0;transform:scaleX(1)}46%{left:calc(100% - 62px);transform:scaleX(1)}50%,56%{left:calc(100% - 62px);transform:scaleX(-1)}96%{left:0;transform:scaleX(-1)}100%{left:0;transform:scaleX(1)}}
+@keyframes b2-spin{to{transform:rotate(360deg)}}
+.idle .b2-cart,.idle .b2-cart .wheel,.idle .b2-cab,.idle.b2-cab{animation-play-state:paused}
+.b2-quai{position:absolute;left:8px;bottom:28px;width:56px;text-align:center}
+.b2-quai .sacks{display:flex;flex-wrap:wrap-reverse;justify-content:center;gap:1px;min-height:18px}
+.b2-quai .sk{width:13px;height:11px;border-radius:5px 5px 4px 4px;background:#E7C48B;box-shadow:inset 0 -2px 0 #C79B5C}
+.b2-tag{display:inline-block;background:rgba(59,31,23,.78);color:#FFF3DE;border-radius:8px;padding:2px 6px;font:800 11px var(--round);font-variant-numeric:tabular-nums}
+.b2-tag.warn{background:var(--down)}
+.b2-farmsw{position:absolute;left:78px;top:12px;display:flex;gap:6px}
+.b2-farmsw button{background:rgba(255,255,255,.75)!important;border-radius:999px;padding:4px 10px;font:800 13px var(--round)!important}
+.b2-farmsw button.on{background:var(--ink)!important;color:#FFF3DE!important}
+
+/* panneaux en bois (charrette, monte-charge, parcelles) */
+.b2-sign{position:relative;background:linear-gradient(180deg,#E9BC84,#D9A066);border-radius:12px;padding:8px 10px;color:var(--ink);
+  box-shadow:0 3px 0 #9A6334,inset 0 1px 0 rgba(255,255,255,.35);background-image:repeating-linear-gradient(0deg,rgba(124,74,36,.07) 0 2px,transparent 2px 9px),linear-gradient(180deg,#EDC28C,#D9A066)}
+.b2-sign::before,.b2-sign::after{content:"";position:absolute;top:7px;width:5px;height:5px;border-radius:50%;background:#7C4A24;box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+.b2-sign::before{left:6px}.b2-sign::after{right:6px}
+.b2-sign h3{margin:0;font:400 italic 20px/1 var(--disp);color:var(--ink)}
+.b2-sign .meta{font:800 12.5px var(--round);color:var(--ink2);font-variant-numeric:tabular-nums}
+.b2-sign .row{display:flex;align-items:center;gap:8px}
+.b2-sign .row + .row{margin-top:6px}
+.b2-sign .sp{flex:1;min-width:0}
+.b2-lvl{display:inline-grid;place-items:center;min-width:30px;height:22px;border-radius:7px;background:var(--ink);color:#FFE6B8;font:900 12.5px var(--round);padding:0 6px;font-variant-numeric:tabular-nums}
+.b2-slow{display:inline-block;margin-left:4px;padding:1px 7px;border-radius:6px;background:var(--down);color:#fff;font:900 11px var(--round);animation:b2-blink 1.2s infinite;vertical-align:2px}
+.b2-mgr{width:40px;height:40px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:22px;background:#FFF4E0;box-shadow:0 0 0 2.5px var(--gold),0 2px 0 3px rgba(0,0,0,.12);position:relative}
+.b2-mgr.hire{background:rgba(255,244,224,.55);box-shadow:none;border:2px dashed var(--wood2);font-size:13px;font-weight:900;color:var(--wood2);flex-direction:column;line-height:1;gap:1px}
+.b2-mgr.hire .b2-coin{width:11px;height:11px;margin:0}
+.b2-mgr.can{animation:b2-call 1.6s ease-in-out infinite}
+@keyframes b2-call{50%{box-shadow:0 0 0 5px rgba(242,179,61,.6)}}
+.b2-cartsign{margin:-2px 10px 0;z-index:2}
+
+/* la coupe de terrain */
+.b2-shaft{position:relative;padding:10px 10px 12px 74px}
+.b2-rail{position:absolute;left:12px;top:0;bottom:0;width:50px}
+.b2-rail::before,.b2-rail::after{content:"";position:absolute;top:0;bottom:0;width:7px;background:linear-gradient(90deg,#8C5A30,#5E3517);border-radius:3px}
+.b2-rail::before{left:2px}.b2-rail::after{right:2px}
+.b2-rail .rope{position:absolute;left:24px;top:0;width:2px;height:var(--rope,40px);background:#3E220F}
+.b2-cab{position:absolute;left:6px;top:4px;width:38px;height:36px;animation:b2-lift var(--dur,6s) ease-in-out infinite alternate}
+@keyframes b2-lift{from{transform:translateY(0)}to{transform:translateY(var(--h,300px))}}
+.b2-cab svg{display:block;width:100%}
+.b2-elev{margin:0 0 10px -62px}
+.b2-plot{position:relative;margin-bottom:12px;border-radius:14px;background:var(--soil,#8A5A33);box-shadow:inset 0 2px 0 rgba(255,255,255,.08),0 2px 0 rgba(0,0,0,.25)}
+.b2-plot .art{display:block;width:100%;height:96px;border-radius:14px 14px 0 0;overflow:hidden}
+.b2-plot .art svg{display:block;width:100%;height:100%}
+.b2-plot.idle .art *{animation-play-state:paused!important}
+.b2-plot .b2-sign{margin:-10px 8px 8px}
+.b2-plot .pend{position:absolute;left:-58px;top:26px;width:52px;text-align:center}
+.b2-plot .pend .b2-tag.warn{animation:b2-blink 1s infinite}
+.b2-plot .pend .bag{font-size:24px;line-height:1;filter:drop-shadow(0 2px 0 rgba(0,0,0,.25))}
+.b2-plot .tapme{position:absolute;inset:0 0 auto 0;height:96px;display:grid;place-items:center;pointer-events:none}
+.b2-plot .tapme span{background:rgba(255,255,255,.88);border-radius:999px;padding:6px 12px;font:900 13px var(--round);color:var(--ink);box-shadow:0 3px 10px rgba(0,0,0,.2);animation:b2-hint 1.4s ease-in-out infinite}
+@keyframes b2-hint{50%{transform:scale(1.07)}}
+.b2-plvl{position:absolute;left:8px;top:8px;background:rgba(59,31,23,.82);color:#FFE6B8;border-radius:9px;padding:3px 8px;font:800 11.5px var(--round);pointer-events:none}
+.b2-plvl b{font-size:15px;font-weight:900}
+.b2-plot .runbar{position:absolute;left:0;top:0;height:4px;border-radius:14px 0 0 0;background:#FFE08A;transition:width .25s linear}
+.b2-plot.lvlup::after{content:"";position:absolute;inset:0;border-radius:14px;box-shadow:inset 0 0 0 3px #FFE08A;animation:b2-ring .7s ease-out forwards;pointer-events:none}
+@keyframes b2-ring{from{box-shadow:inset 0 0 0 3px #FFE08A,0 0 0 0 rgba(255,224,138,.8)}to{box-shadow:inset 0 0 0 0 #FFE08A,0 0 0 18px rgba(255,224,138,0)}}
+.b2-locked{position:relative;border-radius:14px;padding:16px 12px;text-align:center;color:#F5E4CC;background:repeating-linear-gradient(135deg,rgba(0,0,0,.12) 0 10px,transparent 10px 20px),#4A2E19;border:2px dashed rgba(245,228,204,.35)}
+.b2-locked h3{margin:2px 0 4px;font:400 italic 22px var(--disp)}
+.b2-locked p{margin:0 0 10px;font:600 13px/1.35 var(--round);color:rgba(245,228,204,.75)}
+.b2-locked .palier{display:inline-block;background:var(--gold);color:#4A2C00;border-radius:6px;padding:1px 8px;font:900 11.5px var(--round);margin-bottom:4px}
+.b2-deep{height:40px;background:linear-gradient(#3B2414,#2A190D)}
+
+/* barre d'actions flottante */
+#b2-dock{position:relative;height:0;z-index:6}
+.b2-dock{position:absolute;left:0;right:0;bottom:0;z-index:4;pointer-events:none;padding:0 12px 10px}
+.b2-dock .b2-col{display:flex;gap:8px;justify-content:center}
+.b2-dock button{pointer-events:auto}
+.b2-act{display:flex;align-items:center;gap:6px;border-radius:999px!important;padding:11px 16px;font:900 15px var(--round)!important;background:#FFF4E0!important;color:var(--ink)!important;box-shadow:0 4px 0 #B98A57,0 8px 18px rgba(0,0,0,.25)}
+.b2-act:active{transform:translateY(2px)}
+.b2-act.main{background:var(--gold)!important;color:#4A2C00!important;box-shadow:0 4px 0 var(--gold2),0 8px 18px rgba(0,0,0,.25)}
+.b2-act.cool{opacity:.7}
+.b2-act .t{font-variant-numeric:tabular-nums;font-size:13px;opacity:.75}
+.b2-act.on{background:#BDE7FF!important;box-shadow:0 4px 0 #6FB4DA,0 8px 18px rgba(0,0,0,.25)}
+
+/* animations des décors */
+.b2-sway{transform-box:fill-box;transform-origin:50% 100%;animation:b2-sway 2.6s ease-in-out infinite}
+@keyframes b2-sway{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
+.b2-peck{transform-box:fill-box;transform-origin:30% 90%;animation:b2-peck 1.6s ease-in-out infinite}
+@keyframes b2-peck{0%,60%,100%{transform:rotate(0)}70%,85%{transform:rotate(22deg)}}
+.b2-chew{transform-box:fill-box;transform-origin:20% 30%;animation:b2-chew 2.2s ease-in-out infinite}
+@keyframes b2-chew{0%,100%{transform:rotate(0)}50%{transform:rotate(7deg)}}
+.b2-ripe{transform-box:fill-box;transform-origin:center;animation:b2-ripe 3s ease-in-out infinite}
+@keyframes b2-ripe{0%,100%{transform:scale(.75)}50%{transform:scale(1.08)}}
+.b2-bee{animation:b2-bee 3.2s linear infinite}
+@keyframes b2-bee{0%{transform:translate(0,0)}25%{transform:translate(14px,-8px)}50%{transform:translate(26px,2px)}75%{transform:translate(10px,8px)}100%{transform:translate(0,0)}}
+.b2-chop{transform-box:fill-box;transform-origin:90% 90%;animation:b2-chop 1.1s ease-in infinite}
+@keyframes b2-chop{0%,100%{transform:rotate(-40deg)}55%{transform:rotate(18deg)}65%{transform:rotate(10deg)}}
+.b2-grow{transform-box:fill-box;transform-origin:50% 100%;animation:b2-grow 5s ease-out infinite}
+@keyframes b2-grow{0%{transform:scaleY(.55)}70%,100%{transform:scaleY(1)}}
+@media (prefers-reduced-motion:reduce){.b2-wrap *,.b2-wrap *::before{animation-duration:0s!important;animation-iteration-count:1!important}}
+
+/* ======== GRANGE (intérieur en planches) ======== */
+.b2-barnin{background:repeating-linear-gradient(90deg,#C88D57 0 46px,#BE8350 46px 48px,#C48A55 48px 94px,#B67B48 94px 96px);min-height:100%}
+.b2-h2{margin:0 0 8px;font:400 italic 28px/1.05 var(--disp);color:var(--ink)}
+.b2-h2 small{display:block;font:700 13px var(--round);font-style:normal;color:var(--ink2);margin-top:3px}
+.b2-paper{background:var(--paper);border-radius:16px;padding:14px;box-shadow:0 3px 0 rgba(124,74,36,.35),0 8px 20px rgba(59,31,23,.12)}
+.b2-paper + .b2-paper{margin-top:14px}
+.b2-cap{display:flex;align-items:center;gap:10px}
+.b2-cap .b2-gbar{flex:1;height:16px}
+.b2-cap b{font:900 15px var(--round);font-variant-numeric:tabular-nums}
+.b2-stock{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:4px}
+.b2-tile{position:relative;background:#FFFAF1;border-radius:14px;padding:10px 6px 8px;text-align:center;box-shadow:0 2px 0 rgba(124,74,36,.25)}
+.b2-tile .ic{font-size:30px;line-height:1.1}
+.b2-tile b{display:block;font:900 16px var(--round);font-variant-numeric:tabular-nums;margin-top:2px}
+.b2-tile small{display:block;font:700 11.5px var(--round);color:var(--ink2)}
+.b2-tile.mine{background:#FFF0C8;box-shadow:0 0 0 2.5px var(--gold),0 2px 0 rgba(124,74,36,.25)}
+.b2-tile.mine::after{content:"Ta spécialité";position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#4A2C00;border-radius:6px;padding:1px 6px;font:900 9.5px var(--round);white-space:nowrap}
+.b2-tile.zero{opacity:.5}
+.b2-oven{display:flex;gap:12px;align-items:flex-end}
+.b2-oven .art{width:120px;flex:none}
+.b2-oven .art svg{display:block;width:100%}
+.b2-flame{transform-box:fill-box;transform-origin:50% 100%;animation:b2-flame .5s ease-in-out infinite alternate}
+@keyframes b2-flame{from{transform:scale(.85,.8)}to{transform:scale(1.05,1.12)}}
+.b2-oven.cold .b2-flame{display:none}
+.b2-slots{display:grid;gap:8px;margin-top:10px}
+.b2-slot{display:flex;align-items:center;gap:10px;background:#FFFAF1;border-radius:12px;padding:8px 10px;box-shadow:0 2px 0 rgba(124,74,36,.2)}
+.b2-slot .ic{font-size:26px}
+.b2-slot .sp{flex:1;min-width:0}
+.b2-slot b{font:800 14px var(--round)}
+.b2-slot .pb{height:8px;border-radius:999px;background:rgba(59,31,23,.12);margin-top:5px;overflow:hidden}
+.b2-slot .pb i{display:block;height:100%;background:linear-gradient(90deg,#F6C543,#F2873B);border-radius:999px}
+.b2-slot .t{font:800 12px var(--round);color:var(--ink2);font-variant-numeric:tabular-nums}
+.b2-slot.free{background:transparent;border:2px dashed rgba(124,74,36,.35);box-shadow:none;color:var(--ink2);font:700 13px var(--round)}
+.b2-rec{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid rgba(124,74,36,.15)}
+.b2-rec:first-of-type{border-top:0}
+.b2-rec .ic{font-size:30px;width:38px;text-align:center}
+.b2-rec .sp{flex:1;min-width:0}
+.b2-rec b{font:800 15px var(--round)}
+.b2-ing{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.b2-ing span{border-radius:7px;padding:2px 6px;font:800 11.5px var(--round);font-variant-numeric:tabular-nums}
+.b2-ing .ok{background:#DDF3E2;color:var(--up2)}
+.b2-ing .ko{background:#FBE0DA;color:var(--down)}
+.b2-note{font:600 13px/1.4 var(--round);color:var(--ink2);margin:6px 0 0}
+.b2-teaser{display:flex;gap:10px;align-items:center;border:2px dashed rgba(59,31,23,.25);border-radius:14px;padding:12px;font:700 13.5px/1.35 var(--round);color:var(--ink2)}
+.b2-teaser .i{font-size:26px;filter:grayscale(.6)}
+
+/* ======== MARCHÉ (le tableau à la craie) ======== */
+.b2-board{background:var(--board);color:var(--chalk);min-height:100%;background-image:radial-gradient(rgba(255,255,255,.035) 1px,transparent 1px);background-size:6px 6px}
+.b2-pills{display:flex;gap:6px;overflow-x:auto;padding:12px 16px 4px;scrollbar-width:none}
+.b2-pills::-webkit-scrollbar{display:none}
+.b2-chip{flex:none;display:flex;flex-direction:column;align-items:flex-start;gap:1px;background:var(--board2)!important;border-radius:12px;padding:7px 10px;color:var(--chalk)!important;min-width:76px;box-shadow:inset 0 0 0 1px rgba(239,234,219,.12)}
+.b2-chip.on{box-shadow:inset 0 0 0 2px var(--chalk)}
+.b2-chip .n{font:800 13px var(--round)}
+.b2-chip .p{font:900 13px var(--round);font-variant-numeric:tabular-nums}
+.b2-chip .c{font:800 11px var(--round);font-variant-numeric:tabular-nums}
+.up{color:#6EE09A}.down{color:#FF8A70}.flat{color:var(--chalk2)}
+.b2-quote{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;padding:8px 0 2px}
+.b2-quote .big{font:900 40px/1 var(--round);font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+.b2-quote .big .b2-coin{width:26px;height:26px;vertical-align:2px}
+.b2-quote .ch{font:900 16px var(--round);margin-left:6px}
+.b2-quote .lim{text-align:right;font:700 12px/1.45 var(--round);color:var(--chalk2)}
+.b2-quote .lim b{color:var(--chalk)}
+.b2-seg{display:flex;gap:4px;background:rgba(0,0,0,.2);border-radius:10px;padding:3px;margin-top:10px}
+.b2-seg button{flex:1;padding:6px;border-radius:8px;font:800 13px var(--round)!important;color:var(--chalk2)!important}
+.b2-seg button.on{background:var(--board2)!important;color:var(--chalk)!important}
+.b2-chart{margin-top:8px;background:rgba(0,0,0,.14);border-radius:12px;padding:6px 4px 2px}
+.b2-chart svg{display:block;width:100%;height:170px}
+.b2-two{display:flex;gap:8px;margin-top:12px}
+.b2-two .b2-btn{flex:1;padding:12px}
+.b2-h3{margin:18px 0 6px;font:400 italic 23px var(--disp);color:var(--chalk)}
+.b2-book{border-radius:12px;overflow:hidden;background:rgba(0,0,0,.14)}
+.b2-ord{display:flex;align-items:center;gap:8px;padding:9px 10px;border-top:1px solid rgba(239,234,219,.08);font:700 14px var(--round);font-variant-numeric:tabular-nums}
+.b2-ord:first-child{border-top:0}
+.b2-ord .who{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.b2-ord .who small{display:block;font-size:11.5px;color:var(--chalk2)}
+.b2-ord .q{width:62px;text-align:right;color:var(--chalk2)}
+.b2-ord .pr{width:64px;text-align:right;font-weight:900}
+.b2-ord.res{background:rgba(242,179,61,.1)}
+.b2-ord.me .who{color:var(--gold)}
+.b2-ord .b2-btn{padding:6px 10px;font-size:13px!important}
+.b2-empty{padding:14px;text-align:center;font:700 13.5px/1.4 var(--round);color:var(--chalk2)}
+.b2-hist .b2-ord{font-size:12.5px;padding:7px 10px}
+
+/* ======== VILLAGE (tableau d'affichage) ======== */
+.b2-vil{background:#C9A06A;min-height:100%;background-image:radial-gradient(rgba(59,31,23,.09) 1.5px,transparent 1.5px);background-size:14px 14px}
+.b2-clock{display:inline-flex;align-items:center;gap:6px;background:var(--ink);color:#FFE6B8;border-radius:999px;padding:5px 11px;font:800 13px var(--round);font-variant-numeric:tabular-nums}
+.b2-notes{display:grid;gap:12px;margin-top:10px}
+.b2-order{position:relative;background:var(--paper);border-radius:6px 6px 14px 14px;padding:14px 12px 12px;box-shadow:0 3px 0 rgba(124,74,36,.35),0 8px 18px rgba(59,31,23,.15)}
+.b2-order:nth-child(odd){transform:rotate(-.6deg)}.b2-order:nth-child(even){transform:rotate(.5deg)}
+.b2-order::before{content:"";position:absolute;top:-6px;left:50%;width:14px;height:14px;margin-left:-7px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#F28A72,#B8341F);box-shadow:0 2px 3px rgba(0,0,0,.3)}
+.b2-order .hd{display:flex;align-items:center;gap:10px}
+.b2-order .face{width:44px;height:44px;border-radius:50%;background:#FBE3D3;display:grid;place-items:center;font-size:26px;flex:none}
+.b2-order .hd .sp{flex:1;min-width:0}
+.b2-order .who{font:400 italic 19px/1.05 var(--disp)}
+.b2-order .want{font:800 14px var(--round);color:var(--ink)}
+.b2-order .prime{text-align:right;font:900 16px var(--round);color:var(--up2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.b2-order .prime small{display:block;font:700 11px var(--round);color:var(--ink2)}
+.b2-order .pb{height:10px;border-radius:999px;background:rgba(59,31,23,.12);margin:10px 0 8px;overflow:hidden}
+.b2-order .pb i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#7DCB8F,#2F9E57)}
+.b2-order .ft{display:flex;align-items:center;gap:8px;font:700 12.5px var(--round);color:var(--ink2);font-variant-numeric:tabular-nums}
+.b2-order .ft .sp{flex:1}
+.b2-order.done{opacity:.6}
+.b2-order.done .stamp{position:absolute;right:14px;top:30px;transform:rotate(-12deg);border:3px solid var(--up);color:var(--up);border-radius:8px;padding:2px 8px;font:900 15px var(--round)}
+.b2-baron{position:relative;margin-top:18px;background:linear-gradient(135deg,#3B1F17,#6B2E1F);color:#FFE6B8;border-radius:18px;padding:16px;display:flex;align-items:center;gap:12px;box-shadow:0 4px 0 #22100A}
+.b2-baron .crown{font-size:38px;animation:b2-hint 2.4s ease-in-out infinite}
+.b2-baron .sp{flex:1}
+.b2-baron small{font:800 12px var(--round);opacity:.8}
+.b2-baron b{display:block;font:400 italic 27px/1 var(--disp);color:#fff;margin:2px 0}
+.b2-baron .f{font:900 15px var(--round);font-variant-numeric:tabular-nums}
+.b2-rank{margin-top:10px}
+.b2-rk{display:flex;align-items:center;gap:10px;padding:9px 6px;border-top:1px solid rgba(124,74,36,.15);font:700 14px var(--round)}
+.b2-rk:first-child{border-top:0}
+.b2-rk .n{width:22px;text-align:center;font-weight:900;color:var(--ink2)}
+.b2-rk .ic{font-size:20px}
+.b2-rk .sp{flex:1;min-width:0}
+.b2-rk .sp small{display:block;font-size:11.5px;color:var(--ink2);font-weight:700}
+.b2-rk .f{font-weight:900;font-variant-numeric:tabular-nums}
+.b2-rk.me{background:#FFF0C8;border-radius:10px;border-top-color:transparent}
+.b2-titles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.b2-ttl{background:#FFFAF1;border-radius:12px;padding:9px 10px;box-shadow:0 2px 0 rgba(124,74,36,.2)}
+.b2-ttl .i{font-size:20px}
+.b2-ttl b{display:block;font:800 12px var(--round);color:var(--ink2)}
+.b2-ttl span{display:block;font:900 14px var(--round)}
+
+/* ======== Choix de la spécialité ======== */
+.b2-pick{background:linear-gradient(var(--sky1),var(--sky2) 40%,#F3E3C7 70%);min-height:100%}
+.b2-pick h1{margin:6px 0 4px;font:400 italic 44px/1 var(--disp)}
+.b2-pick p{margin:0 0 12px;font:600 14.5px/1.45 var(--round);color:var(--ink2)}
+.b2-specs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.b2-spec{display:flex;flex-direction:column;border-radius:16px!important;overflow:hidden;background:var(--paper)!important;box-shadow:0 3px 0 rgba(124,74,36,.35);text-align:left;padding:0!important}
+.b2-spec .art{height:70px;background:#8A5A33}
+.b2-spec .art svg{display:block;width:100%;height:100%}
+.b2-spec .tx{padding:8px 10px 10px}
+.b2-spec b{display:block;font:900 16px var(--round)}
+.b2-spec small{display:block;font:700 12px var(--round);color:var(--ink2)}
+.b2-spec.on{box-shadow:0 0 0 3px var(--up),0 3px 0 rgba(124,74,36,.35)}
+.b2-spec[disabled]{opacity:.55}
+.b2-spec[disabled] .art{filter:grayscale(.8)}
+
+/* feuille (quantités, détails) */
+.b2-sheetbg{position:absolute;inset:0;z-index:20;background:rgba(30,16,8,.45);display:flex;align-items:flex-end;animation:b2-fade .2s}
+@keyframes b2-fade{from{opacity:0}}
+.b2-sheet{width:100%;max-width:520px;margin:0 auto;background:var(--paper);border-radius:22px 22px 0 0;padding:10px 18px calc(env(safe-area-inset-bottom,0px) + 18px);animation:b2-rise .28s cubic-bezier(.2,.9,.3,1);max-height:85%;overflow-y:auto}
+@keyframes b2-rise{from{transform:translateY(100%)}}
+.b2-sheet .grab{width:40px;height:5px;border-radius:99px;background:rgba(59,31,23,.2);margin:0 auto 10px}
+.b2-sheet h3{margin:0 0 4px;font:400 italic 26px var(--disp)}
+.b2-sheet p{margin:0 0 10px;font:600 14px/1.4 var(--round);color:var(--ink2)}
+.b2-qty{display:flex;align-items:center;gap:10px;margin:8px 0}
+.b2-qty input[type=range]{flex:1;accent-color:var(--up)}
+.b2-qty .v{min-width:70px;text-align:right;font:900 18px var(--round);font-variant-numeric:tabular-nums}
+.b2-quick{display:flex;gap:6px;margin-bottom:10px}
+.b2-quick button{flex:1;background:rgba(59,31,23,.07)!important;border-radius:10px;padding:7px;font:800 13px var(--round)!important}
+.b2-field{display:flex;align-items:center;gap:8px;background:#fff;border-radius:12px;padding:8px 12px;margin:6px 0 4px;box-shadow:inset 0 0 0 1.5px rgba(59,31,23,.15)}
+.b2-field input{flex:1;border:0;outline:0;background:none;font:900 20px var(--round);color:var(--ink);width:100%;font-variant-numeric:tabular-nums}
+.b2-sum{display:flex;justify-content:space-between;font:800 14.5px var(--round);margin:10px 0;font-variant-numeric:tabular-nums}
+.b2-toast{position:absolute;left:50%;top:calc(env(safe-area-inset-top,0px) + 64px);transform:translate(-50%,-20px);opacity:0;transition:transform .4s cubic-bezier(.2,1.3,.4,1),opacity .3s;z-index:30;
+  background:var(--ink);color:#FFF3DE;font:800 14px var(--round);border-radius:999px;padding:10px 16px;box-shadow:0 8px 24px rgba(0,0,0,.3);max-width:calc(100% - 32px);text-align:center;pointer-events:none}
+.b2-toast.on{transform:translate(-50%,0);opacity:1}
+.b2-toast.gold{background:#5C3A00;color:#FFE6A8}
+.b2-toast.err{background:var(--red2)}
+.b2-load{display:grid;place-items:center;height:100%;font:800 15px var(--round);color:var(--ink2)}
+.b2-tip{display:flex;gap:10px;align-items:flex-start;background:#FFF9EA;border-radius:14px;padding:10px 12px;margin:10px 10px 0;box-shadow:0 3px 0 rgba(124,74,36,.3);font:700 13.5px/1.4 var(--round);color:var(--ink)}
+.b2-tip .i{font-size:22px;line-height:1}
+.b2-tip button{margin-left:auto;font-size:18px!important;color:var(--ink2)!important;padding:0 2px}
+`;
+
+/* =================== Dessins =================== */
+const seedR = n => { let a = n * 9301 + 49297; return () => { a = (a * 9301 + 49297) % 233280; return a / 233280; }; };
+// le décor d'une parcelle, propre à chaque spécialité ; plus de monde à mesure qu'elle monte de niveau
+function plotArt(k, i, lvl){
+  const r = seedR(i * 7 + 3), n = Math.min(9, 3 + Math.floor((lvl || 1) / 6));
+  const sky = `<rect width="240" height="96" fill="url(#b2s${k})"/>`;
+  const grad = { ble:["#FCE7B5","#F4CF7A"], oeufs:["#FCE3C9","#F3C79E"], lait:["#E3F2D8","#C3E2A8"], fruits:["#E6F3D6","#BFE09A"], miel:["#FFF0C7","#F8D98A"], bois:["#D9EDD9","#A9D3A4"] }[k] || ["#eee","#ddd"];
+  let g = `<defs><linearGradient id="b2s${k}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${grad[0]}"/><stop offset="1" stop-color="${grad[1]}"/></linearGradient></defs>${sky}`;
+  const ground = c => `<path d="M0 74 Q60 68 120 72 T240 70 V96 H0Z" fill="${c}"/>`;
+  if (k === "ble"){
+    g += ground("#C79A4E");
+    const cnt = 10 + n * 2;
+    for (let j = 0; j < cnt; j++){
+      const x = 8 + j * (226 / cnt) + r() * 6, h = 34 + r() * 18, d = (r() * 2).toFixed(2);
+      g += `<g class="b2-sway" style="animation-delay:-${d}s"><path d="M${x} 78 L${x} ${78 - h}" stroke="#B9862B" stroke-width="2"/>`;
+      for (let s = 0; s < 4; s++) g += `<ellipse cx="${x + (s % 2 ? 3 : -3)}" cy="${78 - h + 4 + s * 5}" rx="2.6" ry="5" fill="${s % 2 ? "#E8B53A" : "#F2C94C"}" transform="rotate(${s % 2 ? 25 : -25} ${x} ${78 - h + 4 + s * 5})"/>`;
+      g += `<path d="M${x} ${78 - h} l0 -8" stroke="#E8B53A" stroke-width="1.2"/></g>`;
+    }
+  } else if (k === "oeufs"){
+    g += ground("#C9A266") + `<g><rect x="176" y="36" width="52" height="38" fill="#D96C4A"/><path d="M170 38 L202 18 L234 38Z" fill="#8E3B26"/><rect x="194" y="52" width="16" height="22" rx="8" fill="#5B2A1C"/><path d="M180 74 h44" stroke="#7A3320" stroke-width="2"/></g>`;
+    g += `<ellipse cx="150" cy="80" rx="16" ry="5" fill="#E7C27A"/><ellipse cx="146" cy="77" rx="4" ry="5" fill="#FFF7EA"/><ellipse cx="154" cy="77.5" rx="4" ry="5" fill="#F5E6CF"/>`;
+    for (let j = 0; j < Math.min(6, n); j++){
+      const x = 14 + j * 26 + r() * 6, y = 66 + r() * 6, f = j % 2 ? 1 : -1, d = (r() * 1.6).toFixed(2), col = j % 3 === 2 ? "#C9773F" : "#FFFBF2";
+      g += `<g transform="translate(${x} ${y}) scale(${f} 1)"><g class="b2-peck" style="animation-delay:-${d}s"><ellipse cx="0" cy="0" rx="11" ry="8" fill="${col}" stroke="#D9C3A0" stroke-width="1"/><path d="M-9 -3 q-6 -6 -3 3" fill="${col}"/><circle cx="8" cy="-8" r="5" fill="${col}"/><path d="M6 -14 q2 -4 4 0 q2 -4 3 1" fill="#D93B2B"/><path d="M12.5 -8 l4 1.5 -4 1.5z" fill="#F2A33A"/><circle cx="9" cy="-9" r=".9" fill="#3B1F17"/></g><path d="M-2 7 v5 M3 7 v5" stroke="#E39A3B" stroke-width="1.5"/></g>`;
+    }
+  } else if (k === "lait"){
+    g += ground("#8DB862") + `<path d="M0 60 H240" stroke="#9A6A3E" stroke-width="2.5"/><path d="M0 68 H240" stroke="#9A6A3E" stroke-width="2.5"/>`;
+    for (let x = 6; x < 240; x += 26) g += `<rect x="${x}" y="54" width="4" height="22" fill="#B07D4A"/>`;
+    for (let j = 0; j < Math.min(4, Math.ceil(n / 2)); j++){
+      const x = 26 + j * 56 + r() * 8, f = j % 2 ? -1 : 1, d = (r() * 2).toFixed(2);
+      g += `<g transform="translate(${x} 70) scale(${f} 1)"><rect x="-18" y="-16" width="34" height="18" rx="8" fill="#FFFDF8" stroke="#3B1F17" stroke-width="1"/><ellipse cx="-6" cy="-10" rx="5" ry="4" fill="#3B1F17"/><ellipse cx="8" cy="-4" rx="4" ry="3" fill="#3B1F17"/>
+        <path d="M-14 2 v8 M-6 2 v8 M6 2 v8 M12 2 v8" stroke="#3B1F17" stroke-width="2.4"/><ellipse cx="-2" cy="4" rx="4" ry="2.5" fill="#F6B9C4"/>
+        <g class="b2-chew" style="animation-delay:-${d}s"><rect x="14" y="-22" width="14" height="13" rx="5" fill="#FFFDF8" stroke="#3B1F17" stroke-width="1"/><rect x="21" y="-14" width="9" height="6" rx="3" fill="#F6B9C4"/><circle cx="19" cy="-18" r="1.2" fill="#3B1F17"/><path d="M15 -22 l-3 -4 M22 -22 l2 -4" stroke="#C9A066" stroke-width="2"/></g></g>`;
+    }
+  } else if (k === "fruits"){
+    g += ground("#86B85A");
+    for (let j = 0; j < Math.min(5, Math.ceil(n * .7)); j++){
+      const x = 24 + j * 48 + r() * 6, s = .85 + r() * .3;
+      g += `<g transform="translate(${x} 76) scale(${s})"><rect x="-3.5" y="-26" width="7" height="26" rx="2" fill="#7C4A24"/><circle cx="0" cy="-36" r="19" fill="#4E9A3E"/><circle cx="-11" cy="-30" r="11" fill="#5FAE4A"/><circle cx="11" cy="-31" r="12" fill="#57A645"/>`;
+      for (let a = 0; a < 5; a++){ const ax = -12 + r() * 24, ay = -46 + r() * 22, d = (r() * 3).toFixed(2); g += `<circle class="b2-ripe" style="animation-delay:-${d}s" cx="${ax.toFixed(1)}" cy="${ay.toFixed(1)}" r="3.6" fill="#E03B2E"/>`; }
+      g += `</g>`;
+    }
+    g += `<g transform="translate(206 86)"><path d="M-12 -10 h24 l-3 10 h-18z" fill="#B07D4A"/><circle cx="-5" cy="-12" r="4" fill="#E03B2E"/><circle cx="3" cy="-12" r="4" fill="#E9562F"/></g>`;
+  } else if (k === "miel"){
+    g += ground("#9CC266");
+    for (let x = 10; x < 240; x += 18) g += `<g class="b2-sway" style="animation-delay:-${(r()*2).toFixed(2)}s"><path d="M${x} 76 v-9" stroke="#4E8A33" stroke-width="1.5"/><circle cx="${x}" cy="66" r="3" fill="${["#F28AB0","#FFFFFF","#B98AF2","#FFD54A"][Math.floor(r()*4)]}"/></g>`;
+    for (let j = 0; j < Math.min(4, Math.ceil(n / 2)); j++){
+      const x = 22 + j * 56;
+      g += `<g transform="translate(${x} 76)"><rect x="-16" y="-8" width="32" height="8" fill="#7C4A24"/><rect x="-14" y="-22" width="28" height="14" rx="2" fill="#F2B33D"/><rect x="-14" y="-36" width="28" height="14" rx="2" fill="#F6C55A"/><path d="M-18 -36 h36 l-4 -6 h-28z" fill="#B85C2A"/><path d="M-14 -22 h28 M-14 -29 h28" stroke="#C98A12" stroke-width="1"/><rect x="-5" y="-12" width="10" height="3" rx="1.5" fill="#5B3519"/></g>`;
+    }
+    for (let j = 0; j < 3 + n; j++){ const x = 10 + r() * 200, y = 16 + r() * 40, d = (r() * 3).toFixed(2); g += `<g class="b2-bee" style="animation-delay:-${d}s"><g transform="translate(${x.toFixed(0)} ${y.toFixed(0)})"><ellipse cx="0" cy="0" rx="4" ry="3" fill="#F2B33D"/><path d="M-1 -3 v6 M1.5 -3 v6" stroke="#3B1F17" stroke-width="1.2"/><ellipse cx="-1" cy="-4" rx="3" ry="2" fill="#fff" opacity=".85"/></g></g>`; }
+  } else if (k === "bois"){
+    g += ground("#6E9A4E");
+    for (let j = 0; j < Math.min(7, n + 1); j++){
+      const x = 14 + j * 30 + r() * 8, s = .7 + r() * .45;
+      g += `<g transform="translate(${x} 78) scale(${s})" class="b2-grow" style="animation-delay:-${(r()*5).toFixed(1)}s"><rect x="-3" y="-12" width="6" height="12" fill="#6B3E1E"/><path d="M0 -62 L18 -26 H-18Z" fill="#2F6B3A"/><path d="M0 -50 L22 -12 H-22Z" fill="#3A7E45"/></g>`;
+    }
+    g += `<g transform="translate(196 80)"><ellipse cx="0" cy="-2" rx="14" ry="5" fill="#C98F55"/><ellipse cx="0" cy="-4" rx="12" ry="4" fill="#E2B27A"/><circle cx="0" cy="-4" r="2" fill="none" stroke="#B07D4A"/></g>`;
+    g += `<g transform="translate(180 64)"><g class="b2-chop"><path d="M0 0 L18 16" stroke="#7C4A24" stroke-width="3" stroke-linecap="round"/><path d="M-4 -5 l9 -2 -2 9z" fill="#9AA6AE"/></g></g>`;
+    g += `<g transform="translate(222 84)"><rect x="-14" y="-6" width="28" height="6" rx="3" fill="#A86B3C"/><rect x="-11" y="-12" width="22" height="6" rx="3" fill="#B87A46"/><circle cx="-14" cy="-3" r="3" fill="#E2B27A"/><circle cx="-11" cy="-9" r="3" fill="#E2B27A"/></g>`;
+  }
+  return `<svg viewBox="0 0 240 96" preserveAspectRatio="xMidYMax slice" aria-hidden="true">${g}</svg>`;
+}
+function barnArt(fill){
+  const n = Math.round(Math.min(1, fill) * 10);
+  let sacks = ""; for (let j = 0; j < n; j++){ const row = Math.floor(j / 4), col = j % 4; sacks += `<rect x="${54 + col * 11 - (row % 2) * 5}" y="${100 - row * 9}" width="10" height="9" rx="3.5" fill="${j % 2 ? "#E7C48B" : "#DDB57A"}" stroke="#B88A50" stroke-width=".8"/>`; }
+  return `<svg viewBox="0 0 150 120" aria-hidden="true"><ellipse cx="78" cy="116" rx="70" ry="5" fill="rgba(0,0,0,.15)"/>
+  <rect x="118" y="34" width="24" height="80" rx="10" fill="#D8D2C4"/><path d="M118 40 a12 12 0 0 1 24 0" fill="#A9A294"/><path d="M118 60 h24 M118 80 h24 M118 100 h24" stroke="#B9B2A3" stroke-width="2"/>
+  <path d="M14 56 L66 20 L118 56 V114 H14Z" fill="#CC3F27"/><path d="M8 58 L66 16 L124 58" fill="none" stroke="#7A2516" stroke-width="7" stroke-linejoin="round"/>
+  <path d="M8 58 L66 16 L124 58" fill="none" stroke="#FFF4E6" stroke-width="2" stroke-linejoin="round"/>
+  <rect x="56" y="34" width="20" height="16" fill="#7A2516"/><path d="M56 34 h20 v16 h-20z M56 34 l20 16 M76 34 l-20 16" stroke="#FFF4E6" stroke-width="2" fill="none"/>
+  <rect x="44" y="72" width="44" height="42" fill="#5B2213"/>${sacks}
+  <path d="M44 72 h44 v42 h-44z" stroke="#FFF4E6" stroke-width="3" fill="none"/><path d="M44 72 l-0 0" />
+  <path d="M20 114 V62 M112 114 V62" stroke="#A83220" stroke-width="2"/></svg>`;
+}
+const CART = `<svg viewBox="0 0 62 40" aria-hidden="true"><path d="M2 14 h44 l-4 16 h-36z" fill="#A86B3C" stroke="#6B3E1E" stroke-width="1.5"/><path d="M8 18 h32 M7 24 h32" stroke="#8C5A30" stroke-width="1.2"/>
+  <rect x="9" y="5" width="11" height="10" rx="4" fill="#E7C48B" stroke="#B88A50"/><rect x="21" y="3" width="11" height="12" rx="4" fill="#DDB57A" stroke="#B88A50"/><rect x="31" y="7" width="10" height="8" rx="3.5" fill="#E7C48B" stroke="#B88A50"/>
+  <path d="M46 20 l14 -4" stroke="#6B3E1E" stroke-width="2.5" stroke-linecap="round"/>
+  <g class="wheel"><circle cx="13" cy="32" r="7" fill="#5B3519"/><circle cx="13" cy="32" r="4.5" fill="#C98F55"/><path d="M13 27.5 v9 M8.5 32 h9" stroke="#5B3519" stroke-width="1.5"/></g>
+  <g class="wheel"><circle cx="36" cy="32" r="7" fill="#5B3519"/><circle cx="36" cy="32" r="4.5" fill="#C98F55"/><path d="M36 27.5 v9 M31.5 32 h9" stroke="#5B3519" stroke-width="1.5"/></g></svg>`;
+const CABIN = `<svg viewBox="0 0 38 36" aria-hidden="true"><path d="M19 0 v6" stroke="#3E220F" stroke-width="2"/><rect x="2" y="6" width="34" height="28" rx="4" fill="#D9A066" stroke="#7C4A24" stroke-width="2"/><path d="M2 14 h34" stroke="#7C4A24" stroke-width="2"/><rect x="8" y="17" width="10" height="12" rx="4" fill="#E7C48B" stroke="#B88A50"/><rect x="19" y="19" width="10" height="10" rx="4" fill="#DDB57A" stroke="#B88A50"/></svg>`;
+function ovenArt(hot){
+  return `<svg viewBox="0 0 120 100" aria-hidden="true"><rect x="52" y="0" width="16" height="30" fill="#8C7B6B"/><rect x="49" y="0" width="22" height="5" fill="#6E5F51"/>
+  <path d="M8 96 V58 A52 46 0 0 1 112 58 V96Z" fill="#B9A58F"/>
+  ${[[14,62],[36,40],[62,30],[86,42],[100,64],[22,82],[96,84],[60,50]].map(([x,y]) => `<rect x="${x}" y="${y}" width="16" height="9" rx="3" fill="#A6927C"/>`).join("")}
+  <path d="M32 96 V70 A28 26 0 0 1 88 70 V96Z" fill="#2A140A"/>
+  <g><path class="b2-flame" d="M44 96 q4 -22 12 -26 q-2 12 6 16 q2 -10 8 -14 q2 14 6 24z" fill="#F2873B"/><path class="b2-flame" style="animation-delay:-.2s" d="M52 96 q3 -14 8 -16 q0 8 4 10 q2 -6 5 -8 q1 8 3 14z" fill="#FFD15C"/></g>
+  <rect x="4" y="92" width="112" height="8" rx="3" fill="#8C7B6B"/></svg>`;
+}
+const MGR = { parcel:"🧑‍🌾", elev:"👷", cart:"🧔" };
+
+const st = document.createElement("style"); st.id = "b2-style"; st.textContent = STYLE; document.head.appendChild(st);
+
+/* =================== Ouverture =================== */
+let mult = 1;           // améliorer par ×1, ×10 ou au maximum
+let sheetOpen = false;
+const TABS = [
+  { id:"farm",    label:"Ferme",  i:"🌾" },
+  { id:"barn",    label:"Grange", i:"🏚️", need:"grange",  why:"La grange s'ouvre dès ta première récolte livrée." },
+  { id:"market",  label:"Marché", i:"📈", need:"marche",  why:"Le marché ouvre quand tu débloques ta 2e parcelle." },
+  { id:"village", label:"Village",i:"🏘️", need:"village", why:"Le village ouvre quand tu débloques ta 3e parcelle." },
+];
 function openBaron(){
-  closeBaron();
-  const w = document.createElement("div"); w.className = "bn-wrap"; w.setAttribute("role", "dialog"); w.setAttribute("aria-label", "Le Baron");
-  w.innerHTML = `<div class="bn-in"><div class="bn-top"><button type="button" class="bn-back" data-bn="arcade">‹ Arcade</button><button type="button" class="bn-x" data-bn="close" aria-label="Fermer">×</button></div><div id="bn-root"></div></div>`;
-  document.body.appendChild(w); document.body.style.overflow = "hidden";
-  mount();
+  closeBaron(true);
+  const w = document.createElement("div"); w.className = "b2-wrap"; w.setAttribute("role", "dialog"); w.setAttribute("aria-label", "Le Baron");
+  w.innerHTML = `<div class="b2-hud"><div class="b2-col"><button class="b2-hbtn" data-a="arcade" aria-label="Retour à l'Arcade">‹</button>
+    <div class="b2-pill"><i class="b2-coin"></i><span data-live="coins">…</span></div><div class="b2-pill"><span class="b2-e">🪵</span><span data-live="wood">…</span></div>
+    <div class="b2-sp"></div><button class="b2-hbtn" data-a="close" aria-label="Fermer">×</button></div></div>
+    <div class="b2-scroll" id="b2-main"><div class="b2-load">Le Baron se prépare…</div></div><div id="b2-dock"></div><nav class="b2-tabs" id="b2-tabs"></nav>`;
+  document.body.appendChild(w); document.body.style.overflow = "hidden"; wrapEl = w;
+  w.addEventListener("click", onClick);
+  w.addEventListener("input", onInput);
+  start();
 }
-function closeBaron(){
-  document.querySelector(".bn-wrap")?.remove(); rootEl = null;
+function closeBaron(silent){
+  if (S && !silent) save(true);
+  clearInterval(loopT); loopT = null;
+  document.querySelector(".b2-wrap")?.remove(); wrapEl = null; sheetOpen = false;
   try{ if (!Q.layerCount()) document.body.style.overflow = ""; }catch(e){ document.body.style.overflow = ""; }
 }
-const coinsLabel = () => {
-  if (S && S.player) return `${fmtN(S.player.coins)} pièces`;
-  try{ const c = localStorage.getItem("bn_coins"); if (c !== null) return `${fmtN(+c)} pièces`; }catch(e){}
-  return getToken() ? "" : "Choisis ta spécialité";
-};
-(window.QUERIDA_GAMES = window.QUERIDA_GAMES || {})["baron"] = { open: openBaron, status: coinsLabel };
-try{ window.dispatchEvent(new Event("qh-games")); }catch(e){}
-
-/* =================== Montage =================== */
-function mount(){
-  const root = document.getElementById("bn-root");
-  if (!root || root.dataset.bn === "1") return;
-  root.dataset.bn = "1"; rootEl = root;
+async function start(){
   const me = Q.me();
-  if (!me){ root.innerHTML = `<div class="bn-load">Crée d'abord ton profil Querida.</div>`; return; }
-  if (Q.demo()){ root.innerHTML = `<div class="bn"><h1>Le Baron</h1><p class="bn-sub">Le jeu a besoin de la vraie base de Querida (pas dispo en démo).</p></div>`; return; }
+  const main = () => wrapEl && wrapEl.querySelector("#b2-main");
+  if (!me){ main().innerHTML = `<div class="b2-load">Crée d'abord ton profil Querida.</div>`; return; }
+  if (Q.demo()){ main().innerHTML = `<div class="b2-load">Le Baron a besoin de la vraie base de Querida.</div>`; return; }
   if (!getToken()) return showPick();
-  if (S){ drawFarm(); refresh(); } else { root.innerHTML = `<div class="bn-load">Ouverture de ta ferme…</div>`; refresh(true); }
-}
-let md = false;
-new MutationObserver(() => { if (md) return; md = true; requestAnimationFrame(() => { md = false; try{ mount(); }catch(e){} }); })
-  .observe(document.body, { childList:true, subtree:true });
-const alive = () => rootEl && document.body.contains(rootEl);
-
-async function refresh(first){
   try{
-    setState(await rpc("baron_state", { p_token: getToken() }));
-    if (S.auto > 0 && farm()) toast(`🧑‍🌾 Ton fermier a ramassé ${fmtN(S.auto)} ${RES[farm().resource].e}`);
-    if (alive()) drawFarm();
-    if (first){ welcome(); setTimeout(rollGolden, 4000); setTimeout(() => loadMarket(true), 1500); setTimeout(() => loadRank(true).then(() => { if (view === "farm" && iAmBaron()) drawFarm(); }), 2500); }
+    const gained = await load();
+    if (!wrapEl) return;
+    view = "farm"; draw(); lastSig = unlockSig();
+    if (gained >= 1) setTimeout(() => toast(`Pendant ton absence, tes contremaîtres ont rentré ${fmtN(gained)} ${P[S.spec].e} dans la grange`, "gold"), 500);
+    loop(); loadWorld(true); save(true);
   }catch(e){
     const m = String(e && e.message || "");
-    if (m.includes("jeton inconnu")){ setToken(null); S = null; if (alive()) showPick(); return; }
-    if (alive() && !S) rootEl.innerHTML = `<div class="bn"><h1>Le Baron</h1><p class="bn-err">${esc(errText(e))}</p><button class="bn-btn ghost" data-bn="retry">Réessayer</button></div>`;
+    if (m.includes("jeton inconnu")){ setToken(null); return showPick(); }
+    if (main()) main().innerHTML = `<div class="b2-load"><div style="text-align:center;padding:24px">${esc(errText(e))}<br><br><button class="b2-btn" data-a="retry">Réessayer</button></div></div>`;
+  }
+}
+let lastSig = "";
+const unlockSig = () => ["grange","mgr","boost","marche","village","four","farm2"].map(k => BX.unlocked(S, k) ? 1 : 0).join("") + (view === "farm" ? (TIPS.find(x => !seen("tip_" + x.id) && x.when()) || {}).id : "");
+function loop(){
+  clearInterval(loopT);
+  let n = 0;
+  loopT = setInterval(() => {
+    if (!wrapEl || !S) return;
+    const t = now(), dt = (t - lastTick) / 1000; lastTick = t;
+    let done = [];
+    if (dt > 5) BX.catchUp(S, t); else if (dt > 0){ done = BX.step(S, dt, t) || []; S.last = t; }
+    if (done.length){ const d = done[0]; toast(`${P[d.rec].e} ${fmtN(d.qty)} ${P[d.rec].label.toLowerCase()} sorti${d.qty > 1 ? "s" : ""} du four`, "gold"); sound("done"); if (view === "barn") draw(); }
+    if (BX.ensureOrders(S, t, ME.id, groupProd())){ dirty = true; if (view === "village") draw(); }
+    live();
+    n++;
+    if (n % 4 === 0 && !sheetOpen){ const sig = unlockSig(); if (sig !== lastSig){ lastSig = sig; draw(); } }
+    if (n % 80 === 0) save();                       // toutes les 20 s si quelque chose a changé
+    if (n % 120 === 0) loadWorld((view === "market" || view === "village"));
+  }, 250);
+}
+document.addEventListener("visibilitychange", () => { if (document.hidden && S && wrapEl) save(true); else if (!document.hidden && S && wrapEl){ lastTick = now(); } });
+
+/* =================== Affichage =================== */
+function draw(){
+  if (!wrapEl || !S) return;
+  const main = wrapEl.querySelector("#b2-main");
+  const keep = main.dataset.v === view ? main.scrollTop : 0;
+  const html = view === "farm" ? farmHTML() : view === "barn" ? barnHTML() : view === "market" ? marketHTML() : villageHTML();
+  main.innerHTML = html; main.dataset.v = view; main.scrollTop = keep;
+  wrapEl.querySelector("#b2-dock").innerHTML = view === "farm" ? dockHTML() : "";
+  wrapEl.querySelector("#b2-tabs").innerHTML = `<div class="b2-col">${TABS.map(t => {
+    const lock = t.need && !BX.unlocked(S, t.need);
+    const dot = !lock && t.need && !seen("tab_" + t.id);
+    return `<button class="b2-tab ${view === t.id ? "on" : ""} ${lock ? "locked" : ""}" data-a="tab" data-v="${t.id}"><span class="i">${lock ? "🔒" : t.i}</span>${t.label}${dot ? `<span class="dot"></span>` : ""}</button>`;
+  }).join("")}</div>`;
+  if (view === "farm") fitShaft();
+  live(true);
+}
+function fitShaft(){
+  const sh = wrapEl.querySelector(".b2-shaft"), cab = wrapEl.querySelector(".b2-cab");
+  if (!sh || !cab) return;
+  const h = Math.max(60, sh.offsetHeight - 60);
+  cab.style.setProperty("--h", h + "px");
+  cab.style.setProperty("--dur", Math.max(2.5, Math.min(7, h / 120)) + "s");
+}
+let shown = { coins: null, wood: null };
+function live(force){
+  if (!wrapEl || !S) return;
+  const q = s => wrapEl.querySelectorAll(s);
+  // compteurs qui défilent
+  for (const k of ["coins", "wood"]){
+    const target = k === "coins" ? S.coins : S.stock.bois;
+    if (shown[k] === null || force && Math.abs(target - shown[k]) > target * .5) shown[k] = target;
+    shown[k] += (target - shown[k]) * 0.35; if (Math.abs(target - shown[k]) < 0.5) shown[k] = target;
+    const el = wrapEl.querySelector(`[data-live="${k}"]`); if (el) el.textContent = fmtN(shown[k]);
+  }
+  try{ localStorage.setItem("bn2_coins", String(Math.floor(S.coins))); }catch(e){}
+  // boutons trop chers
+  q("[data-cc]").forEach(b => { const ok = S.coins >= +b.dataset.cc && S.stock.bois >= +(b.dataset.cw || 0); b.classList.toggle("no", !ok); });
+  q("[data-mgrc]").forEach(b => b.classList.toggle("can", S.coins >= +b.dataset.mgrc));
+  const t = now();
+  if (view === "farm"){
+    const key = S.cur, f = S.farms[key]; if (!f) return;
+    f.parcels.forEach((p, i) => {
+      const el = wrapEl.querySelector(`[data-plot="${i}"]`); if (!el) return;
+      const run = p.mgr || p.run > 0;
+      el.classList.toggle("idle", !run);
+      const pe = el.querySelector("[data-pend]"); if (pe) pe.textContent = fmtN(p.pend);
+      const rb = el.querySelector(".runbar"); if (rb) rb.style.width = p.mgr ? "0" : (p.run / BAL.cycle * 100) + "%";
+      const tm = el.querySelector(".tapme"); if (tm) tm.style.display = run ? "none" : "";
+      const full = p.pend >= BAL.pendCap(BAL.parcelRate(i, p.lvl) * (f.boost > t ? 2 : 1)) * .98;
+      pe && pe.classList.toggle("warn", full);
+    });
+    const er = f.elev.mgr || f.elev.run > 0, cr = f.cart.mgr || f.cart.run > 0;
+    wrapEl.querySelector(".b2-cab")?.classList.toggle("idle", !er);
+    wrapEl.querySelector(".b2-sky")?.classList.toggle("idle", !cr);
+    const qe = wrapEl.querySelector("[data-live=quai]"); if (qe) qe.textContent = fmtN(f.quai);
+    const sk = wrapEl.querySelector(".b2-quai .sacks");
+    if (sk){ const n = Math.min(8, Math.ceil(f.quai / Math.max(1, BX.BAL.quaiCap(BAL.elevRate(f.elev.lvl))) * 8)); if (+sk.dataset.n !== n){ sk.dataset.n = n; sk.innerHTML = "<i class='sk'></i>".repeat(n); } }
+    const cap = BX.barnCap(S), used = BX.stockUnits(S), fill = Math.min(1, used / cap);
+    const gb = wrapEl.querySelector(".b2-sky .b2-gbar"); if (gb){ gb.querySelector("i").style.width = (fill * 100) + "%"; gb.classList.toggle("full", fill >= .999); }
+    const gl = wrapEl.querySelector("[data-live=barn]"); if (gl) gl.textContent = `${fmtN(used)} / ${fmtN(cap)}`;
+    const ba = wrapEl.querySelector(".b2-barn"); if (ba){ const n = Math.round(fill * 10); if (+ba.dataset.n !== n){ ba.dataset.n = n; ba.innerHTML = barnArt(fill); } }
+    const bn = BX.bottleneck(S, key, t);
+    q("[data-slow]").forEach(e => e.style.display = e.dataset.slow === bn ? "" : "none");
+    const bb = wrapEl.querySelector("[data-a=boost]");
+    if (bb){
+      const on = f.boost > t, cd = f.boostCd > t;
+      bb.classList.toggle("on", on); bb.classList.toggle("cool", !on && cd);
+      bb.querySelector(".t").textContent = on ? `×2 · ${fmtT(f.boost - t)}` : cd ? fmtT(f.boostCd - t) : "×2";
+    }
+  }
+  if (view === "barn"){
+    q("[data-slot]").forEach(el => {
+      const sl = S.oven.slots[+el.dataset.slot]; if (!sl) return;
+      const k = Math.min(1, (t - sl.t0) / sl.dur);
+      el.querySelector(".pb i").style.width = (k * 100) + "%"; el.querySelector(".t").textContent = fmtT(sl.t0 + sl.dur - t);
+    });
+    const cg = wrapEl.querySelector("[data-live=cap]"); if (cg){ const cap = BX.barnCap(S), used = BX.stockUnits(S); cg.textContent = `${fmtN(used)} / ${fmtN(cap)}`; const gb = cg.closest(".b2-cap").querySelector(".b2-gbar"); gb.querySelector("i").style.width = Math.min(100, used / cap * 100) + "%"; gb.classList.toggle("full", used >= cap); }
+    q("[data-stock]").forEach(e => e.textContent = fmtN(S.stock[e.dataset.stock]));
+  }
+  if (view === "village"){
+    const c = wrapEl.querySelector("[data-live=clock]"); if (c) c.textContent = fmtT((S.orders.slot + 1) * BAL.slotMs - t);
   }
 }
 
-/* =================== Choix de la spécialité =================== */
-async function showPick(){
-  if (!alive()) return;
-  rootEl.innerHTML = `<div class="bn-load">Le Baron se prépare…</div>`;
-  try{
-    const { data, error } = await db().from("baron_players").select("id,name,specialty");
-    if (error) throw error;
-    pickData = data || [];
-  }catch(e){
-    rootEl.innerHTML = `<div class="bn"><h1>Le Baron</h1><p class="bn-err">${esc(errText(e))}</p><button class="bn-btn ghost" data-bn="pick-retry">Réessayer</button></div>`;
-    return;
+/* ---------- Ferme ---------- */
+const mgrBtn = (has, kind, cost, a, i) => has
+  ? `<span class="b2-mgr" title="Contremaître engagé">${MGR[kind]}</span>`
+  : BX.unlocked(S, "mgr") ? `<button class="b2-mgr hire" data-a="${a}" ${i !== undefined ? `data-i="${i}"` : ""} data-mgrc="${cost}" aria-label="Engager un contremaître pour ${fmtN(cost)} pièces">+${MGR[kind]}<span><i class="b2-coin"></i>${fmtN(cost)}</span></button>` : "";
+function upCost(kind, f, i){
+  const at = kind === "parcel" ? L => BAL.parcelCost(i, L) : kind === "elev" ? BAL.elevCost : BAL.cartCost;
+  const L = kind === "parcel" ? f.parcels[i].lvl : f[kind].lvl;
+  const b = BX.bulk(at, L, mult === "max" ? "max" : mult, S.coins);
+  if (b.n === 0) return { n: 1, coins: BX.nice(at(L)) };
+  return b;
+}
+function farmHTML(){
+  const key = S.cur, f = S.farms[key], t = now(), pr = P[key];
+  const r = BX.farmRates(f, t), cap = BX.barnCap(S), used = BX.stockUnits(S);
+  const farmsK = Object.keys(S.farms);
+  const eu = upCost("elev", f), cu = upCost("cart", f);
+  const depth = i => `hsl(${26 - i * 1.2} ${42 - i * 2}% ${34 - i * 2.6}%)`;
+  const tip = farmTip();
+  let plots = f.parcels.map((p, i) => {
+    const pu = upCost("parcel", f, i), rate = BAL.parcelRate(i, p.lvl) * r.boost;
+    const next = BX.MILES.find(m => m > p.lvl);
+    return `<div class="b2-plot" data-plot="${i}" style="--soil:${depth(i)}">
+      <div class="pend"><div class="bag">🧺</div><span class="b2-tag" data-pend>${fmtN(p.pend)}</span></div>
+      <div class="art" data-a="tap-parcel" data-i="${i}">${plotArt(key, i, p.lvl)}</div><span class="b2-plvl">Niv <b>${p.lvl}</b></span>
+      <div class="runbar"></div>
+      ${p.mgr ? "" : `<div class="tapme"><span>👆 Touche pour récolter</span></div>`}
+      <div class="b2-sign"><div class="row">
+        <div class="sp"><h3>${esc(pr.short)} ${i + 1}</h3>
+        <div class="meta">${pr.e} ${fmtN(rate, 1)}/s</div>${next ? `<div class="meta" style="font-size:11.5px;opacity:.8">×2 au niveau ${next}</div>` : ""}</div>
+        ${mgrBtn(p.mgr, "parcel", BX.nice(BAL.parcelMgr(i)), "mgr-parcel", i)}
+        <button class="b2-btn" data-a="up-parcel" data-i="${i}" data-cc="${pu.coins}">⬆ ${pu.n > 1 ? `+${pu.n} ` : ""}${COIN}${fmtN(pu.coins)}</button>
+      </div></div></div>`;
+  }).join("");
+  const nc = BX.nextParcelCost(f), ni = f.parcels.length;
+  plots += `<div class="b2-locked">${nc.palier ? `<span class="palier">Palier</span>` : ""}<h3>${esc(pr.short)} ${ni + 1}</h3>
+    <p>${nc.wood ? `Il faut aussi du bois pour la construire.${S.stock.bois < nc.wood && key !== "bois" ? " Le bois s'achète au marché." : ""}` : "Une nouvelle parcelle produit beaucoup plus que la précédente."}</p>
+    <button class="b2-btn gold" data-a="unlock" data-cc="${nc.coins}" data-cw="${nc.wood}">🔓 Débloquer ${price(nc)}</button></div>`;
+  return `<div class="b2-farm"><div class="b2-col">
+    <div class="b2-sky">
+      <div class="sun"></div><div class="b2-cloud" style="top:30px;width:58px;animation-duration:70s;animation-delay:-20s"></div><div class="b2-cloud" style="top:64px;width:44px;animation-duration:95s;animation-delay:-60s"></div>
+      ${farmsK.length > 1 ? `<div class="b2-farmsw">${farmsK.map(k => `<button class="${k === key ? "on" : ""}" data-a="farm" data-k="${k}">${P[k].e} ${P[k].label}</button>`).join("")}</div>` : ""}
+      <svg class="b2-hills" viewBox="0 0 400 70" preserveAspectRatio="none" aria-hidden="true"><path d="M0 50 Q60 10 130 38 T260 30 T400 34 V70 H0Z" fill="#A9D47D"/><path d="M0 60 Q90 34 180 54 T400 50 V70 H0Z" fill="#94C66A"/></svg>
+      <div class="b2-gauge"><div class="b2-glab"><span>Grange</span><span data-live="barn">${fmtN(used)} / ${fmtN(cap)}</span></div><div class="b2-gbar"><i style="width:${Math.min(100, used / cap * 100)}%"></i></div>
+        <div data-slow="barn" style="display:none;margin-top:4px;text-align:right"><span class="b2-tag warn">Pleine : la récolte s'arrête</span></div></div>
+      <div class="b2-barn" data-a="tab" data-v="barn" data-n="-1"></div>
+      <div class="b2-ground"></div><div class="b2-road"></div>
+      <div class="b2-quai"><div class="sacks" data-n="-1"></div><span class="b2-tag" data-live="quai">${fmtN(f.quai)}</span></div>
+      <div class="b2-cartlane"><div class="b2-cart" style="animation-duration:${Math.max(3, BAL.cartTrip - Math.min(4, f.cart.lvl / 12))}s">${CART}</div></div>
+    </div>
+    <div class="b2-sign b2-cartsign"><div class="row">
+      <div class="sp"><h3>Charrette <span class="b2-lvl">Niv ${f.cart.lvl}</span><span class="b2-slow" data-slow="cart" style="display:none">Lent</span></h3>
+      <div class="meta">${fmtN(r.C * BAL.cartTrip)} par trajet · vers la grange</div></div>
+      ${f.cart.mgr ? "" : `<button class="b2-btn ghost" data-a="run-cart" aria-label="Lancer la charrette">▶</button>`}
+      ${mgrBtn(f.cart.mgr, "cart", BAL.cartMgr, "mgr-cart")}
+      <button class="b2-btn" data-a="up-cart" data-cc="${cu.coins}">⬆ ${cu.n > 1 ? `+${cu.n} ` : ""}${COIN}${fmtN(cu.coins)}</button>
+    </div></div>
+    ${tip}
+    ${BX.unlocked(S, "mgr") ? `<div style="display:flex;justify-content:flex-end;padding:10px 12px 0"><div class="b2-seg" style="margin:0;background:rgba(0,0,0,.25);width:auto">${[1, 10, "max"].map(m => `<button class="${mult === m ? "on" : ""}" data-a="mult" data-m="${m}" style="color:#F5E4CC!important;padding:5px 12px">${m === "max" ? "Max" : "×" + m}</button>`).join("")}</div></div>` : ""}
+    <div class="b2-shaft">
+      <div class="b2-rail"><div class="rope" style="height:100%"></div><div class="b2-cab">${CABIN}</div></div>
+      <div class="b2-sign b2-elev"><div class="row">
+        <div class="sp"><h3>Monte-charge <span class="b2-lvl">Niv ${f.elev.lvl}</span><span class="b2-slow" data-slow="elev" style="display:none">Lent</span></h3>
+        <div class="meta">${fmtN(r.E * BAL.elevTrip)} par trajet · remonte les paniers</div></div>
+        ${f.elev.mgr ? "" : `<button class="b2-btn ghost" data-a="run-elev" aria-label="Lancer le monte-charge">▶</button>`}
+        ${mgrBtn(f.elev.mgr, "elev", BAL.elevMgr, "mgr-elev")}
+        <button class="b2-btn" data-a="up-elev" data-cc="${eu.coins}">⬆ ${eu.n > 1 ? `+${eu.n} ` : ""}${COIN}${fmtN(eu.coins)}</button>
+      </div></div>
+      ${plots}
+    </div>
+    ${farm2HTML()}
+    <div class="b2-deep"></div><div style="height:84px;background:#2A190D"></div>
+  </div></div>`;
+}
+function farm2HTML(){
+  if (!BX.unlocked(S, "farm2") || S.cur !== S.spec) return "";
+  const free = BX.RAW.filter(k => !S.farms[k]); if (!free.length) return "";
+  const c = BX.costs.farm(S);
+  return `<div style="padding:0 10px 14px"><div class="b2-locked" style="background:#3B2414"><span class="palier">Concurrence</span><h3>Ouvrir une autre exploitation</h3>
+    <p>Produis aussi une ressource d'un voisin et vends-la moins cher que lui.</p><button class="b2-btn gold" data-a="farm2" data-cc="${c.coins}" data-cw="${c.wood}">Choisir ${price(c)}</button></div></div>`;
+}
+function dockHTML(){
+  const f = S.farms[S.cur], all = f.parcels.every(p => p.mgr) && f.elev.mgr && f.cart.mgr;
+  const a = P[S.cur].act;
+  return `<div class="b2-dock"><div class="b2-col">
+    ${all ? "" : `<button class="b2-act main" data-a="harvest">🧺 Tout récolter</button>`}
+    ${BX.unlocked(S, "boost") ? `<button class="b2-act" data-a="boost" aria-label="${esc(a.label)} : production ×2 pendant 1 minute">${a.e} ${esc(a.label)} <span class="t">×2</span></button>` : ""}
+  </div></div>`;
+}
+const TIPS = [
+  { id:"start",  when: () => S.stats.produced === 0 && S.coins === 0, i:"👆", txt:"Touche ta parcelle pour récolter. Le monte-charge remonte les paniers, la charrette les porte à la grange. « Tout récolter » lance tout d'un coup." },
+  { id:"sell",   when: () => S.stats.earned === 0 && S.stock[S.spec] >= 5, i:"🏚️", txt:"Ta récolte est dans la grange. Ouvre l'onglet Grange pour la vendre au village." },
+  { id:"mgr",    when: () => BX.unlocked(S, "mgr") && !S.farms[S.spec].parcels[0].mgr, i:"🧑‍🌾", txt:"Engage un contremaître (le rond pointillé) : il travaille à ta place, même quand l'appli est fermée." },
+  { id:"slow",   when: () => !!BX.bottleneck(S, S.cur, now()) && S.farms[S.cur].parcels[0].mgr, i:"🐢", txt:"Le badge « Lent » montre le maillon qui freine ta ferme. Paniers pleins en bas : améliore le monte-charge. Tas en haut : la charrette." },
+  { id:"boost",  when: () => BX.unlocked(S, "boost"), i: () => P[S.spec].act.e, txt: () => `${P[S.spec].act.txt}, pendant 1 minute. Tu peux recommencer toutes les 4 minutes.` },
+  { id:"marche", when: () => BX.unlocked(S, "marche"), i:"📈", txt:"Le marché est ouvert : achète et vends avec tes amis, au prix que tu choisis." },
+  { id:"wood",   when: () => { const n = BX.nextParcelCost(S.farms[S.spec]); return n.wood > 0 && S.spec !== "bois"; }, i:"🪵", txt:"Les constructions demandent du bois. Achète-le au marché, ou au village (plus cher)." },
+  { id:"village",when: () => BX.unlocked(S, "village"), i:"🏘️", txt:"Le village passe commande toutes les 20 minutes, avec de grosses primes. Et le four est prêt à être construit dans la grange." },
+  { id:"farm2",  when: () => BX.unlocked(S, "farm2"), i:"⚔️", txt:"Tu peux maintenant ouvrir une 2e exploitation, d'un produit d'un ami. Tout en bas de ta ferme." },
+];
+function farmTip(){
+  const t = TIPS.find(x => !seen("tip_" + x.id) && x.when());
+  const v = x => typeof x === "function" ? x() : x;
+  return t ? `<div class="b2-tip"><span class="i">${v(t.i)}</span><span>${v(t.txt)}</span><button data-a="tipx" data-id="${t.id}" aria-label="J'ai compris">×</button></div>` : "";
+}
+
+/* ---------- Grange ---------- */
+function barnHTML(){
+  const cap = BX.barnCap(S), used = BX.stockUnits(S), bc = BX.costs.barn(S);
+  const tiles = BX.ALL.filter(k => !P[k].rec || BX.unlocked(S, "four")).map(k => `<button class="b2-tile ${k === S.spec ? "mine" : ""} ${S.stock[k] < 1 ? "zero" : ""}" data-a="prod" data-k="${k}">
+      <div class="ic">${P[k].e}</div><b data-stock="${k}">${fmtN(S.stock[k])}</b><small>${esc(P[k].label)}</small></button>`).join("");
+  return `<div class="b2-barnin"><div class="b2-col b2-pad">
+    <div class="b2-paper">
+      <h2 class="b2-h2">Ta grange<small>Niveau ${S.barn}. Quand elle est pleine, ta ferme s'arrête.</small></h2>
+      <div class="b2-cap"><div class="b2-gbar"><i style="width:${Math.min(100, used / cap * 100)}%"></i></div><b data-live="cap">${fmtN(used)} / ${fmtN(cap)}</b></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:10px"><span class="b2-note" style="margin:0;flex:1">Agrandir : ${fmtN(BAL.barnCap(S.barn + 1))} places</span>
+      <button class="b2-btn" data-a="up-barn" data-cc="${bc.coins}" data-cw="${bc.wood}">Agrandir ${price(bc)}</button></div>
+    </div>
+    <div class="b2-paper"><h2 class="b2-h2">Le stock<small>Touche un produit pour le vendre.</small></h2><div class="b2-stock">${tiles}</div></div>
+    ${ovenHTML()}
+  </div></div>`;
+}
+function ovenHTML(){
+  if (!BX.unlocked(S, "four")) return `<div class="b2-paper"><div class="b2-teaser"><span class="i">🔥</span><span>Un four pour fabriquer pain, crêpes et gâteaux se débloque avec ta 3e parcelle.</span></div></div>`;
+  const o = S.oven, c = BX.costs.oven(S);
+  if (!o.lvl) return `<div class="b2-paper"><div class="b2-oven cold"><div class="art">${ovenArt()}</div><div><h2 class="b2-h2">Le four<small>Transforme tes produits et ceux de tes amis en pain, crêpes, tartes, confitures et gâteaux, très demandés par le village.</small></h2>
+    <button class="b2-btn gold" data-a="up-oven" data-cc="${c.coins}" data-cw="${c.wood}">Construire ${price(c)}</button></div></div></div>`;
+  const nS = BAL.ovenSlots(o.lvl), hot = o.slots.some(x => x);
+  const next = o.lvl >= BAL.ovenMax ? "" : o.lvl < 4 ? `Niveau ${o.lvl + 1} : ${o.lvl + 1} places de cuisson` : `Niveau ${o.lvl + 1} : cuisson plus rapide`;
+  const slots = Array.from({ length: nS }, (_, i) => {
+    const sl = o.slots[i];
+    if (!sl) return `<button class="b2-slot free" data-a="bake" data-slot="-1">＋ Place libre · cuisiner quelque chose</button>`;
+    const k = Math.min(1, (now() - sl.t0) / sl.dur);
+    return `<div class="b2-slot" data-slot="${i}"><span class="ic">${P[sl.rec].e}</span><div class="sp"><b>${fmtN(sl.qty)} ${esc(P[sl.rec].label)}</b><div class="pb"><i style="width:${k * 100}%"></i></div></div><span class="t">${fmtT(sl.t0 + sl.dur - now())}</span></div>`;
+  }).join("");
+  const recs = BX.CRAFT.map(k => {
+    const can = BX.canBake(S, k);
+    const ing = Object.keys(P[k].rec).map(x => { const ok = S.stock[x] >= 1; return `<span class="${ok ? "ok" : "ko"}">${P[x].e} ${fmtN(S.stock[x])}</span>`; }).join("");
+    const miss = Object.keys(P[k].rec).find(x => S.stock[x] < 1);
+    return `<div class="b2-rec"><span class="ic">${P[k].e}</span><div class="sp"><b>${esc(P[k].label)}</b><div class="b2-ing">${ing}</div></div>
+      ${can >= 1 ? `<button class="b2-btn" data-a="bake" data-k="${k}">Cuire</button>` : miss && BX.unlocked(S, "marche") ? `<button class="b2-btn red" data-a="goto-mkt" data-k="${miss}">Acheter ${P[miss].e}</button>` : ""}</div>`;
+  }).join("");
+  return `<div class="b2-paper"><div class="b2-oven ${hot ? "" : "cold"}"><div class="art">${ovenArt(hot)}</div><div style="flex:1"><h2 class="b2-h2">Le four<small>Niveau ${o.lvl} · ${nS} place${nS > 1 ? "s" : ""} · fournées de ${fmtN(BX.ovenBatch(S))} max</small></h2>
+    ${o.lvl < BAL.ovenMax ? `<button class="b2-btn" data-a="up-oven" data-cc="${c.coins}" data-cw="${c.wood}">Améliorer ${price(c)}</button><p class="b2-note">${next}</p>` : ""}</div></div>
+    <div class="b2-slots">${slots}</div></div>
+    <div class="b2-paper"><h2 class="b2-h2">Recettes<small>En vert : tu as l'ingrédient. En rouge : il te manque.</small></h2>${recs}</div>`;
+}
+
+/* ---------- Marché ---------- */
+function tradesOf(k, since){ return W.trades.filter(t => t.product === k && (!since || t.ts >= since)); }
+function quote(k){
+  const t = now(), d = 86400000;
+  const vw = a => { let q = 0, v = 0; a.forEach(x => { q += +x.qty; v += x.qty * x.price; }); return q ? v / q : null; };
+  const cur = vw(tradesOf(k, t - d)), prev = vw(W.trades.filter(x => x.product === k && x.ts < t - d && x.ts >= t - 2 * d));
+  const all = tradesOf(k);
+  const last = all.length ? +all[all.length - 1].price : null;
+  const p = cur ?? last;
+  let ch = null;
+  if (p != null){ const ref = prev ?? (tradesOf(k, t - d)[0] || {}).price; if (ref) ch = (p - ref) / ref * 100; }
+  return { p, ch, n: all.length };
+}
+const chg = ch => ch == null ? `<span class="flat">—</span>` : `<span class="${ch > 0.05 ? "up" : ch < -0.05 ? "down" : "flat"}">${ch > 0 ? "+" : ""}${ch.toFixed(1).replace(".", ",")} %</span>`;
+function candles(k, period){
+  const t = now(), spec = { "1h": [12, 300000], "24h": [24, 3600000], "7j": [28, 21600000] }[period];
+  const [n, b] = spec, t0 = t - n * b;
+  const all = tradesOf(k);
+  let prev = null; all.forEach(x => { if (x.ts < t0) prev = +x.price; });
+  const out = [];
+  for (let j = 0; j < n; j++){
+    const a = tradesOf(k).filter(x => x.ts >= t0 + j * b && x.ts < t0 + (j + 1) * b);
+    if (a.length){ const ps = a.map(x => +x.price), v = a.reduce((s, x) => s + +x.qty, 0); out.push({ o: prev ?? ps[0], c: ps[ps.length - 1], h: Math.max(...ps, prev ?? ps[0]), l: Math.min(...ps, prev ?? ps[0]), v }); prev = ps[ps.length - 1]; }
+    else out.push(prev == null ? null : { o: prev, c: prev, h: prev, l: prev, v: 0, flat: true });
   }
-  drawPick();
+  return out;
+}
+function chartSVG(k, period){
+  const cs = candles(k, period), floor = P[k].floor, W_ = 340, H = 170, padL = 4, padR = 34, top = 10, bot = 22;
+  const vals = cs.filter(Boolean).flatMap(c => [c.h, c.l]).concat([floor]);
+  let mx = Math.max(...vals) * 1.06, mn = Math.min(...vals) * 0.9; if (mx - mn < 1) mx = mn + 1;
+  const y = v => top + (mx - v) / (mx - mn) * (H - top - bot);
+  const cw = (W_ - padL - padR) / cs.length;
+  const vmax = Math.max(1, ...cs.filter(Boolean).map(c => c.v));
+  let g = "";
+  [0.25, 0.5, 0.75].forEach(f => { const v = mn + (mx - mn) * f; g += `<path d="M${padL} ${y(v)} H${W_ - padR}" stroke="rgba(239,234,219,.08)"/><text x="${W_ - padR + 4}" y="${y(v) + 4}" font-size="10" fill="rgba(239,234,219,.5)" font-family="ui-rounded,system-ui" font-weight="700">${fmtP(v)}</text>`; });
+  cs.forEach((c, j) => {
+    if (!c) return;
+    const x = padL + j * cw + cw / 2, upC = c.c >= c.o, col = c.flat ? "rgba(239,234,219,.35)" : upC ? "#6EE09A" : "#FF8A70";
+    g += `<rect x="${x - cw * .35}" y="${H - bot - (c.v / vmax) * 18}" width="${cw * .7}" height="${(c.v / vmax) * 18}" fill="rgba(239,234,219,.08)"/>`;
+    g += `<path d="M${x} ${y(c.h)} V${y(c.l)}" stroke="${col}" stroke-width="1.4"/>`;
+    const yo = y(Math.max(c.o, c.c)), hh = Math.max(1.5, Math.abs(y(c.o) - y(c.c)));
+    g += `<rect x="${x - cw * .32}" y="${yo}" width="${cw * .64}" height="${hh}" rx="1" fill="${col}"/>`;
+  });
+  g += `<path d="M${padL} ${y(floor)} H${W_ - padR}" stroke="#F2B33D" stroke-width="1.5" stroke-dasharray="5 4"/><text x="${padL + 4}" y="${y(floor) - 5}" font-size="10.5" fill="#F2B33D" font-family="ui-rounded,system-ui" font-weight="800">Rachat du village · ${fmtP(floor)}</text>`;
+  const lab = { "1h": ["il y a 1 h", "maintenant"], "24h": ["hier", "maintenant"], "7j": ["il y a 7 j", "maintenant"] }[period];
+  g += `<text x="${padL}" y="${H - 6}" font-size="10" fill="rgba(239,234,219,.5)" font-family="ui-rounded,system-ui" font-weight="700">${lab[0]}</text><text x="${W_ - padR}" y="${H - 6}" text-anchor="end" font-size="10" fill="rgba(239,234,219,.5)" font-family="ui-rounded,system-ui" font-weight="700">${lab[1]}</text>`;
+  if (!cs.some(Boolean)) g += `<text x="${(W_ - padR) / 2}" y="${H / 2 - 10}" text-anchor="middle" font-size="13" fill="rgba(239,234,219,.6)" font-family="ui-rounded,system-ui" font-weight="800">Pas encore d'échange sur cette période</text>`;
+  return `<svg viewBox="0 0 ${W_} ${H}" role="img" aria-label="Cours de ${esc(P[k].label)}">${g}</svg>`;
+}
+function marketHTML(){
+  if (!mkt.k) mkt.k = BX.RAW.find(k => k !== S.spec) || "bois";
+  const k = mkt.k, qv = quote(k);
+  const prods = BX.ALL.filter(x => !P[x].rec || BX.unlocked(S, "four"));
+  const pills = prods.map(x => { const q = quote(x); return `<button class="b2-chip ${x === k ? "on" : ""}" data-a="mkt-k" data-k="${x}"><span class="n">${P[x].e} ${esc(P[x].label)}</span><span class="p">${q.p != null ? fmtP(q.p) : "—"}</span><span class="c">${chg(q.ch)}</span></button>`; }).join("");
+  const offers = W.listings.filter(l => l.product === k).sort((a, b) => a.price - b.price || a.id - b.id);
+  const resL = BX.reserveLeft(S, k, now());
+  const rows = offers.map(l => {
+    const mine = l.seller_id === ME.id;
+    return `<div class="b2-ord ${mine ? "me" : ""}"><span class="who">${mine ? "Toi" : esc(nameOf(l.seller_id))}<small>${fmtAgo(new Date(l.created_at).getTime())}</small></span><span class="q">${fmtN(l.qty)}</span><span class="pr">${fmtP(+l.price)}</span>
+      ${mine ? `<button class="b2-btn ghost" style="color:var(--chalk)!important;background:rgba(255,255,255,.1)!important" data-a="unlist" data-id="${l.id}">Retirer</button>` : `<button class="b2-btn" data-a="buy" data-id="${l.id}">Acheter</button>`}</div>`;
+  }).join("");
+  const res = `<div class="b2-ord res"><span class="who">🏘️ Le village<small>Dépannage, cher et limité</small></span><span class="q">${fmtN(resL)}</span><span class="pr">${fmtP(BX.reservePrice(k))}</span>
+    <button class="b2-btn gold" data-a="buy-res" ${resL < 1 ? "disabled" : ""}>Acheter</button></div>`;
+  const hist = W.trades.filter(t => t.product === k).slice(-12).reverse().map(t => `<div class="b2-ord"><span class="who">${esc(t.buyer_id === ME.id ? "Toi" : nameOf(t.buyer_id))} ← ${esc(t.seller_id === ME.id ? "toi" : nameOf(t.seller_id))}<small>${fmtAgo(t.ts)}</small></span><span class="q">${fmtN(t.qty)}</span><span class="pr">${fmtP(+t.price)}</span></div>`).join("");
+  return `<div class="b2-board"><div class="b2-pills">${pills}</div><div class="b2-col" style="padding:4px 16px 24px">
+    <div class="b2-quote"><div><div style="font:800 13px var(--round);color:var(--chalk2)">${P[k].e} ${esc(P[k].label)} · prix moyen 24 h</div><span class="big">${COIN}${qv.p != null ? fmtP(qv.p) : "—"}</span><span class="ch">${chg(qv.ch)}</span></div>
+      <div class="lim">Village rachète à <b>${fmtP(P[k].floor)}</b><br>Réserve du village <b>${fmtP(BX.reservePrice(k))}</b><br>Tu en as <b>${fmtN(S.stock[k])}</b></div></div>
+    <div class="b2-seg">${["1h", "24h", "7j"].map(p => `<button class="${mkt.period === p ? "on" : ""}" data-a="mkt-p" data-p="${p}">${p === "1h" ? "1 h" : p === "24h" ? "24 h" : "7 j"}</button>`).join("")}</div>
+    <div class="b2-chart">${chartSVG(k, mkt.period)}</div>
+    <div class="b2-two"><button class="b2-btn" data-a="list" data-k="${k}" ${S.stock[k] < 1 ? "disabled" : ""}>Mettre en vente</button><button class="b2-btn gold" data-a="sell" data-k="${k}" ${S.stock[k] < 1 ? "disabled" : ""}>Vendre au village</button></div>
+    <h3 class="b2-h3">Offres des joueurs</h3>
+    <div class="b2-book">${rows || `<div class="b2-empty">Personne n'en vend pour l'instant.${k === S.spec ? " Tu es le seul à en produire : à toi de fixer ton prix." : ""}</div>`}${res}</div>
+    <h3 class="b2-h3">Dernières transactions</h3>
+    <div class="b2-book b2-hist">${hist || `<div class="b2-empty">Aucune transaction encore.</div>`}</div>
+  </div></div>`;
+}
+
+/* ---------- Village ---------- */
+function villageHTML(){
+  BX.ensureOrders(S, now(), ME.id, groupProd());
+  const notes = S.orders.list.map(o => {
+    const got = S.orders.prog[o.id] || 0, done = got >= o.qty, c = BX.CHARS[o.who], have = Math.floor(S.stock[o.k]);
+    const canBake = P[o.k].rec && S.oven.lvl && BX.canBake(S, o.k) >= 1;
+    const action = done ? "" : have >= 1 ? `<button class="b2-btn" data-a="deliver" data-id="${o.id}">Livrer ${fmtN(Math.min(have, o.qty - got))}</button>`
+      : canBake ? `<button class="b2-btn gold" data-a="bake" data-k="${o.k}">Au four</button>`
+      : `<button class="b2-btn red" data-a="goto-mkt" data-k="${o.k}">Acheter</button>`;
+    return `<div class="b2-order ${done ? "done" : ""}"><div class="hd"><span class="face">${c.e}</span><div class="sp"><div class="who">${c.name}</div><div class="want">veut ${fmtN(o.qty)} ${P[o.k].e} ${esc(P[o.k].label)}</div></div>
+      <div class="prime">+${COIN}${fmtN(o.bonus)}<small>de prime</small></div></div>
+      <div class="pb"><i style="width:${Math.min(100, got / o.qty * 100)}%"></i></div>
+      <div class="ft"><span>${fmtN(got)} / ${fmtN(o.qty)} livrés</span><span class="sp"></span><span>Tu en as ${fmtN(have)}</span>${action}</div>${done ? `<span class="stamp">Livré !</span>` : ""}</div>`;
+  }).join("");
+  const players = W.players.map(p => p.id === ME.id ? Object.assign({}, p, { stats: publicStats() }) : p);
+  if (!players.some(p => p.id === ME.id)) players.push({ id: ME.id, name: ME.name, specialty: S.spec, stats: publicStats() });
+  players.sort((a, b) => (+b.stats?.fortune || 0) - (+a.stats?.fortune || 0));
+  const top = players[0];
+  const best = (key, label, i, unit) => { const p = players.slice().sort((a, b) => (+b.stats?.[key] || 0) - (+a.stats?.[key] || 0))[0]; return p && +p.stats?.[key] > 0 ? `<div class="b2-ttl"><span class="i">${i}</span><b>${label}</b><span>${esc(p.id === ME.id ? "Toi" : p.name)}</span></div>` : `<div class="b2-ttl"><span class="i" style="filter:grayscale(1)">${i}</span><b>${label}</b><span style="color:var(--ink3)">Personne encore</span></div>`; };
+  return `<div class="b2-vil"><div class="b2-col b2-pad">
+    <div class="b2-paper" style="background:#FFF4E0"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><h2 class="b2-h2" style="margin:0">Commandes du village<small>Livre en plusieurs fois. La prime tombe à la fin.</small></h2><span class="b2-clock">⏳ <span data-live="clock">${fmtT((S.orders.slot + 1) * BAL.slotMs - now())}</span></span></div></div>
+    <div class="b2-notes">${notes}</div>
+    ${top ? `<div class="b2-baron"><span class="crown">👑</span><div class="sp"><small>Le Baron du moment</small><b>${esc(top.id === ME.id ? "C'est toi !" : top.name)}</b><span class="f">${COIN}${fmtN(top.stats?.fortune || 0)} · ${P[top.specialty]?.e || ""} ${esc(P[top.specialty]?.label || "")}</span></div></div>` : ""}
+    <div class="b2-paper b2-rank"><h2 class="b2-h2">Classement<small>Fortune : argent, stock et la moitié de ce que tu as construit.</small></h2>
+      ${players.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? "👑" : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}<small>${esc(P[p.specialty]?.label || "")}${p.stats?.farms && p.stats.farms.length > 1 ? " + " + p.stats.farms.filter(x => x !== p.specialty).map(x => P[x]?.e).join("") : ""} · ${fmtN(p.stats?.prod || 0, 1)} pièces/s</small></span><span class="f">${COIN}${fmtN(p.stats?.fortune || 0)}</span></div>`).join("")}
+    </div>
+    <div class="b2-titles">${best("prod", "Gros producteur", "🏭")}${best("traded", "Meilleur trader", "📈")}${best("baked", "Pâtissier", "🧁")}${best("orders", "Ami du village", "📦")}</div>
+  </div></div>`;
+}
+
+/* ---------- Choix de la spécialité ---------- */
+let picking = null, pickData = [];
+async function showPick(err){
+  const main = wrapEl && wrapEl.querySelector("#b2-main"); if (!main) return;
+  wrapEl.querySelector("#b2-tabs").innerHTML = ""; wrapEl.querySelectorAll("[data-live]").forEach(e => e.textContent = "0");
+  try{ const r = await rpc("baron2_world", {}); pickData = r.players || []; }catch(e){ main.innerHTML = `<div class="b2-load"><div style="text-align:center;padding:24px">${esc(errText(e))}<br><br><button class="b2-btn" data-a="pick-retry">Réessayer</button></div></div>`; return; }
+  drawPick(err);
 }
 function drawPick(err){
-  if (!alive()) return;
-  const me = Q.me(), taken = Object.fromEntries(pickData.map(p => [p.specialty, p]));
-  const mine = pickData.find(p => p.id === me.id);
-  if (mine){
-    rootEl.innerHTML = `<div class="bn"><h1>Le Baron</h1>
-      <div class="bn-hint"><span class="i">🔑</span><span>Tu as déjà une ferme (${esc(RES[mine.specialty].label)}), mais ce téléphone n'a pas ta clé. Demande à Naïm de te la redonner.</span></div></div>`;
-    return;
-  }
+  const main = wrapEl && wrapEl.querySelector("#b2-main"); if (!main) return;
+  const me = Q.me(), taken = Object.fromEntries(pickData.map(p => [p.specialty, p])), mine = pickData.find(p => p.id === me.id);
   const full = pickData.length >= 6;
-  rootEl.innerHTML = `<div class="bn">
-    <div><h1>Le Baron</h1></div>
-    <p class="bn-sub">Deviens le plus riche du groupe. Choisis ta spécialité : il n'y a qu'une place pour chacune, et ce choix est définitif. Au départ, toutes rapportent autant ; les plus rares bougent plus sur le marché.</p>
-    <div class="bn-chip" style="align-self:flex-start">${pickData.length} / 6 places prises</div>
-    ${full ? `<div class="bn-hint"><span class="i">🏰</span><span>Les 6 places sont prises. La partie continue sans toi pour l'instant.</span></div>` : ""}
-    <div class="bn-grid">${ORDER.map(k => {
-      const r = RES[k], t = taken[k];
-      return `<button class="bn-card ${picking === k ? "on" : ""}" data-bn="pick" data-k="${k}" ${t || full ? "disabled" : ""}>
-        <span class="big">${r.e}</span><b>${r.label}</b>
-        <small>${perRate(r)} · ${r.price} pièces</small>
-        <small>${t ? `<span class="taken">Pris par ${esc(t.name)}</span>` : r.perish ? `Se périme en ${r.perish} h` : "Ne se périme pas"}</small>
-      </button>`; }).join("")}</div>
-    <p class="bn-err">${err ? esc(err) : ""}</p>
-    <button class="bn-btn" data-bn="join" ${picking && !taken[picking] && !full ? "" : "disabled"}>${picking ? `Devenir ${esc(RES[picking].who.toLowerCase())}` : "Choisis une spécialité"}</button>
-  </div>`;
+  main.innerHTML = `<div class="b2-pick"><div class="b2-col b2-pad">
+    <h1>Le Baron</h1>
+    <p>Monte ta ferme, vends au village et à tes amis, deviens le plus riche du groupe. Une seule place par spécialité : choisis la tienne.</p>
+    ${mine ? `<div class="b2-tip" style="margin:0 0 12px"><span class="i">🔑</span><span>Tu as déjà une ferme (${esc(P[mine.specialty].label)}), mais ce téléphone n'a pas ta clé. Demande à Naïm de te la redonner.</span></div>` : ""}
+    <div class="b2-specs">${BX.RAW.map(k => { const t = taken[k]; return `<button class="b2-spec ${picking === k ? "on" : ""}" data-a="pick" data-k="${k}" ${t || full || mine ? "disabled" : ""}>
+      <div class="art">${plotArt(k, 0, 12)}</div><div class="tx"><b>${P[k].e} ${esc(P[k].label)}</b><small>${t ? `Pris par ${esc(t.name)}` : `${esc(P[k].place)} · ${esc(P[k].act.label.toLowerCase())}`}</small></div></button>`; }).join("")}</div>
+    ${err ? `<p style="color:var(--down);margin:10px 0 0">${esc(err)}</p>` : ""}
+    <div style="margin-top:14px"><button class="b2-btn big" data-a="join" ${picking && !taken[picking] && !full && !mine ? "" : "disabled"}>${picking ? `Ouvrir mon ${esc(P[picking].place.toLowerCase())}` : "Choisis une spécialité"}</button></div>
+  </div></div>`;
 }
 async function join(){
-  if (busy || !picking) return; busy = true;
-  const btn = rootEl.querySelector('[data-bn="join"]'); if (btn){ btn.disabled = true; btn.textContent = "Installation de ta ferme…"; }
+  const btn = wrapEl.querySelector('[data-a="join"]'); if (!btn || btn.disabled) return; btn.disabled = true; btn.textContent = "Installation…";
   try{
-    const me = Q.me();
-    const token = await rpc("baron_join", { p_profile: String(me.id), p_name: String(me.name || "Ami").slice(0, 30), p_resource: picking });
-    setToken(token); busy = false;
-    rootEl.innerHTML = `<div class="bn-load">Ouverture de ta ferme…</div>`;
-    await refresh(true);
-  }catch(e){
-    busy = false;
-    try{ const { data } = await db().from("baron_players").select("id,name,specialty"); pickData = data || pickData; }catch(_){}
-    if (String(e.message || "").includes("spécialité déjà prise")) picking = null;
-    drawPick(errText(e));
-  }
+    const me = Q.me(), s0 = BX.newState(picking, now());
+    const token = await rpc("baron2_join", { p_profile: String(me.id), p_name: String(me.name || "Ami").slice(0, 30), p_spec: picking, p_state: s0 });
+    setToken(token); await start();
+  }catch(e){ if (String(e.message || "").includes("spécialité prise")) picking = null; await showPick(errText(e)); }
 }
 
-/* =================== La ferme =================== */
-function sky(){
-  const d = new Date(), h = d.getHours() + d.getMinutes() / 60;
-  if (h < 6 || h >= 21.5) return { top:"#141B38", bot:"#2E3A68", ground:"#2F5A35", hill:"#244A2B", night:true, h };
-  if (h < 8)    return { top:"#F6A97E", bot:"#FCE3C8", ground:"#7FB35A", hill:"#5E9A45", h };
-  if (h < 18)   return { top:"#9FD3F0", bot:"#E3F4FB", ground:"#8CC063", hill:"#69A64B", h };
-  if (h < 20)   return { top:"#F2873B", bot:"#F9C9A0", ground:"#6E9E4F", hill:"#55873E", h };
-  return { top:"#5B2A6E", bot:"#E07A5F", ground:"#4F7D3E", hill:"#3E6A31", h };
+/* =================== Feuilles =================== */
+function sheet(html){
+  closeSheet();
+  wrapEl.insertAdjacentHTML("beforeend", `<div class="b2-sheetbg" data-a="sheetbg"><div class="b2-sheet" role="dialog"><div class="grab"></div>${html}</div></div>`);
+  sheetOpen = true;
 }
-function weather(){
-  // la même météo pour tout le monde, qui change chaque jour
-  const d = new Date(); const n = (d.getFullYear() * 372 + d.getMonth() * 31 + d.getDate()) * 2654435761 >>> 0;
-  const r = (n % 100) / 100; return r < 0.5 ? "soleil" : r < 0.8 ? "nuages" : "pluie";
+function closeSheet(){ wrapEl && wrapEl.querySelector(".b2-sheetbg")?.remove(); sheetOpen = false; }
+function qtyBlock(max, start, id){
+  max = Math.max(0, Math.floor(max)); start = Math.min(max, Math.floor(start));
+  return `<div class="b2-qty"><input type="range" min="${max ? 1 : 0}" max="${max}" value="${start}" step="1" data-q="${id}" aria-label="Quantité"><span class="v" data-qv="${id}">${fmtN(start)}</span></div>
+    <div class="b2-quick">${[[.25, "¼"], [.5, "½"], [1, "Tout"]].map(([f, l]) => `<button data-a="qset" data-id="${id}" data-f="${f}">${l}</button>`).join("")}</div>`;
 }
-function sceneSVG(){
-  const k = sky(), w = weather();
-  // soleil ou lune, qui traverse le ciel selon l'heure
-  const frac = k.night ? (((k.h + 24 - 21.5) % 24) / 8.5) : Math.min(1, Math.max(0, (k.h - 6) / 15.5));
-  const cx = 30 + frac * 300, cy = 70 - Math.sin(frac * Math.PI) * 48;
-  const stars = k.night ? Array.from({ length: 18 }, (_, i) => `<circle cx="${(i * 73) % 360}" cy="${8 + (i * 37) % 80}" r="${i % 3 ? 0.9 : 1.4}" fill="#fff" opacity="${0.5 + (i % 4) / 8}"/>`).join("") : "";
-  const orb = k.night
-    ? `<circle cx="${cx}" cy="${cy}" r="12" fill="#F4F1DE"/><circle cx="${cx + 5}" cy="${cy - 3}" r="11" fill="${k.top}"/>`
-    : (w === "pluie" ? "" : `<circle cx="${cx}" cy="${cy}" r="15" fill="#FFD45E"/><circle cx="${cx}" cy="${cy}" r="22" fill="#FFD45E" opacity=".25"/>`);
-  const gray = w === "pluie" && !k.night ? `<rect width="360" height="248" fill="#7B8794" opacity=".35"/>` : "";
-  return `<svg class="bn-bg" viewBox="0 0 360 248" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-    <defs><linearGradient id="bn-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${k.top}"/><stop offset="1" stop-color="${k.bot}"/></linearGradient></defs>
-    <rect width="360" height="248" fill="url(#bn-sky)"/>${stars}${orb}${gray}
-    <path d="M0 128 Q60 96 130 120 T260 112 T360 118 V248 H0Z" fill="${k.hill}"/>
-    <path d="M0 140 Q90 124 180 136 T360 132 V248 H0Z" fill="${k.ground}"/>
-    <g transform="translate(262 88)">
-      <rect x="0" y="22" width="62" height="40" fill="#B5432B"/><path d="M-6 24 L31 0 L68 24Z" fill="#7A2E1F"/>
-      <rect x="22" y="36" width="18" height="26" fill="#5A2216"/><path d="M22 36 L40 62 M40 36 L22 62" stroke="#E9C7A8" stroke-width="2"/>
-      <rect x="6" y="30" width="10" height="9" fill="${k.night ? "#FFD45E" : "#F6E7D4"}"/><rect x="46" y="30" width="10" height="9" fill="${k.night ? "#FFD45E" : "#F6E7D4"}"/>
-    </g>
-    <g stroke="#E9D3B6" stroke-width="3" stroke-linecap="round" opacity=".9">
-      <path d="M8 212 H230"/><path d="M8 226 H230"/>${Array.from({ length: 9 }, (_, i) => `<path d="M${12 + i * 27} 204 V234"/>`).join("")}
-    </g>
-    ${k.night ? `<rect width="360" height="248" fill="#0B1030" opacity=".28"/>` : ""}
-  </svg>`;
+const qval = id => { const r = wrapEl.querySelector(`[data-q="${id}"]`); return r ? Math.floor(+r.value) : 0; };
+let sheetCtx = null;
+function sheetSum(){
+  if (!sheetCtx) return;
+  const c = sheetCtx, q = qval("q");
+  const el = wrapEl.querySelector("[data-qv=q]"); if (el) el.textContent = fmtN(q);
+  const s = wrapEl.querySelector("[data-sum]");
+  if (c.type === "sell"){ s.innerHTML = `<span>Le village te paie</span><span>${COIN}${fmtN(q * P[c.k].floor)}</span>`; }
+  if (c.type === "list"){ const p = Math.max(0, +String(wrapEl.querySelector("[data-price]").value).replace(",", ".") || 0); s.innerHTML = `<span>Si tout part</span><span>${COIN}${fmtN(q * p)}</span>`; }
+  if (c.type === "buy" || c.type === "res"){ s.innerHTML = `<span>Tu paies</span><span>${COIN}${fmtN(q * c.price)}</span>`; const b = wrapEl.querySelector("[data-a=confirm]"); if (b) b.disabled = q < 1 || q * c.price > S.coins; }
+  if (c.type === "bake"){ s.innerHTML = `<span>Cuisson</span><span>${fmtT(BX.ovenDur(S, c.k))}</span>`; }
 }
-// Emplacements des produits au sol (en %)
-const SLOTS = [[30,66],[52,80],[18,88],[74,80],[44,64],[34,92],[60,92],[14,76],[62,66],[86,90],[32,79],[84,72]];
-function animalsHTML(f){
-  const r = RES[f.resource], n = Math.min(6, f.units);
-  return Array.from({ length: n }, (_, i) => {
-    const x = 22 + i * 11 + (i % 2) * 4, y = r.walk ? (i % 2 ? 66 : 58) : 50 + (i % 2) * 6;
-    if (f.resource === "miel") return `<div class="bn-animal f" style="left:${80 - i * 6}%;top:${40 + i * 4}%;--dl:-${i * 1.3}s">🐝</div>` + (i === 0 ? `<div class="bn-animal" style="left:82%;top:58%;font-size:30px">🌼</div>` : "");
-    if (f.resource === "bois") return `<div class="bn-animal s" style="left:${10 + i * 9}%;top:${44 + (i % 2) * 4}%;font-size:36px;--dl:-${i}s">🌲</div>`;
-    if (f.resource === "ble") return `<div class="bn-animal s" style="left:${14 + i * 10}%;top:${54 + (i % 2) * 5}%;font-size:28px;--dl:-${i * 0.7}s">🌾</div><div class="bn-animal s" style="left:${18 + i * 10}%;top:${58 + (i % 2) * 5}%;font-size:24px;--dl:-${i * 0.5}s">🌾</div>`;
-    return `<div class="bn-animal w" style="left:${x}%;top:${y}%;--d:${11 + i * 3}s;--dl:-${i * 2.5}s;--a:-${30 + i * 4}px;--b:${30 + i * 5}px">${r.animal}</div>`;
-  }).join("") + (f.resource === "oeufs" ? `<div class="bn-animal" style="left:12%;top:47%;font-size:24px">🏠</div>` : "");
+function sellSheet(k){
+  sheetCtx = { type:"sell", k };
+  sheet(`<h3>${P[k].e} Vendre au village</h3><p>Le village rachète toujours, à ${fmtP(P[k].floor)} pièces l'unité : c'est le prix plancher. Au marché, tes amis paieront peut-être plus.</p>
+    ${qtyBlock(S.stock[k], S.stock[k], "q")}<div class="b2-sum" data-sum></div><button class="b2-btn gold big" data-a="confirm">Vendre au village</button>`);
+  sheetSum();
 }
-function itemsHTML(){
-  const f = farm(); if (!f) return "";
-  const total = Math.max(0, Math.floor(livePending()) - collected);
-  const n = Math.min(SLOTS.length, total);
-  if (!n) return "";
-  const base = Math.floor(total / n), extra = total % n, e = RES[f.resource].e;
-  return Array.from({ length: n }, (_, i) => {
-    const v = base + (i < extra ? 1 : 0), [x, y] = SLOTS[i];
-    return `<button class="bn-item" data-bn="item" data-v="${v}" style="left:${x}%;top:${y}%;animation-delay:${i * 30}ms" aria-label="Ramasser ${v} ${esc(RES[f.resource].label)}">${e}${v > 1 ? `<span class="n">${v}</span>` : ""}</button>`;
-  }).join("");
+function prodSheet(k){
+  const q = quote(k);
+  sheetCtx = null;
+  sheet(`<h3>${P[k].e} ${esc(P[k].label)}</h3><p>Tu en as ${fmtN(S.stock[k])}. Le village le rachète ${fmtP(P[k].floor)}${q.p != null ? `, le marché en ce moment autour de ${fmtP(q.p)}` : ""}.</p>
+    <div class="b2-two"><button class="b2-btn gold" data-a="sell" data-k="${k}" ${S.stock[k] < 1 ? "disabled" : ""}>Vendre au village</button>
+    ${BX.unlocked(S, "marche") ? `<button class="b2-btn" data-a="goto-mkt" data-k="${k}">Voir au marché</button>` : ""}</div>`);
 }
-function gaugeData(){
-  const f = farm(), p = livePending(), cap = Number(f.cap), ready = Math.max(0, Math.floor(p) - collected);
-  const full = p >= cap - 1e-6, pct = Math.min(100, (p / cap) * 100);
-  const left = (cap - p) / Number(f.rate_per_h) * 3600000;
-  return { e: RES[f.resource].e, ready, full, pct, txt: full ? "Ferme pleine : la production est perdue !" : `Pleine dans ${fmtDur(left)}` };
+function listSheet(k){
+  const q = quote(k), cheapest = W.listings.filter(l => l.product === k).sort((a, b) => a.price - b.price)[0];
+  const sug = q.p != null ? q.p : P[k].floor * 1.5;
+  sheetCtx = { type:"list", k };
+  sheet(`<h3>${P[k].e} Mettre en vente</h3><p>Tu fixes ton prix. Tes produits sortent de la grange et attendent un acheteur ; tu peux les retirer quand tu veux.${cheapest ? ` L'offre la moins chère est à ${fmtP(+cheapest.price)}.` : ""}</p>
+    ${qtyBlock(S.stock[k], S.stock[k] / 2, "q")}
+    <div class="b2-field"><i class="b2-coin"></i><input data-price inputmode="decimal" value="${String(Math.round(sug * 10) / 10).replace(".", ",")}" aria-label="Prix à l'unité"><span style="font:700 13px var(--round);color:var(--ink2)">l'unité</span></div>
+    <p class="b2-note">Plancher du village : ${fmtP(P[k].floor)} · Réserve du village : ${fmtP(BX.reservePrice(k))}</p>
+    <div class="b2-sum" data-sum></div><button class="b2-btn big" data-a="confirm">Mettre en vente</button>`);
+  sheetSum();
 }
-function gaugeHTML(){
-  const d = gaugeData();
-  return `<div class="bn-gauge ${d.full ? "full" : ""}" id="bn-gauge">
-    <div class="row"><b id="bn-g-ready">${d.e} ${d.ready} à ramasser</b><span id="bn-g-left">${d.txt}</span></div>
-    <div class="bn-bar"><i id="bn-g-fill" style="width:${d.pct.toFixed(1)}%"></i></div>
-    <button class="bn-btn" data-bn="all" id="bn-g-btn" ${d.ready ? "" : "disabled"}>Tout récolter</button>
-  </div>`;
+function buySheet(l){
+  const max = Math.min(+l.qty, Math.floor(S.coins / +l.price));
+  sheetCtx = { type:"buy", l, price: +l.price, k: l.product };
+  sheet(`<h3>${P[l.product].e} Acheter à ${esc(nameOf(l.seller_id))}</h3><p>${fmtN(l.qty)} en vente à ${fmtP(+l.price)} l'unité.${max < 1 ? " Tu n'as pas assez de pièces." : ""}</p>
+    ${qtyBlock(max, max, "q")}<div class="b2-sum" data-sum></div><button class="b2-btn big" data-a="confirm" ${max < 1 ? "disabled" : ""}>Acheter</button>`);
+  sheetSum();
 }
-function updateGauge(){
-  const g = document.getElementById("bn-gauge"); if (!g) return; const d = gaugeData();
-  g.classList.toggle("full", d.full);
-  const set = (id, v) => { const el = document.getElementById(id); if (el && el.textContent !== v) el.textContent = v; };
-  set("bn-g-ready", `${d.e} ${d.ready} à ramasser`); set("bn-g-left", d.txt);
-  const fill = document.getElementById("bn-g-fill"); if (fill) fill.style.width = d.pct.toFixed(1) + "%";
-  const btn = document.getElementById("bn-g-btn"); if (btn) btn.disabled = !d.ready || busy;
+function resSheet(k){
+  const pr = BX.reservePrice(k), left = BX.reserveLeft(S, k, now()), max = Math.min(left, Math.floor(S.coins / pr));
+  sheetCtx = { type:"res", k, price: pr };
+  sheet(`<h3>🏘️ Réserve du village</h3><p>Le village dépanne quand personne ne vend, mais à ${fmtP(pr)} l'unité, et seulement ${fmtN(left)} ${P[k].e} d'ici les prochaines commandes.</p>
+    ${qtyBlock(max, max, "q")}<div class="b2-sum" data-sum></div><button class="b2-btn gold big" data-a="confirm" ${max < 1 ? "disabled" : ""}>Acheter</button>`);
+  sheetSum();
 }
-function stockHTML(){
-  const rate = Number(S.sell_rate || 0.7);
-  if (!S.stocks.length) return `<div class="bn-list"><div class="bn-empty">Ton stock est vide. Ramasse ta production !</div></div>`;
-  return `<div class="bn-list">${S.stocks.map(s => {
-    const r = RES[s.resource], price = Number(S.market[s.resource] || r.price);
-    const room = mRoom(s.resource), q = Math.min(Number(s.qty), room), unit = price * rate, gain = q > 0 ? sellGain(s.resource, q) : 0;
-    const exp = s.next_expiry ? new Date(s.next_expiry).getTime() - Date.now() : null;
-    return `<div class="bn-line"><span class="ico">${r.e}</span>
-      <div class="txt"><b>${fmtN(s.qty)} ${esc(r.label.toLowerCase())}</b>
-        <small>${unit.toLocaleString("fr-FR", { maximumFractionDigits:1 })} pièces l'unité au marché</small>
-        ${exp !== null ? `<small class="${exp < 3 * 3600000 ? "warn" : ""}">Les premiers se périment dans ${fmtDur(exp)}</small>` : ""}</div>
-      ${q > 0 ? `<button class="bn-btn small" data-bn="sell" data-k="${s.resource}" data-q="${q}">Vendre${q < s.qty ? ` ${fmtN(q)}` : ""} · ${fmtN(gain)} 🪙</button>`
-              : `<button class="bn-btn small ghost" disabled>Marché plein</button>`}
-    </div>`; }).join("")}</div>`;
-}
-let view = "farm", M = null, mFetched = 0, mBusy = false, sheet = null;
-function tabsHTML(){
-  const n = M ? M.orders.filter(o => !o.winner && canDeliver(o)).length : 0;
-  return `<div class="bn-tabs" role="tablist">
-    <button data-bn="view" data-v="farm" aria-pressed="${view === "farm"}">${MAIN[farm().resource]} Ferme</button>
-    <button data-bn="view" data-v="market" aria-pressed="${view === "market"}">🏪 Marché${n ? ` <i>${n}</i>` : ""}</button>
-    <button data-bn="view" data-v="rank" aria-pressed="${view === "rank"}">🏆 Classement</button></div>`;
-}
-function drawFarm(){
-  if (view === "market") return drawMarket();
-  if (view === "rank") return drawRank();
-  if (!alive() || !S || !farm()) return;
-  const f = farm(), r = RES[f.resource], p = S.player;
-  const w = weather();
-  rootEl.innerHTML = `<div class="bn">${tabsHTML()}
-    <div class="bn-head"><h1>Ma ferme${iAmBaron() ? " 👑" : ""}</h1><div class="bn-purse" id="bn-purse">🪙 <span>${fmtN(p.coins)}</span></div></div>
-    <div class="bn-who"><span class="bn-chip">${r.e} ${esc(r.who)}</span><span>${f.units} ${f.units > 1 ? r.units : r.unit} · ${perRate({ rate: Number(f.rate_per_h) })}</span></div>
-    ${questHTML()}
-    <div class="bn-scene" id="bn-scene">${sceneSVG()}
-      ${w !== "soleil" ? `<div class="bn-cloud" style="top:6%;animation-duration:70s;animation-delay:-20s">☁️</div><div class="bn-cloud" style="top:16%;font-size:26px;animation-duration:95s;animation-delay:-60s">☁️</div>` : ""}
-      ${w === "pluie" ? `<div class="bn-rain"></div>` : ""}
-      ${animalsHTML(f)}
-      <button class="bn-main" id="bn-main" data-bn="tap" aria-label="Taper sur ta bête"><span>${MAIN[f.resource]}</span></button>
-      ${seen("tap") ? "" : `<span class="bn-hand" id="bn-hand">👆</span>`}
-      <span class="bn-energy" id="bn-energy">⚡ <span id="bn-en">30</span><i><b id="bn-enb" style="width:100%"></b></i></span>
-      <div id="bn-items">${itemsHTML()}</div>
-      <div id="bn-chores">${choresHTML()}</div>
-      <span class="bn-combo ${comboOn() ? "" : "off"}" id="bn-combo">${comboText()}</span>
-      <span class="bn-tag">${w === "pluie" ? "🌧️ Pluie" : w === "nuages" ? "⛅ Nuageux" : sky().night ? "🌙 Nuit" : "☀️ Beau temps"}</span>
-    </div>
-    ${gaugeHTML()}
-    ${buyHTML()}
-    ${upgradesHTML()}
-    <div class="bn-sec">Mon stock</div>
-    ${stockHTML()}
-  </div>`;
-  if (golden) showGolden();
-}
-/* =================== Corvées =================== */
-// 4 types de corvées côté serveur (durée de production gagnée : 4, 4, 6, 8 min) ; chaque ferme a les siennes
-const CHORES = {
-  arroser: { need:1, life:22000, min:4 },
-  nourrir: { need:1, life:22000, min:4 },
-  herbes:  { need:3, life:24000, min:6 },
-  renard:  { need:2, life:12000, min:8 },
-};
-const CHORE_SKIN = {
-  oeufs: { arroser:{ e:"🪣", done:"💧", label:"Remplir l'eau", fx:"💧" },        nourrir:{ e:"🌽", done:"🐔", label:"Donner le grain", fx:"🌽" },
-           herbes:{ e:"🪶", done:"✨", label:"Ramasser les plumes", fx:"🪶" },   renard:{ e:"🦊", done:"💨", label:"Chasser le renard", fx:"💥" } },
-  ble:   { arroser:{ e:"🥀", done:"🌾", label:"Arroser", fx:"💧" },              nourrir:{ e:"🐛", done:"✨", label:"Enlever les chenilles", fx:"🐛" },
-           herbes:{ e:"🌿", done:"✨", label:"Désherber", fx:"🌱" },             renard:{ e:"🐦", done:"💨", label:"Chasser les corbeaux", fx:"💥" } },
-  lait:  { arroser:{ e:"🪣", done:"💧", label:"Remplir l'abreuvoir", fx:"💧" },  nourrir:{ e:"🌾", done:"🐄", label:"Donner le foin", fx:"🌾" },
-           herbes:{ e:"💩", done:"✨", label:"Nettoyer l'étable", fx:"🧹" },     renard:{ e:"🪰", done:"💨", label:"Chasser les mouches", fx:"💥" } },
-  bois:  { arroser:{ e:"🌱", done:"🌳", label:"Arroser les pousses", fx:"💧" },  nourrir:{ e:"🪓", done:"✨", label:"Affûter la hache", fx:"⚡" },
-           herbes:{ e:"🌿", done:"✨", label:"Débroussailler", fx:"🌱" },        renard:{ e:"🦫", done:"💨", label:"Chasser le castor", fx:"💥" } },
-  laine: { arroser:{ e:"🪣", done:"💧", label:"Remplir l'abreuvoir", fx:"💧" },  nourrir:{ e:"✂️", done:"🧶", label:"Tondre", fx:"✂️" },
-           herbes:{ e:"🌵", done:"✨", label:"Arracher les chardons", fx:"🌱" }, renard:{ e:"🐺", done:"💨", label:"Chasser le loup", fx:"💥" } },
-  miel:  { arroser:{ e:"🌼", done:"🌸", label:"Planter des fleurs", fx:"🌸" },   nourrir:{ e:"💨", done:"🍯", label:"Enfumer la ruche", fx:"💨" },
-           herbes:{ e:"🕸️", done:"✨", label:"Enlever les toiles", fx:"🕸️" },   renard:{ e:"🐻", done:"💨", label:"Chasser l'ours", fx:"💥" } },
-};
-const chDef = kind => Object.assign({}, CHORES[kind], (CHORE_SKIN[farm() ? farm().resource : "oeufs"] || CHORE_SKIN.oeufs)[kind]);
-// ce que la corvée va rapporter (affiché sur l'étiquette)
-const choreGain = kind => { const f = farm(); if (!f) return 0;
-  const next = Date.now() - lastChore < 40000 ? Math.min(5, (S.combo || 0) + 1) : 0;
-  return Math.max(1, Math.round(Number(f.rate_per_h) * CHORES[kind].min / 60 * (1 + 0.2 * next))); };
-const CHORE_SLOTS = [[22,56],[48,58],[70,62],[36,74],[80,76],[16,72]];
-let chores = [], nextSpawn = Date.now() + 4000, lastChore = 0, choreBusy = false;
-const comboNow = () => (Date.now() - lastChore < 40000 && S) ? (S.combo || 0) : 0;
-const comboOn = () => comboNow() > 0;
-const comboText = () => `Combo ×${(1 + 0.2 * comboNow()).toLocaleString("fr-FR", { maximumFractionDigits:1 })}`;
-function choreHTML(c){
-  const d = chDef(c.kind), left = d.need - c.taps;
-  return `<button class="bn-chore ${c.kind === "renard" ? "fox" : ""}" data-bn="chore" data-id="${c.id}" style="left:${c.x}%;top:${c.y}%" aria-label="${d.label}">
-    <span class="ce">${d.e}</span><span class="cl">${d.label}${left > 1 ? ` <i>×${left}</i>` : ""} <span class="cg">+${fmtN(choreGain(c.kind))} ${RES[farm().resource].e}</span></span></button>`;
-}
-function choresHTML(){ return chores.map(choreHTML).join(""); }
-function spawnChore(){
-  const free = CHORE_SLOTS.filter(([x, y]) => !chores.some(c => c.x === x && c.y === y));
-  if (!free.length) return;
-  const kinds = Object.keys(CHORES), kind = kinds[Math.floor(Math.random() * kinds.length)];
-  const [x, y] = free[Math.floor(Math.random() * free.length)];
-  const c = { id: Math.random().toString(36).slice(2, 9), kind, x, y, taps: 0, born: Date.now() };
-  chores.push(c);
-  document.getElementById("bn-chores")?.insertAdjacentHTML("beforeend", choreHTML(c));
-  if (!seen("chore-tip")){ markSeen("chore-tip"); toast("✨ Une corvée ! Tape dessus : elle te donne des produits tout de suite"); }
-  buzz(5);
-}
-setInterval(() => {
-  try{
-    const t = Date.now();
-    // les corvées oubliées s'en vont (le renard file vite)
-    chores.filter(c => t - c.born > chDef(c.kind).life).forEach(c => {
-      chores = chores.filter(x => x !== c);
-      const el = document.querySelector(`.bn-chore[data-id="${c.id}"]`); if (el){ el.classList.add("bye"); setTimeout(() => el.remove(), 500); }
-    });
-    if (!alive() || !S || !farm() || document.visibilityState !== "visible") return;
-    if (view === "farm" && chores.length < 2 && t >= nextSpawn){ spawnChore(); nextSpawn = t + 15000 + Math.random() * 10000; }
-    const cb = document.getElementById("bn-combo"); if (cb){ cb.classList.toggle("off", !comboOn()); if (comboOn()) cb.textContent = comboText(); }
-  }catch(e){}
-}, 1000);
-async function doChore(el){
-  const c = chores.find(x => x.id === el.dataset.id); if (!c) return;
-  const d = chDef(c.kind);
-  c.taps++; el.classList.remove("hit"); void el.offsetWidth; el.classList.add("hit"); buzz(8); sound("pop");
-  const b = el.getBoundingClientRect(); floatText(b.left + b.width / 2, b.top + 10, d.fx);
-  if (c.taps < d.need){
-    if (c.kind === "renard"){ // le renard détale un peu plus loin
-      c.x = Math.max(12, Math.min(86, c.x + (Math.random() < .5 ? -22 : 22))); el.style.left = c.x + "%";
-    }
-    const lab = el.querySelector(".cl"); if (lab) lab.innerHTML = `${d.label}${d.need - c.taps > 1 ? ` <i>×${d.need - c.taps}</i>` : ""} <span class="cg">+${fmtN(choreGain(c.kind))} ${RES[farm().resource].e}</span>`;
+function bakeSheet(k){
+  const free = S.oven.slots.slice(0, BAL.ovenSlots(S.oven.lvl)).length < BAL.ovenSlots(S.oven.lvl) || S.oven.slots.slice(0, BAL.ovenSlots(S.oven.lvl)).some(x => !x);
+  if (!k){
+    sheetCtx = null;
+    sheet(`<h3>Que cuisiner ?</h3>${BX.CRAFT.map(r => { const c = BX.canBake(S, r); return `<div class="b2-rec"><span class="ic">${P[r].e}</span><div class="sp"><b>${esc(P[r].label)}</b><div class="b2-ing">${Object.keys(P[r].rec).map(x => `<span class="${S.stock[x] >= 1 ? "ok" : "ko"}">${P[x].e} ${fmtN(S.stock[x])}</span>`).join("")}</div></div>${c >= 1 ? `<button class="b2-btn" data-a="bake" data-k="${r}">Choisir</button>` : ""}</div>`; }).join("")}`);
     return;
   }
-  if (choreBusy){ c.taps--; return; }
-  choreBusy = true;
-  try{
-    const res = await rpc("baron_chore", { p_token: getToken(), p_kind: c.kind });
-    chores = chores.filter(x => x !== c);
-    el.querySelector(".ce").textContent = d.done; el.classList.add("done"); setTimeout(() => el.remove(), 500);
-    lastChore = Date.now(); setState(res.state); S.combo = res.combo;
-    floatText(b.left + b.width / 2, b.top - 8, `+${res.qty} ${RES[res.resource].e}`, res.combo >= 3);
-    const cb = document.getElementById("bn-combo");
-    if (cb){ cb.textContent = comboText(); cb.classList.toggle("off", !comboOn()); cb.classList.remove("pop"); void cb.offsetWidth; cb.classList.add("pop"); }
-    if (res.combo >= 5) toast("🔥 Combo maximum ×2 !", "gold");
-    refreshPanels();
-  }catch(err){ c.taps = d.need - 1; toast(esc(errText(err))); }
-  choreBusy = false;
+  if (!S.oven.lvl){ toast("Construis d'abord le four, dans la grange."); return; }
+  if (!free){ toast("Toutes les places du four sont occupées."); return; }
+  const max = Math.min(BX.canBake(S, k), BX.ovenBatch(S));
+  sheetCtx = { type:"bake", k };
+  sheet(`<h3>${P[k].e} ${esc(P[k].label)}</h3><p>Chaque ${esc(P[k].label.toLowerCase())} demande ${Object.keys(P[k].rec).map(x => `1 ${P[x].e}`).join(" + ")}. Fournée de ${fmtN(BX.ovenBatch(S))} au maximum.</p>
+    ${qtyBlock(max, max, "q")}<div class="b2-sum" data-sum></div><button class="b2-btn big" data-a="confirm" ${max < 1 ? "disabled" : ""}>🔥 Lancer la cuisson</button>`);
+  sheetSum();
 }
-// Redessine le stock et l'achat sans toucher à la scène (les corvées restent en place)
-function refreshPanels(){
-  if (view === "market"){ drawMarket(); return; }
-  if (view === "rank") return;
-  const list = rootEl && rootEl.querySelector(".bn-list"); if (list) list.outerHTML = stockHTML();
-  const buy = document.getElementById("bn-buy"); if (buy) buy.outerHTML = buyHTML();
-  const purse = document.querySelector("#bn-purse span"); if (purse) purse.textContent = fmtN(S.player.coins);
-  const qu = document.getElementById("bn-quest"); if (qu) qu.outerHTML = questHTML();
-  updateEnergy();
+function farm2Sheet(){
+  const c = BX.costs.farm(S), free = BX.RAW.filter(k => !S.farms[k]);
+  sheetCtx = null;
+  sheet(`<h3>Nouvelle exploitation</h3><p>Elle a ses propres parcelles, son monte-charge et sa charrette, et livre dans la même grange. Coût : ${price(c)}.</p>
+    <div class="b2-specs">${free.map(k => `<button class="b2-spec" data-a="farm2-go" data-k="${k}"><div class="art">${plotArt(k, 0, 6)}</div><div class="tx"><b>${P[k].e} ${esc(P[k].label)}</b><small>${esc((W.players.find(p => p.specialty === k) || {}).name ? "Concurrence " + (W.players.find(p => p.specialty === k)).name : "Personne n'en produit")}</small></div></button>`).join("")}</div>`);
 }
 
-/* =================== Le marché =================== */
-const stockOf = k => { const st = S && S.stocks.find(x => x.resource === k); return st ? Number(st.qty) : 0; };
-const canDeliver = o => Object.entries(o.items).every(([k, q]) => stockOf(k) >= q);
-// Marché à stocks : prix normal à mi-stock, jusqu'à ×4 en rupture, ×0,35 quand c'est plein (comme le serveur)
-const mp = k => M && M.prices && M.prices[k];
-const priceAt = (k, st) => { const m = mp(k); if (!m) return Number((S.market || {})[k] || RES[k].price);
-  const cap = Number(m.cap); return Number(m.base) * Math.min(4, Math.max(0.35, Math.pow((cap / 2) / Math.max(st, cap * 0.05), 0.6))); };
-const mStock = k => mp(k) ? Math.max(0, Math.floor(Number(mp(k).stock))) : 0;
-const mRoom = k => mp(k) ? Math.max(0, Math.floor(Number(mp(k).cap) - Number(mp(k).stock))) : Infinity;
-const buyCost = (k, q) => Math.ceil(q * priceAt(k, Number(mp(k).stock) - q / 2));
-const sellGain = (k, q) => Math.floor(q * priceAt(k, (mp(k) ? Number(mp(k).stock) : 0) + q / 2) * Number(S.sell_rate || 0.7));
-const maxBuy = (k, coins) => { let lo = 0, hi = mStock(k); while (lo < hi){ const m = Math.ceil((lo + hi) / 2); if (buyCost(k, m) <= coins) lo = m; else hi = m - 1; } return lo; };
-const pfmt = n => Number(n).toLocaleString("fr-FR", { maximumFractionDigits: Number(n) < 20 ? 2 : 1 });
-async function loadMarket(force){
-  if (mBusy || (!force && Date.now() - mFetched < 4000)) return;
-  mBusy = true;
-  try{
-    M = await rpc("baron_market_view", { p_token: getToken() }); mFetched = Date.now();
-    if (alive() && view === "market" && !sheet) drawMarket();
-    else if (alive()){ const tb = rootEl.querySelector(".bn-tabs"); if (tb) tb.outerHTML = tabsHTML(); }   // pastille des commandes livrables
+/* =================== Actions =================== */
+async function confirm(){
+  const c = sheetCtx; if (!c) return;
+  const q = qval("q"); if (q < 1) return;
+  const btn = wrapEl.querySelector("[data-a=confirm]"); if (btn) btn.disabled = true;
+  if (c.type === "sell"){
+    if (S.stock[c.k] < q) return;
+    S.stock[c.k] -= q; const g = q * P[c.k].floor; S.coins += g; S.stats.earned += g; S.stats.villageSold += g; dirty = true;
+    closeSheet(); draw(); sound("coin"); coinsFly(wrapEl.querySelector(`[data-k="${c.k}"]`) || wrapEl.querySelector("#b2-main"), 6); toast(`+${COIN}${fmtN(g)}`, "gold");
+    return;
   }
-  catch(e){ if (view === "market" && alive() && !M) rootEl.innerHTML = `<div class="bn">${tabsHTML()}<p class="bn-err">${esc(errText(e))}</p></div>`; }
-  mBusy = false;
+  if (c.type === "res"){
+    const cost = q * c.price; if (cost > S.coins) return;
+    S.coins -= cost; S.stock[c.k] += q; S.reserve.used[c.k] = (S.reserve.used[c.k] || 0) + q; S.stats.bought += cost; dirty = true;
+    closeSheet(); draw(); sound("up"); toast(`${fmtN(q)} ${P[c.k].e} achetés au village`); return;
+  }
+  if (c.type === "bake"){
+    const nS = BAL.ovenSlots(S.oven.lvl); let idx = -1; for (let i = 0; i < nS; i++) if (!S.oven.slots[i]){ idx = i; break; }
+    if (idx < 0 || BX.canBake(S, c.k) < q) return;
+    for (const x in P[c.k].rec) S.stock[x] -= q * P[c.k].rec[x];
+    S.oven.slots[idx] = { rec: c.k, qty: q, t0: now(), dur: BX.ovenDur(S, c.k) }; dirty = true;
+    closeSheet(); view = "barn"; draw(); sound("up"); toast(`🔥 ${fmtN(q)} ${P[c.k].label.toLowerCase()} au four`); return;
+  }
+  if (c.type === "list"){
+    const p = Math.round((+String(wrapEl.querySelector("[data-price]").value).replace(",", ".") || 0) * 10) / 10;
+    if (!(p > 0)) { toast("Indique un prix.", "err"); if (btn) btn.disabled = false; return; }
+    if (S.stock[c.k] < q) return;
+    S.stock[c.k] -= q;
+    try{ await queue(() => rpc("baron2_list", { p_token: getToken(), p_state: S, p_product: c.k, p_qty: q, p_price: p })); lastSave = now(); closeSheet(); toast(`${fmtN(q)} ${P[c.k].e} mis en vente à ${fmtP(p)}`); await loadWorld(true); draw(); }
+    catch(e){ S.stock[c.k] += q; toast(errText(e), "err"); if (btn) btn.disabled = false; }
+    return;
+  }
+  if (c.type === "buy"){
+    const cost = q * c.price; if (cost > S.coins) return;
+    S.coins -= cost; S.stock[c.k] += q; S.stats.bought += cost;
+    try{ await queue(() => rpc("baron2_buy", { p_token: getToken(), p_state: S, p_id: c.l.id, p_qty: q, p_price: c.price })); lastSave = now(); closeSheet(); sound("up"); toast(`${fmtN(q)} ${P[c.k].e} achetés à ${esc(nameOf(c.l.seller_id))}`); await loadWorld(true); draw(); }
+    catch(e){ S.coins += cost; S.stock[c.k] -= q; S.stats.bought -= cost; toast(errText(e), "err"); closeSheet(); await loadWorld(true); draw(); }
+  }
 }
-setInterval(() => { if (alive() && S && document.visibilityState === "visible" && (view === "market" || Date.now() - mFetched > 60000)) loadMarket(); }, 15000);
-function spark(hist, price, base){
-  const pts = (hist || []).map(h => Number(h[1])); pts.push(Number(price));
-  if (pts.length < 2) pts.unshift(Number(base));
-  const lo = Math.min(...pts, base * 0.95), hi = Math.max(...pts, base * 1.05), w = 160, h = 28;
-  const xy = pts.map((v, i) => `${(i / (pts.length - 1) * w).toFixed(1)},${(h - 2 - (v - lo) / (hi - lo) * (h - 4)).toFixed(1)}`);
-  const col = pts[pts.length - 1] >= pts[0] ? "#2F7D4E" : "#D92D20";
-  const by = (h - 2 - (base - lo) / (hi - lo) * (h - 4)).toFixed(1);
-  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><line x1="0" y1="${by}" x2="${w}" y2="${by}" stroke="currentColor" stroke-opacity=".18" stroke-dasharray="2 3"/><polyline points="${xy.join(" ")}" fill="none" stroke="${col}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+function onInput(e){
+  if (e.target.matches("[data-q]") || e.target.matches("[data-price]")) sheetSum();
 }
-function orderHTML(o){
-  const ok = !o.winner && canDeliver(o), left = new Date(o.expires_at).getTime() - Date.now();
-  const its = Object.entries(o.items).map(([k, q]) => {
-    const have = stockOf(k), cls = o.winner ? "" : have >= q ? "have" : "miss";
-    return `<span class="it ${cls}">${RES[k].e} ${fmtN(q)}${k === M.star ? ` <span class="star">⭐</span>` : ""}${!o.winner && have < q ? ` <small>(${fmtN(have)})</small>` : ""}</span>`;
-  }).join("");
-  const foot = o.winner
-    ? `<small>${o.mine ? "🏆 Tu l'as livrée !" : `✅ Livrée par ${esc(o.winner)}`}</small>`
-    : `<button class="bn-btn ${ok ? "" : "ghost"}" data-bn="deliver" data-id="${o.id}" ${ok ? "" : "disabled"}>${ok ? `Livrer · +${fmtN(o.reward)} 🪙` : "Il te manque des produits"}</button>`;
-  return `<div class="bn-order ${ok ? "ok" : ""} ${o.winner ? "won" : ""}"><div class="top"><b>+${fmtN(o.reward)} 🪙</b><small>${o.winner ? "" : `encore ${fmtDur(left)}`}</small></div>
-    <div class="its">${its}</div>${foot}</div>`;
+function paid(c, el){
+  if (!BX.pay(S, c)){ sound("err"); buzz(20); toast(S.stock.bois < (c.wood || 0) ? "Il te manque du bois." : "Pas encore assez de pièces."); bounce(el); return false; }
+  dirty = true; return true;
 }
-function drawMarket(){
-  if (!alive() || !S || !farm()) return;
-  if (!M){ rootEl.innerHTML = `<div class="bn">${tabsHTML()}<div class="bn-load">Le marché ouvre ses étals…</div></div>`; loadMarket(true); return; }
-  const p = S.player, star = RES[M.star];
-  const stalls = ORDER.map(k => {
-    const r = RES[k], m = M.prices[k], price = Number(m.price), ago = Number(m.ago);
-    const ch = ago ? (price - ago) / ago * 100 : 0, cls = ch > 0.5 ? "up" : ch < -0.5 ? "down" : "flat";
-    const who = M.producers && M.producers[k] ? `de ${esc(M.producers[k])}` : "pas encore de producteur";
-    const have = stockOf(k), st = mStock(k), room = mRoom(k), cap = Number(m.cap);
-    const lvl = st < 1 ? `<span class="down">Rupture !</span>` : room < 1 ? `<span class="down">Marché plein</span>` : `${fmtN(st)} au marché`;
-    return `<div class="bn-stall"><span class="ico">${r.e}</span>
-      <div class="txt"><b>${r.label}</b><small>${who}${have ? ` · tu en as ${fmtN(have)}` : ""}</small>
-        <small class="lv">${lvl}<i><b style="width:${Math.min(100, st / cap * 100).toFixed(0)}%"></b></i></small></div>
-      ${spark(m.history, price, m.base)}
-      <div class="pr"><b>${pfmt(price)} 🪙</b><small class="${cls}">${cls === "up" ? "▲" : cls === "down" ? "▼" : "■"} ${Math.abs(ch).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} %</small></div>
-      <div class="acts"><button class="bn-btn small" data-bn="mbuy" data-k="${k}" ${st < 1 ? "disabled" : ""}>${st < 1 ? "Rupture" : "Acheter"}</button>${have ? `<button class="bn-btn small ghost" data-bn="msell" data-k="${k}" ${room < 1 ? "disabled" : ""}>${room < 1 ? "Plein" : "Vendre"}</button>` : ""}</div>
-    </div>`;
-  }).join("");
-  rootEl.innerHTML = `<div class="bn">${tabsHTML()}
-    <div class="bn-head"><h1>Le marché</h1><div class="bn-purse" id="bn-purse">🪙 <span>${fmtN(p.coins)}</span></div></div>
-    <div class="bn-crier"><span class="big">📣</span><div><b>Le crieur : commandes du village</b><small>Le premier qui livre empoche tout. Star du jour : ${star.e} ${star.label}, comptée double ⭐</small></div></div>
-    ${M.orders.map(orderHTML).join("")}
-    <div class="bn-sec">Les étals · prix sur 1 h</div>
-    <div class="bn-list">${stalls}</div>
-    <p class="bn-sub" style="font-size:13px;text-align:center">Le marché ne vend que ce que vous lui avez vendu : quand c'est rare, c'est cher. Il n'achète que s'il a de la place, et les villageois vident les étals petit à petit.</p>
-  </div>`;
-}
-/* Feuille d'achat / vente */
-function openSheet(mode, k){
-  const r = RES[k], price = Number(M.prices[k].price), coins = Number(S.player.coins), have = stockOf(k);
-  const max = mode === "buy" ? maxBuy(k, coins) : Math.min(have, mRoom(k));
-  if (!max){ toast(mode === "buy" ? (mStock(k) < 1 ? "Rupture : personne n'en a vendu au marché." : "Pas assez de pièces.") : (have ? "Le marché est plein : personne n'en veut pour l'instant." : "Tu n'en as pas.")); return; }
-  const opts = [...new Set([10, 50, 100, 500].filter(q => q < max).concat([max]))].slice(-4);
-  sheet = { mode, k, q: opts.includes(10) && max > 10 ? 10 : max, opts, max, price };
-  drawSheet();
-}
-function drawSheet(){
-  document.querySelector(".bn-sheet")?.remove(); if (!sheet) return;
-  const { mode, k, q, opts, max, price } = sheet, r = RES[k];
-  const total = mode === "buy" ? buyCost(k, q) : sellGain(k, q);
-  document.body.insertAdjacentHTML("beforeend", `<div class="bn-sheet" data-bn="sheet-close"><div class="box" role="dialog" aria-modal="true">
-    <h2>${mode === "buy" ? "Acheter" : "Vendre"} ${r.e} ${r.label.toLowerCase()}</h2>
-    <p class="sub">${pfmt(price)} pièces l'unité${mode === "sell" ? ` · vente à ${Math.round(Number(S.sell_rate || 0.7) * 100)} %` : ""} · ${mode === "buy" ? `${fmtN(mStock(k))} disponibles` : `le marché en prend encore ${fmtN(mRoom(k))}`}</p>
-    <div class="bn-qty">${opts.map(o => `<button data-bn="sq" data-q="${o}" aria-pressed="${o === q}">${o === max && o !== 10 && o !== 50 && o !== 100 && o !== 500 ? `Max ${fmtN(o)}` : fmtN(o)}</button>`).join("")}</div>
-    <div class="bn-total"><span>${fmtN(q)} ${r.label.toLowerCase()}</span><b>${mode === "buy" ? "−" : "+"}${fmtN(total)} 🪙</b></div>
-    <button class="bn-btn" data-bn="sheet-ok">${mode === "buy" ? "Acheter" : "Vendre"}</button>
-  </div></div>`);
-}
-async function sheetOk(){
-  if (!sheet || busy) return; busy = true;
-  const { mode, k, q } = sheet; sheet = null; document.querySelector(".bn-sheet")?.remove();
-  try{
-    const res = await rpc(mode === "buy" ? "baron_buy" : "baron_sell", { p_token: getToken(), p_resource: k, p_qty: q });
-    setState(res.state); sound("coin"); buzz(12);
-    toast(mode === "buy" ? `Acheté : ${fmtN(q)} ${RES[k].e} pour ${fmtN(res.cost)} pièces` : res.sold < q ? `Vendu ${fmtN(res.sold)} : le marché est plein pour le reste` : `Vendu ! +${fmtN(res.earned)} pièces`);
-    await loadMarket(true); drawMarket();
-  }catch(e){ toast(esc(errText(e))); }
-  busy = false;
-}
-async function deliver(id, btn){
-  if (busy) return; busy = true;
-  try{
-    const res = await rpc("baron_order_deliver", { p_token: getToken(), p_order: +id });
-    setState(res.state); M = res.market; mFetched = Date.now();
-    const b = btn.getBoundingClientRect(); floatText(b.left + b.width / 2, b.top, `+${fmtN(res.reward)} 🪙`, true);
-    sound("gold"); buzz([10, 40, 10, 40]);
-    toast(`📣 Commande livrée ! +${fmtN(res.reward)} pièces`, "gold");
-    drawMarket();
-  }catch(e){ toast(esc(errText(e))); loadMarket(true); }
-  busy = false;
-}
-
-/* =================== Classement =================== */
-let RK = null, rkFetched = 0, rkBusy = false;
-const meId = () => String((Q.me() || {}).id || "");
-const iAmBaron = () => !!(RK && RK.reign && RK.reign.player_id === meId());
-async function loadRank(force){
-  if (rkBusy || (!force && Date.now() - rkFetched < 5000)) return;
-  rkBusy = true;
-  try{ RK = await rpc("baron_ranking", {}); rkFetched = Date.now(); if (alive() && view === "rank") drawRank(); }
-  catch(e){ if (alive() && view === "rank" && !RK) rootEl.innerHTML = `<div class="bn">${tabsHTML()}<p class="bn-err">${esc(errText(e))}</p></div>`; }
-  rkBusy = false;
-}
-setInterval(() => { if (alive() && S && view === "rank" && document.visibilityState === "visible") loadRank(); }, 20000);
-const rankName = (f, i, isBaron) => isBaron ? "Baron" : f >= 50000 ? "Notable" : f >= 10000 ? "Marchand" : f >= 2000 ? "Fermier" : "Paysan";
-const since = t => fmtDur(Date.now() - new Date(t).getTime());
-function drawRank(){
-  if (!alive() || !S || !farm()) return;
-  if (!RK){ rootEl.innerHTML = `<div class="bn">${tabsHTML()}<div class="bn-load">Le crieur compte les pièces…</div></div>`; loadRank(true); return; }
-  const P = RK.players || [], reign = RK.reign, me = meId();
-  const king = reign && P.find(p => p.id === reign.player_id);
-  const rows = P.map((p, i) => {
-    const isB = reign && p.id === reign.player_id, rr = RES[p.specialty];
-    return `<div class="bn-rank ${p.id === me ? "me" : ""}"><span class="n">${isB ? "👑" : i + 1}</span>
-      <div><b>${rr.e} ${esc(p.name)}</b><span class="chip ${isB ? "baron" : ""}">${rankName(Number(p.fortune), i, isB)}</span></div>
-      <span class="f">${fmtN(p.fortune)} 🪙</span>
-      <small>🪙 ${fmtN(p.coins)} pièces · 📦 ${fmtN(p.stock_value)} en stock · ${MAIN[p.specialty]} ${fmtN(p.units)} (${fmtN(p.farm_value)})</small></div>`;
-  }).join("");
-  const best = (key, fmt) => { const w = P.slice().sort((a, b) => Number(b[key]) - Number(a[key]))[0]; return w && Number(w[key]) > 0 ? { name: w.name, v: fmt(Number(w[key])) } : null; };
-  const T = [
-    ["🚜", "Meilleur producteur", best("prod_value", v => `${fmtN(v)} pièces de production / h`)],
-    ["📣", "Roi des commandes", best("orders_won", v => `${fmtN(v)} commande${v > 1 ? "s" : ""} livrée${v > 1 ? "s" : ""}`)],
-    ["💰", "Meilleur marchand", best("market_earned", v => `${fmtN(v)} pièces gagnées au marché`)],
-    ["💪", "Gros bosseur", best("work", v => `${fmtN(v)} taps et corvées`)],
-  ].map(([e, t, w]) => `<div class="bn-title"><span class="e">${e}</span><small>${t}</small><b>${w ? esc(w.name) : "—"}</b><span>${w ? w.v : "Personne encore"}</span></div>`).join("");
-  const hist = (RK.history || []).map(h => `<div class="bn-line"><span class="ico">👑</span><div class="txt"><b>${esc(h.name)}</b><small>${h.ended_at ? `a régné ${fmtDur(new Date(h.ended_at) - new Date(h.started_at))}` : `règne depuis ${since(h.started_at)}`}</small></div></div>`).join("");
-  rootEl.innerHTML = `<div class="bn">${tabsHTML()}
-    <div class="bn-head"><h1>Classement</h1><div class="bn-purse" id="bn-purse">🪙 <span>${fmtN(S.player.coins)}</span></div></div>
-    ${king ? `<div class="bn-baron"><span class="big">👑</span><div><small>Le Baron du moment</small><b>${esc(king.name)}</b><span>${fmtN(king.fortune)} pièces de fortune · depuis ${since(reign.started_at)}</span></div></div>`
-           : `<div class="bn-baron"><span class="big">👑</span><div><small>Le trône est vide</small><b>Personne</b><span>Le premier à 1 000 pièces de fortune devient Baron.</span></div></div>`}
-    <div class="bn-sec">Les plus riches</div>
-    <div class="bn-list">${rows}</div>
-    <p class="bn-sub" style="font-size:13px;text-align:center">Fortune = pièces + valeur du stock + ce qu'ont coûté tes bêtes. Rangs : Paysan, Fermier (2 000), Marchand (10 000), Notable (50 000), et un seul Baron.</p>
-    <div class="bn-sec">Les titres</div>
-    <div class="bn-titles">${T}</div>
-    ${hist ? `<div class="bn-sec">Les règnes</div><div class="bn-list">${hist}</div>` : ""}
-  </div>`;
-}
-
-/* =================== Améliorations =================== */
-const UPS = {
-  entrepot:  { e:"🏚️", name:"Entrepôt",   fx: l => `Ferme pleine en ${8 + 4 * l + fermH(farm().levels.fermier)} h → ${12 + 4 * l + fermH(farm().levels.fermier)} h` },
-  rendement: { e:"🌱", name:"Rendement",  fx: l => `Production +${20 * l} % → +${20 * (l + 1)} %` },
-  fermier:   { e:"🧑‍🌾", name:"Fermier",   fx: l => l ? `Ramasse tout seul · +${fermH(l)} h → +${fermH(l + 1)} h de place` : `Ramasse tout seul quand tu reviens, et +4 h de place` },
-  glaciere:  { e:"🧊", name:"Glacière",   fx: l => `Œufs et lait se gardent ×${1 + l} → ×${2 + l}` },
-  reseau:    { e:"📣", name:"Réputation", fx: l => `Primes des commandes +${10 * l} % → +${10 * (l + 1)} %` },
-  etal:      { e:"🏪", name:"Bel étal",   fx: l => `Vente au marché ${70 + 5 * l} % → ${75 + 5 * l} % du prix` },
-};
-const fermH = l => [0, 4, 8, 12, 24, 48][Math.max(0, Math.min(5, l || 0))];
-function upgradesHTML(){
-  const U = S.upgrades; if (!U || !U.length) return "";
-  const coins = Number(S.player.coins);
-  return `<div class="bn-sec">Améliorations</div><div class="bn-ups">${U.map(u => {
-    const d = UPS[u.kind], max = u.lvl >= 5, have = stockOf(u.resource), okC = coins >= u.coins, okR = have >= u.qty;
-    const dots = "●".repeat(u.lvl) + "○".repeat(5 - u.lvl);
-    return `<div class="bn-up"><span class="ico">${d.e}</span>
-      <div><b>${d.name}</b><span class="dots">${dots}</span></div>
-      <span class="eff">${max ? "Niveau maximum !" : d.fx(u.lvl)}</span>
-      ${max ? "<span></span>" : `<span class="cost"><span class="${okC ? "" : "no"}">${fmtN(u.coins)} 🪙</span> + <span class="${okR ? "" : "no"}">${fmtN(u.qty)} ${RES[u.resource].e}</span>${okR ? "" : ` <small style="color:var(--label2);font-weight:500">(tu en as ${fmtN(have)})</small>`}</span>`}
-      ${max ? "" : `<button class="bn-btn small" data-bn="up" data-k="${u.kind}" ${okC && okR ? "" : "disabled"}>Améliorer</button>`}
-    </div>`; }).join("")}</div>
-    <p class="bn-sub" style="font-size:12px;text-align:center;margin-top:-6px">Il te manque un produit ? Achète-le au marché, ou attends que son producteur en vende.</p>`;
-}
-async function doUpgrade(kind){
-  if (busy) return; busy = true;
-  try{
-    const res = await rpc("baron_upgrade", { p_token: getToken(), p_kind: kind });
-    setState(res.state); drawFarm(); sound("gold"); buzz([10, 30, 10]);
-    toast(`${UPS[kind].e} ${UPS[kind].name} niveau ${res.lvl} !`, "gold");
-  }catch(e){ toast(esc(errText(e))); refresh(); }
-  busy = false;
-}
-
-/* =================== Achat d'unités =================== */
-function buyHTML(){
-  const f = farm(), p = S.player;
-  const r = RES[f.resource], cost = Number(f.unit_cost || 50), ok = Number(p.coins) >= cost;
-  const next = [10, 25, 50].find(m => m > f.units), mult = next === 10 ? "1,5" : next === 25 ? "2" : "3";
-  const pal = next ? `À ${next} ${esc(r.units)} : production ×${mult} (encore ${next - f.units})` : "Production ×3 : palier maximum !";
-  return `<div class="bn-buy" id="bn-buy"><span class="ico">${MAIN[f.resource]}</span>
-    <div class="txt"><b>${un(r) === "une" ? "Une" : "Un"} ${esc(r.unit)} de plus</b><small>Tu en as ${f.units} · ${pal}</small></div>
-    <button class="bn-btn small" data-bn="buy" ${ok ? "" : "disabled"}>${fmtN(cost)} 🪙</button></div>`;
-}
-async function buyUnit(){
-  if (busy) return; busy = true;
-  try{
-    const res = await rpc("baron_buy_unit", { p_token: getToken() });
-    setState(res.state); drawFarm();
-    const f = farm(), r = RES[f.resource];
-    sound("gold"); buzz([10, 30, 10]);
-    toast(`${r.animal} ${nouv(r)} ${esc(r.unit)} ! Tu en as ${f.units}`);
-  }catch(e){ toast(esc(errText(e))); refresh(); }
-  busy = false;
-}
-
-/* =================== Taper sur sa bête =================== */
-let tapQueue = 0, tapTimer = null, tapBusy = false;
-const energyNow = () => !S ? 0 : Math.max(0, Math.min(30, Number(S.energy || 0) + (Date.now() - fetchedAt) / 4000) - tapQueue);
-function updateEnergy(){
-  const e = energyNow(), n = document.getElementById("bn-en"), b = document.getElementById("bn-enb"), m = document.getElementById("bn-main");
-  if (n) n.textContent = Math.floor(e); if (b) b.style.width = (e / 30 * 100).toFixed(0) + "%";
-  if (m) m.classList.toggle("tired", e < 1);
-}
-setInterval(() => { try{ if (alive() && S) updateEnergy(); }catch(e){} }, 500);
-function tapMain(el, x, y){
+function onClick(e){
+  const b = e.target.closest("[data-a]"); if (!b || !wrapEl) return;
+  const a = b.dataset.a, f = S && S.farms[S.cur], t = now();
+  if (a === "sheetbg"){ if (e.target === b) closeSheet(); return; }
+  if (a === "close"){ closeBaron(); return; }
+  if (a === "arcade"){ closeBaron(); try{ document.querySelector(".topbar .qh-btn")?.click(); }catch(_){} return; }
+  if (a === "retry"){ start(); return; }
+  if (a === "pick-retry"){ showPick(); return; }
+  if (a === "pick"){ picking = b.dataset.k; drawPick(); return; }
+  if (a === "join"){ join(); return; }
   if (!S) return;
-  if (energyNow() < 1){ el.classList.remove("no"); void el.offsetWidth; el.classList.add("no"); buzz(20);
-    toast("⚡ Plus d'énergie : elle revient toute seule (1 toutes les 4 s)"); return; }
-  tapQueue++;
-  if (!seen("tap")){ markSeen("tap"); document.getElementById("bn-hand")?.remove(); }
-  el.classList.add("squash"); setTimeout(() => el.classList.remove("squash"), 80);
-  floatText(x + (Math.random() * 30 - 15), y - 20, RES[farm().resource].e);
-  sound("pop"); buzz(6); updateEnergy();
-  clearTimeout(tapTimer); tapTimer = setTimeout(flushTaps, tapQueue >= 20 ? 0 : 500);
-}
-async function flushTaps(){
-  if (tapBusy || !tapQueue){ if (tapQueue) tapTimer = setTimeout(flushTaps, 300); return; }
-  tapBusy = true; const n = tapQueue;
-  try{
-    const res = await rpc("baron_tap", { p_token: getToken(), p_n: n });
-    tapQueue -= n;
-    if (res.state){ setState(res.state); }
-    else if (S){ S.energy = res.energy; fetchedAt = Date.now(); }
-    if (res.qty > 0){
-      const m = document.getElementById("bn-main"); if (m){ const b = m.getBoundingClientRect(); floatText(b.left + b.width / 2, b.top - 6, `+${res.qty} ${RES[res.resource].e}`, true); }
+  switch (a){
+    case "tab": {
+      const tb = TABS.find(x => x.id === b.dataset.v);
+      if (tb.need && !BX.unlocked(S, tb.need)){ toast(tb.why); bounce(b); return; }
+      view = tb.id; markSeen("tab_" + tb.id); closeSheet(); wrapEl.querySelector("#b2-main").scrollTop = 0; draw();
+      if (view === "market" || view === "village") loadWorld(true);
+      return;
     }
-    refreshPanels();
-  }catch(e){ tapQueue = 0; toast(esc(errText(e))); }
-  tapBusy = false;
-}
-
-/* =================== Objectifs =================== */
-function questProgress(q){
-  const c = S.counters || {}, f = farm();
-  const have = q.kind === "units" ? f.units : q.kind === "earned" ? Number(S.player.earned || 0) : q.kind === "chores" ? c.chores : Number(c[q.kind] || 0);
-  return Math.min(q.target, have || 0);
-}
-function questText(q){
-  const r = RES[farm().resource];
-  if (q.kind === "harvested") return `Ramasse ta production`;
-  if (q.kind === "taps") return `Tape ${q.target} fois sur ta bête`;
-  if (q.kind === "sold") return `Vends au marché`;
-  if (q.kind === "units") return `Aie ${q.target} ${esc(r.units)}`;
-  if (q.kind === "chores") return `Fais ${q.target} corvées`;
-  if (q.kind === "combo") return `Fais un combo ×${(1 + 0.2 * q.target).toLocaleString("fr-FR")}`;
-  if (q.kind === "earned") return `Gagne ${fmtN(q.target)} pièces au total`;
-  return "";
-}
-function questHTML(){
-  const q = S && S.quest; if (!q) return `<div id="bn-quest" hidden></div>`;
-  const have = questProgress(q), ok = have >= q.target;
-  return `<div class="bn-quest ${ok ? "ready" : ""}" id="bn-quest"><span class="ico">${ok ? "🎁" : "🎯"}</span>
-    <div class="txt"><small>Objectif ${q.idx} / 12</small><b>${questText(q)}</b>
-      <div class="bn-bar"><i style="width:${(have / q.target * 100).toFixed(0)}%"></i></div></div>
-    ${ok ? `<button class="bn-btn small" data-bn="quest">+${fmtN(q.reward)} 🪙</button>` : `<span class="rw">+${fmtN(q.reward)} 🪙</span>`}</div>`;
-}
-async function claimQuest(btn){
-  if (busy) return; busy = true;
-  try{
-    const res = await rpc("baron_quest_claim", { p_token: getToken() });
-    setState(res.state);
-    const b = btn.getBoundingClientRect(); floatText(b.left + b.width / 2, b.top, `+${fmtN(res.reward)} 🪙`, true);
-    sound("gold"); buzz([10, 30, 10]);
-    toast(res.state.quest ? `🎁 Objectif réussi ! +${fmtN(res.reward)} pièces` : "🏆 Tous les objectifs réussis !", "gold");
-    const pu = document.getElementById("bn-purse"); if (pu){ pu.classList.remove("bump"); void pu.offsetWidth; pu.classList.add("bump"); }
-    refreshPanels();
-  }catch(e){ toast(esc(errText(e))); refresh(); }
-  busy = false;
-}
-
-// Mise à jour légère chaque seconde (sans redessiner la scène)
-setInterval(() => {
-  try{
-    if (!alive() || !S || !farm()) return;
-    updateGauge();
-    const box = document.getElementById("bn-items"); if (!box) return;
-    const want = Math.min(SLOTS.length, Math.max(0, Math.floor(livePending()) - collected));
-    const have = box.querySelectorAll(".bn-item:not(.got)").length;
-    if (want !== have && !box.querySelector(".got")) box.innerHTML = itemsHTML();
-  }catch(e){}
-}, 1000);
-// Resynchronisation avec le serveur toutes les minutes
-setInterval(() => { if (alive() && S && !busy && !collected && document.visibilityState === "visible") refresh(); }, 60000);
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && alive() && S) refresh(); });
-
-/* =================== Récolte =================== */
-function grab(el){
-  if (!el || el.classList.contains("got")) return;
-  const v = +el.dataset.v || 1, b = el.getBoundingClientRect();
-  el.classList.add("got"); collected += v;
-  floatText(b.left + b.width / 2, b.top, `+${v}`); sound("pop"); buzz(8);
-  setTimeout(() => el.remove(), 450);
-  updateGauge();
-  clearTimeout(harvestTimer); harvestTimer = setTimeout(harvest, 900);
-}
-async function harvest(all){
-  clearTimeout(harvestTimer);
-  if (busy) { harvestTimer = setTimeout(harvest, 400); return; }
-  busy = true;
-  if (all) document.querySelectorAll("#bn-items .bn-item:not(.got)").forEach((el, i) => setTimeout(() => grab(el), i * 45));
-  if (all) await new Promise(r => setTimeout(r, 120 + 45 * 12));
-  clearTimeout(harvestTimer);
-  try{
-    const res = await rpc("baron_harvest", { p_token: getToken() });
-    collected = 0; setState(res.state);
-    const g = (res.gains || [])[0];
-    if (g) toast(`+${g.qty} ${RES[g.resource].e} dans ton stock`);
-    drawFarm();
-  }catch(e){ collected = 0; toast(esc(errText(e))); refresh(); }
-  busy = false;
-}
-
-/* =================== Vente instantanée =================== */
-async function sell(k, q){
-  if (busy) return; busy = true;
-  try{
-    const firstSale = !S.player.first_sale_at;
-    const res = await rpc("baron_sell", { p_token: getToken(), p_resource: k, p_qty: q });
-    setState(res.state); drawFarm();
-    const purse = document.getElementById("bn-purse");
-    if (purse){ purse.classList.add("bump"); const b = purse.getBoundingClientRect(); floatText(b.left + b.width / 2, b.bottom, `+${fmtN(res.earned)} 🪙`); }
-    sound("coin"); buzz(15);
-    toast(res.sold < q ? `Vendu ${fmtN(res.sold)} sur ${fmtN(q)} : le marché est plein pour le reste` : `Vendu ! +${fmtN(res.earned)} pièces`);
-    loadMarket(true);
-    if (firstSale) setTimeout(() => announce("🎉", "Première vente !", `Bravo, tes premières pièces. Achète vite de ${RES[farm().resource].fem ? "nouvelles" : "nouveaux"} ${esc(RES[farm().resource].units)} juste sous ta ferme pour produire plus.`, "Super", "firstsale"), 900);
-  }catch(e){ toast(esc(errText(e))); refresh(); }
-  busy = false;
-}
-
-/* =================== Produit doré =================== */
-async function rollGolden(){
-  try{
-    if (!alive() || !S || golden || document.visibilityState !== "visible") return;
-    const g = await rpc("baron_golden_roll", { p_token: getToken() });
-    if (g && g.id){ golden = { id: g.id, until: Date.now() + Math.max(2000, new Date(g.until).getTime() - new Date(S.now).getTime() - (Date.now() - fetchedAt)) }; showGolden(); }
-  }catch(e){}
-}
-setInterval(rollGolden, 45000); setTimeout(rollGolden, 5000);
-function showGolden(){
-  const sc = document.getElementById("bn-scene"); if (!sc || !golden) return;
-  if (Date.now() > golden.until){ golden = null; return; }
-  if (sc.querySelector(".bn-item.gold")) return;
-  const [x, y] = [20 + Math.random() * 55, 58 + Math.random() * 24];
-  sc.insertAdjacentHTML("beforeend", `<button class="bn-item gold" data-bn="gold" style="left:${x}%;top:${y}%" aria-label="Produit doré">${RES[farm().resource].e}</button>`);
-  buzz([10, 40, 10]); sound("gold");
-  const left = golden.until - Date.now();
-  setTimeout(() => { const el = document.querySelector(".bn-item.gold:not(.got)"); if (el){ el.classList.add("got"); setTimeout(() => el.remove(), 450); } golden = null; }, left);
-}
-async function claimGolden(el){
-  if (!golden) return; const id = golden.id; golden = null;
-  const b = el.getBoundingClientRect(); el.classList.add("got");
-  floatText(b.left + b.width / 2, b.top, "×50 !", true); sound("gold"); buzz(30);
-  try{
-    const res = await rpc("baron_golden_claim", { p_token: getToken(), p_id: id });
-    setState(res.state);
-    toast(`✨ Produit doré : +50 ${RES[farm().resource].e} !`, "gold");
-    setTimeout(drawFarm, 500);
-  }catch(e){ toast(esc(errText(e))); }
-}
-
-/* =================== Annonces (découverte progressive) =================== */
-function announce(big, title, text, ok, key){
-  if (key && seen(key)) return; if (key) markSeen(key);
-  document.querySelector(".bn-ann")?.remove();
-  document.body.insertAdjacentHTML("beforeend", `<div class="bn-ann" data-bn="ann-close"><div class="box" role="dialog" aria-modal="true">
-    <div class="big">${big}</div><h2>${title}</h2><p>${text}</p><button class="bn-btn" data-bn="ann-close">${ok}</button></div></div>`);
-}
-function welcome(){
-  const f = farm(); if (!f) return; const r = RES[f.resource];
-  if (seen("welcome")){
-    announce("🚀", "Nouveau départ", `Tape sur ta bête pour produire tout de suite, suis les objectifs pour gagner des pièces, et achète des ${esc(r.units)} : elles coûtent bien moins cher. À 10, ta production double !`, "Je fonce", "debut");
-    markSeen("rythme"); return;
+    case "tipx": markSeen("tip_" + b.dataset.id); draw(); return;
+    case "mult": mult = b.dataset.m === "max" ? "max" : +b.dataset.m; draw(); return;
+    case "farm": S.cur = b.dataset.k; draw(); return;
+    case "tap-parcel": {
+      const p = f.parcels[+b.dataset.i];
+      if (p.mgr){ floatText(b, "Ton contremaître s'en occupe"); return; }
+      if (p.run <= 0){ p.run = BAL.cycle; sound("tap"); bounce(b); if (!f.elev.mgr && f.elev.run <= 0) f.elev.run = BAL.cycle; if (!f.cart.mgr && f.cart.run <= 0) f.cart.run = BAL.cycle; markSeen("tip_start"); }
+      live(); return;
+    }
+    case "harvest": {
+      f.parcels.forEach(p => { if (!p.mgr) p.run = Math.max(p.run, BAL.cycle); });
+      if (!f.elev.mgr) f.elev.run = Math.max(f.elev.run, BAL.cycle); if (!f.cart.mgr) f.cart.run = Math.max(f.cart.run, BAL.cycle);
+      sound("tap"); bounce(b); buzz(10); markSeen("tip_start"); live(); return;
+    }
+    case "run-elev": f.elev.run = Math.max(f.elev.run, BAL.cycle); sound("tap"); bounce(b); live(); return;
+    case "run-cart": f.cart.run = Math.max(f.cart.run, BAL.cycle); sound("tap"); bounce(b); live(); return;
+    case "boost": {
+      if (f.boost > t){ toast(`Déjà ×2 encore ${fmtT(f.boost - t)}`); return; }
+      if (f.boostCd > t){ toast(`${P[S.cur].act.label} : de nouveau possible dans ${fmtT(f.boostCd - t)}`); return; }
+      f.boost = t + BAL.boostDur * 1000; f.boostCd = t + BAL.boostCd * 1000; dirty = true; markSeen("tip_boost");
+      sound("done"); buzz(15); floatText(b, "×2 !", "gold"); draw(); return;
+    }
+    case "up-parcel": case "up-elev": case "up-cart": {
+      const kind = a.slice(3), i = +b.dataset.i, u = upCost(kind, f, i);
+      if (!paid({ coins: u.coins }, b)) return;
+      let crossed = false;
+      if (kind === "parcel"){ const p = f.parcels[i]; const m0 = BX.MILES.filter(m => m <= p.lvl).length; p.lvl += u.n; crossed = BX.MILES.filter(m => m <= p.lvl).length > m0; }
+      else f[kind].lvl += u.n;
+      sound("up"); draw();
+      const row = kind === "parcel" ? wrapEl.querySelector(`[data-plot="${i}"]`) : wrapEl.querySelector(kind === "elev" ? ".b2-elev" : ".b2-cartsign");
+      if (row){ row.classList.add("lvlup"); floatText(row, crossed ? "Production ×2 !" : `Niv ${kind === "parcel" ? f.parcels[i].lvl : f[kind].lvl}`, crossed ? "gold" : ""); }
+      return;
+    }
+    case "mgr-parcel": case "mgr-elev": case "mgr-cart": {
+      const kind = a.slice(4), i = +b.dataset.i;
+      const c = kind === "parcel" ? BX.costs.parcelMgr(f, i) : kind === "elev" ? BX.costs.elevMgr() : BX.costs.cartMgr();
+      if (!paid(c, b)) return;
+      if (kind === "parcel") f.parcels[i].mgr = true; else f[kind].mgr = true;
+      markSeen("tip_mgr"); sound("done"); draw(); toast(`${MGR[kind]} Contremaître engagé : il travaille même quand tu n'es pas là`); save(true); return;
+    }
+    case "unlock": {
+      const c = BX.nextParcelCost(f); if (!paid(c, b)) return;
+      f.parcels.push({ lvl:1, mgr:false, run:0, pend:0 }); sound("done"); buzz(25); draw(); save(true);
+      const el = wrapEl.querySelector(`[data-plot="${f.parcels.length - 1}"]`); if (el){ el.classList.add("lvlup"); el.scrollIntoView({ behavior:"smooth", block:"center" }); }
+      const np = S.farms[S.spec].parcels.length;
+      if (S.cur === S.spec && (np === 2 || np === 3 || np === BAL.farmNeeds)) setTimeout(() => toast(np === 2 ? "📈 Le marché est ouvert !" : np === 3 ? "🏘️ Le village et le four sont ouverts !" : "⚔️ Tu peux ouvrir une 2e exploitation"), 700);
+      return;
+    }
+    case "up-barn": { const c = BX.costs.barn(S); if (!paid(c, b)) return; S.barn++; sound("done"); draw(); toast(`Grange agrandie : ${fmtN(BX.barnCap(S))} places`); return; }
+    case "up-oven": { const c = BX.costs.oven(S); if (!paid(c, b)) return; S.oven.lvl++; sound("done"); draw(); toast(S.oven.lvl === 1 ? "🔥 Le four est construit" : `Four niveau ${S.oven.lvl}`); return; }
+    case "farm2": farm2Sheet(); return;
+    case "farm2-go": {
+      const k = b.dataset.k, c = BX.costs.farm(S); if (S.farms[k] || !paid(c, b)) return;
+      S.farms[k] = BX.newFarm(); S.cur = k; closeSheet(); sound("done"); draw(); toast(`${P[k].e} Nouvelle exploitation : ${P[k].place.toLowerCase()}`); save(true); return;
+    }
+    case "prod": prodSheet(b.dataset.k); return;
+    case "sell": sellSheet(b.dataset.k); return;
+    case "list": listSheet(b.dataset.k); return;
+    case "goto-mkt": {
+      if (!BX.unlocked(S, "marche")){ toast(TABS[2].why); return; }
+      mkt.k = b.dataset.k; view = "market"; closeSheet(); wrapEl.querySelector("#b2-main").scrollTop = 0; draw(); loadWorld(true); return;
+    }
+    case "mkt-k": mkt.k = b.dataset.k; draw(); return;
+    case "mkt-p": mkt.period = b.dataset.p; draw(); return;
+    case "buy": { const l = W.listings.find(x => String(x.id) === b.dataset.id); if (l) buySheet(l); return; }
+    case "buy-res": resSheet(mkt.k); return;
+    case "unlist": {
+      const l = W.listings.find(x => String(x.id) === b.dataset.id); if (!l) return;
+      b.disabled = true; S.stock[l.product] += +l.qty;
+      queue(() => rpc("baron2_unlist", { p_token: getToken(), p_state: S, p_id: l.id, p_qty: +l.qty }))
+        .then(() => { lastSave = now(); toast(`${fmtN(l.qty)} ${P[l.product].e} rentrés dans la grange`); return loadWorld(true); })
+        .catch(err => { S.stock[l.product] -= +l.qty; toast(errText(err), "err"); return loadWorld(true); })
+        .then(() => draw());
+      return;
+    }
+    case "deliver": {
+      const r = BX.deliver(S, b.dataset.id); if (!r) return; dirty = true;
+      sound(r.complete ? "done" : "coin"); coinsFly(b, r.complete ? 8 : 4);
+      toast(r.complete ? `Commande livrée ! +${COIN}${fmtN(r.paid)}` : `${fmtN(r.give)} livrés · +${COIN}${fmtN(r.paid)}`, "gold");
+      draw(); if (r.complete) save(true); return;
+    }
+    case "bake": bakeSheet(b.dataset.k); return;
+    case "qset": { const r = wrapEl.querySelector(`[data-q="${b.dataset.id}"]`); if (r){ r.value = Math.max(+r.min, Math.floor(+r.max * +b.dataset.f)); sheetSum(); } return; }
+    case "confirm": confirm(); return;
   }
-  markSeen("rythme"); markSeen("debut");
-  announce(MAIN[f.resource], "Ta ferme t'attend", `Tape sur ta bête, ramasse, vends, achète d'autres ${esc(r.units)}. Le plus riche du groupe devient le Baron 👑`, "C'est parti", "welcome");
 }
 
-/* =================== Interactions =================== */
-document.addEventListener("click", e => {
-  const t = e.target.closest("[data-bn]"); if (!t) return;
-  const a = t.dataset.bn;
-  if (a === "pick"){ picking = t.dataset.k; drawPick(); buzz(5); }
-  else if (a === "join") join();
-  else if (a === "pick-retry") showPick();
-  else if (a === "retry"){ rootEl.innerHTML = `<div class="bn-load">Ouverture de ta ferme…</div>`; refresh(true); }
-  else if (a === "item") grab(t);
-  else if (a === "all") harvest(true);
-  else if (a === "sell") sell(t.dataset.k, +t.dataset.q);
-  else if (a === "gold") claimGolden(t);
-  else if (a === "chore") doChore(t);
-  else if (a === "buy") buyUnit();
-  else if (a === "quest") claimQuest(t);
-  else if (a === "up") doUpgrade(t.dataset.k);
-  else if (a === "view"){ view = t.dataset.v; chores = []; drawFarm(); if (view === "market") loadMarket(true); else if (view === "rank") loadRank(true); else refresh(); buzz(5); }
-  else if (a === "mbuy") openSheet("buy", t.dataset.k);
-  else if (a === "msell") openSheet("sell", t.dataset.k);
-  else if (a === "sq"){ sheet.q = +t.dataset.q; drawSheet(); }
-  else if (a === "sheet-ok") sheetOk();
-  else if (a === "sheet-close" && e.target === t){ sheet = null; t.remove(); }
-  else if (a === "deliver") deliver(t.dataset.id, t);
-  else if (a === "ann-close" && (t.tagName === "BUTTON" || e.target === t)) document.querySelector(".bn-ann")?.remove();
-  else if (a === "close") closeBaron();
-  else if (a === "arcade"){ closeBaron(); document.querySelector(".qh-btn")?.click(); }
-});
-// Glisser le doigt sur les produits pour les ramasser
-let sweeping = false;
-document.addEventListener("pointerdown", e => {
-  const m = e.target.closest && e.target.closest("#bn-main");
-  if (m){ tapMain(m, e.clientX, e.clientY); return; }
-  if (e.target.closest && e.target.closest("#bn-scene")) sweeping = true;
-}, { passive:true });
-document.addEventListener("pointerup", () => { sweeping = false; }, { passive:true });
-document.addEventListener("pointercancel", () => { sweeping = false; }, { passive:true });
-document.addEventListener("pointermove", e => {
-  if (!sweeping) return;
-  const el = document.elementFromPoint(e.clientX, e.clientY);
-  const it = el && el.closest && el.closest(".bn-item");
-  if (!it) return;
-  if (it.dataset.bn === "gold") claimGolden(it); else grab(it);
-}, { passive:true });
+/* =================== Inscription dans l'Arcade =================== */
+const status = () => {
+  if (S) return `${fmtN(S.coins)} pièces`;
+  try{ const c = localStorage.getItem("bn2_coins"); if (c !== null && getToken()) return `${fmtN(+c)} pièces`; }catch(e){}
+  return getToken() ? "" : "Choisis ta spécialité";
+};
+(window.QUERIDA_GAMES = window.QUERIDA_GAMES || {})["baron"] = { open: openBaron, status };
+try{ window.dispatchEvent(new Event("qh-games")); }catch(e){}
 
-
-}catch(err){ /* Le Baron ne doit jamais gêner l'appli */ }
+}catch(e){ try{ console.error("Le Baron", e); }catch(_){} }
 })();

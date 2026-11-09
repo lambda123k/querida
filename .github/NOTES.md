@@ -51,6 +51,21 @@ ne sont volontairement pas écrits ici : les demander à Naim.
   260 questions en octobre 2026 ; objectif 600 à 800, sans questions qui se périment.
 - Profil (« Mon profil ») : 8 domaines dont Planification (Hanoï) et Culture générale (Savant).
 
+## Le Baron (version 2, novembre 2026)
+- Jeu de ferme idle entre amis, côté amis seulement (caché côté Romane), toujours visible dans l'Arcade.
+  Cahier des charges validé par Naim : Idle Miner (parcelles empilées, monte-charge, charrette,
+  contremaîtres, goulots) + marché entre amis, commandes du village, classement.
+- Fichier unique `baron.js` : le moteur `BX` en haut (tout l'équilibrage dans `BAL`), puis l'affichage
+  (préfixe `b2-`). Écrans : Ferme, Grange (stock, four, recettes), Marché (bougies, offres, réserve
+  du village au triple du plancher), Village (commandes toutes les 20 min, classement, titres).
+- La ferme est simulée sur le téléphone et sauvegardée dans `baron2_saves` ; hors ligne rattrapé au retour.
+  Serveur : `supabase/baron2.sql` (tables et fonctions `baron2_*`, accès uniquement par fonctions avec
+  le jeton du joueur, `localStorage.bn2_token`). Les ventes entre joueurs créent un `baron2_credits`
+  versé au vendeur à sa prochaine sauvegarde (idempotent grâce à `credit_seen` dans l'état).
+- `supabase/baron2_00_suppression_ancien.sql` efface l'ancien Baron (tables/fonctions `baron_*`) : à lancer
+  seulement au moment de la mise en ligne de la version 2.
+- Confiance entre amis : l'argent et le stock sont calculés sur le téléphone (pas de contrôle anti-triche).
+
 ## Tests
 - Serveur local `python3 -m http.server 8770` dans le dépôt, puis Playwright (Chromium préinstallé)
   avec un faux client Supabase injecté à la place de `supabase.min.js`. Toujours tester côté amis ET côté
