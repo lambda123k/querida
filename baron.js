@@ -35,21 +35,25 @@ const miles = L => { let n = 0; for (const m of MILES) if (L >= m) n++; return n
 const PALIERS = [3, 6, 9, 12];                 // parcelles 4, 7, 10, 13 : gros paliers (argent ×6, bois ×4)
 const isPalier = i => PALIERS.includes(i);
 const BAL = {
-  cycle: 5,                                     // secondes de travail par tape (sans contremaître)
   boostDur: 60, boostCd: 240,                   // corvée : ×2 pendant 1 min, toutes les 4 min
   parcelRate: (i, L) => 0.3 * Math.pow(5, i) * L * Math.pow(2, miles(L)),          // unités / s
   parcelCost: (i, L) => 4 * Math.pow(8, i) * Math.pow(1.13, L - 1),                // niveau L → L+1
   parcelUnlock: i => i === 0 ? 0 : 60 * Math.pow(10, i - 1) * (isPalier(i) ? 6 : 1),
   parcelWood: i => i < 2 ? 0 : Math.round(12 * Math.pow(8, i - 2) * (isPalier(i) ? 4 : 1)),
   parcelMgr: i => 25 * Math.pow(12, i),
-  elevRate: L => 1.4 * Math.pow(1.2, L - 1) * Math.pow(2, miles(L)),
+  // monte-charge : il descend étage par étage, remplit sa cabine, remonte et vide en haut
+  elevCap: L => Math.round(8 * Math.pow(1.2, L - 1) * Math.pow(2, miles(L))),   // unités par trajet
+  elevSpeed: L => Math.min(5, 1.2 + 0.05 * (L - 1)),                           // étages par seconde
+  elevStop: 0.5, elevUnload: 0.7,
   elevCost: L => 10 * Math.pow(1.21, L - 1),
-  cartRate: L => 1.2 * Math.pow(1.2, L - 1) * Math.pow(2, miles(L)),
+  // charrette : elle charge le tas du haut, roule jusqu'à la grange, décharge et revient
+  cartCap: L => Math.round(9 * Math.pow(1.2, L - 1) * Math.pow(2, miles(L))),
+  cartTime: L => Math.max(1.2, 3.2 - 0.05 * (L - 1)),                          // aller simple, en secondes
+  cartUnload: 0.7,
   cartCost: L => 12 * Math.pow(1.21, L - 1),
   elevMgr: 40, cartMgr: 60,
-  elevTrip: 6, cartTrip: 8,                     // durée d'un aller-retour (pour l'affichage « par trajet »)
+  work: 2.4, walk: 1.3,                         // parcelle : récolte, porte au panier, revient (5 s)
   pendCap: r => Math.max(40, r * 120),          // dépôt d'une parcelle : 2 min de production
-  quaiCap: r => Math.max(60, r * 60),             // r = débit de la charrette
   barnCap: L => Math.round(400 * Math.pow(2.6, L - 1)),
   barnCost: L => 120 * Math.pow(3.3, L - 1),
   barnWood: L => L < 2 ? 0 : Math.round(10 * Math.pow(3.2, L - 2)),
@@ -71,24 +75,35 @@ const BAL = {
 };
 
 /* ---------- État ---------- */
-function newFarm(){ return { parcels:[{ lvl:1, mgr:false, run:0, pend:0 }], elev:{ lvl:1, mgr:false, run:0 }, cart:{ lvl:1, mgr:false, run:0 }, quai:0, boost:0, boostCd:0, lost:0 }; }
+const newParcel = () => ({ lvl:1, mgr:false, pend:0, ph:"idle", t:0 });
+function newFarm(){ return { parcels:[newParcel()], elev:{ lvl:1, mgr:false, ph:"idle", t:0, pos:0, fl:0, load:0 }, cart:{ lvl:1, mgr:false, ph:"idle", t:0, pos:0, load:0 }, quai:0, boost:0, boostCd:0, lost:0 }; }
 function newState(spec, now){
   const stock = {}; ALL.forEach(k => stock[k] = 0); stock.bois = BAL.startWood;
   const farms = {}; farms[spec] = newFarm();
-  return { v:1, spec, cur:spec, coins:BAL.startCoins, stock, farms, barn:1, oven:{ lvl:0, slots:[] },
+  return { v:2, spec, cur:spec, coins:BAL.startCoins, stock, farms, barn:1, oven:{ lvl:0, slots:[] },
     orders:{ slot:0, list:[], prog:{} }, reserve:{ slot:0, used:{} },
     stats:{ produced:0, invested:0, baked:0, orders:0, sold:0, bought:0, earned:0, villageSold:0 },
     seen:{}, last:now, credit_seen:0, created:now };
 }
+function fixFarm(f){
+  f.parcels.forEach(p => { if (!p.ph){ p.ph = "idle"; p.t = 0; } delete p.run; });
+  for (const k of ["elev", "cart"]){ const x = f[k]; if (!x.ph){ x.ph = "idle"; x.t = 0; x.pos = 0; x.load = 0; x.fl = 0; } delete x.run; }
+  return f;
+}
 const stockUnits = s => ALL.reduce((a, k) => a + (s.stock[k] || 0), 0);
 const barnCap = s => BAL.barnCap(s.barn);
 const barnFree = s => Math.max(0, barnCap(s) - stockUnits(s));
+const quaiCap = f => Math.max(BAL.elevCap(f.elev.lvl), BAL.cartCap(f.cart.lvl)) * 3;
+const pendTotal = f => f.parcels.reduce((a, p) => a + p.pend, 0);
 
-/* ---------- Rythmes ---------- */
+/* ---------- Rythmes moyens (affichage, goulot, hors ligne) ---------- */
+const elevTrip = (L, n) => 2 * n / BAL.elevSpeed(L) + n * BAL.elevStop + BAL.elevUnload;
+const elevRate = (L, n) => BAL.elevCap(L) / elevTrip(L, n || 1);
+const cartRate = L => BAL.cartCap(L) / (2 * BAL.cartTime(L) + BAL.cartUnload);
 function farmRates(f, now){
   const boost = f.boost > now ? 2 : 1;
   let P = 0; f.parcels.forEach((p, i) => P += BAL.parcelRate(i, p.lvl) * boost);
-  return { P, E: BAL.elevRate(f.elev.lvl), C: BAL.cartRate(f.cart.lvl), boost };
+  return { P, E: elevRate(f.elev.lvl, f.parcels.length), C: cartRate(f.cart.lvl), boost };
 }
 // production réelle possible (en unités / s), le maillon le plus faible de chaque ferme
 function effRate(s, now){
@@ -97,42 +112,92 @@ function effRate(s, now){
 }
 const prodValue = s => effRate(s, 0) * 10;      // pièces / s au prix plancher
 
-/* ---------- Simulation ---------- */
-function stepFarm(s, key, f, dt, now){
-  const boost = f.boost > now ? 2 : 1;
-  // la charrette : quai → grange
-  const ca = f.cart.mgr ? dt : Math.min(dt, f.cart.run); f.cart.run = Math.max(0, f.cart.run - dt);
-  if (ca > 0){
-    const mv = Math.min(BAL.cartRate(f.cart.lvl) * ca, f.quai, barnFree(s));
-    if (mv > 0){ f.quai -= mv; s.stock[key] += mv; s.stats.produced += mv; }
+/* ---------- Simulation trajet par trajet (appli ouverte) ---------- */
+function startParcel(p){ if (p.ph !== "idle") return false; p.ph = "work"; p.t = 0; return true; }
+function startElev(f){ const e = f.elev; if (e.ph !== "idle") return false; e.ph = "down"; e.fl = 1; e.load = 0; e.t = 0; return true; }
+function startCart(f){ const c = f.cart; if (c.ph !== "idle") return false; c.load = Math.min(BAL.cartCap(c.lvl), f.quai); f.quai -= c.load; c.ph = "go"; c.pos = 0; c.t = 0; return true; }
+function tickFarm(s, key, f, dt, now, ev){
+  const boost = f.boost > now ? 2 : 1, n = f.parcels.length, cyc = BAL.work + 2 * BAL.walk;
+  // les fermiers : récoltent, portent au panier, reviennent
+  f.parcels.forEach((p, i) => {
+    if (p.ph === "idle"){ if (!p.mgr) return; p.ph = "work"; p.t = 0; }
+    p.t += dt;
+    if (p.ph === "work" && p.t >= BAL.work){ p.ph = "go"; p.t = 0; }
+    else if (p.ph === "go" && p.t >= BAL.walk){
+      const r = BAL.parcelRate(i, p.lvl) * boost, amt = r * cyc, cap = BAL.pendCap(r), nv = p.pend + amt;
+      if (nv > cap){ f.lost += nv - cap; p.pend = cap; } else p.pend = nv;
+      ev && ev.push({ k:"drop", key, i, amt }); p.ph = "back"; p.t = 0;
+    } else if (p.ph === "back" && p.t >= BAL.walk){ p.ph = "idle"; p.t = 0; if (p.mgr){ p.ph = "work"; } }
+  });
+  // le monte-charge
+  const e = f.elev, ecap = BAL.elevCap(e.lvl), v = BAL.elevSpeed(e.lvl);
+  if (e.ph === "idle" && e.mgr && pendTotal(f) >= 1 && f.quai < quaiCap(f) - 1) startElev(f);
+  if (e.ph === "down"){ e.pos += v * dt; if (e.pos >= e.fl){ e.pos = e.fl; e.ph = "load"; e.t = 0; } }
+  else if (e.ph === "load"){
+    e.t += dt;
+    if (e.t >= BAL.elevStop){
+      const p = f.parcels[e.fl - 1], take = p ? Math.min(ecap - e.load, p.pend) : 0;
+      if (take > 0){ p.pend -= take; e.load += take; ev && ev.push({ k:"lift", key, i: e.fl - 1, amt: take }); }
+      if (e.load >= ecap - 1e-6 || e.fl >= n) e.ph = "up"; else { e.fl++; e.ph = "down"; }
+    }
+  } else if (e.ph === "up"){ e.pos -= v * dt; if (e.pos <= 0){ e.pos = 0; e.ph = "unload"; e.t = 0; } }
+  else if (e.ph === "unload"){
+    e.t += dt;
+    if (e.t >= BAL.elevUnload){
+      const put = Math.min(e.load, Math.max(0, quaiCap(f) - f.quai));
+      if (put > 0){ f.quai += put; e.load -= put; ev && ev.push({ k:"top", key, amt: put }); }
+      if (e.load < 1e-6){ e.load = 0; e.ph = "idle"; e.fl = 0; }
+    }
   }
-  // le monte-charge : dépôts → quai
-  const er = BAL.elevRate(f.elev.lvl);
-  const ea = f.elev.mgr ? dt : Math.min(dt, f.elev.run); f.elev.run = Math.max(0, f.elev.run - dt);
-  if (ea > 0){
-    let tot = 0; f.parcels.forEach(p => tot += p.pend);
-    const take = Math.min(er * ea, tot, Math.max(0, BAL.quaiCap(BAL.cartRate(f.cart.lvl)) - f.quai));
+  // la charrette
+  const c = f.cart, T = BAL.cartTime(c.lvl);
+  if (c.ph === "idle" && c.mgr && f.quai >= 1) startCart(f);
+  if (c.ph === "go"){ c.pos += dt / T; if (c.pos >= 1){ c.pos = 1; c.ph = "unload"; c.t = 0; } }
+  else if (c.ph === "unload"){
+    c.t += dt;
+    if (c.t >= BAL.cartUnload){
+      const put = Math.min(c.load, barnFree(s));
+      if (put > 0){ s.stock[key] += put; s.stats.produced += put; c.load -= put; ev && ev.push({ k:"barn", key, amt: put }); }
+      if (c.load < 1e-6){ c.load = 0; c.ph = "back"; }
+    }
+  } else if (c.ph === "back"){ c.pos -= dt / T; if (c.pos <= 0){ c.pos = 0; c.ph = "idle"; } }
+}
+function step(s, dt, now, ev){
+  let left = dt;
+  while (left > 1e-9){ const d = Math.min(left, 0.05); for (const k in s.farms) tickFarm(s, k, s.farms[k], d, now, ev); left -= d; }
+  return ovenTick(s, now);
+}
+
+/* ---------- Rattrapage hors ligne : seuls les postes avec contremaître travaillent ---------- */
+function flush(s, key, f){
+  const e = f.elev, c = f.cart;
+  if (e.load > 0){ f.quai += e.load; e.load = 0; }
+  if (c.load > 0){ const put = Math.min(c.load, barnFree(s)); s.stock[key] += put; s.stats.produced += put; f.quai += c.load - put; c.load = 0; }
+  e.ph = "idle"; e.pos = 0; e.fl = 0; c.ph = "idle"; c.pos = 0;
+  f.parcels.forEach(p => { p.ph = "idle"; p.t = 0; });
+}
+function stepAvg(s, key, f, dt, now){
+  const boost = f.boost > now ? 2 : 1;
+  if (f.cart.mgr){ const mv = Math.min(cartRate(f.cart.lvl) * dt, f.quai, barnFree(s)); if (mv > 0){ f.quai -= mv; s.stock[key] += mv; s.stats.produced += mv; } }
+  if (f.elev.mgr){
+    const tot = pendTotal(f), take = Math.min(elevRate(f.elev.lvl, f.parcels.length) * dt, tot, Math.max(0, quaiCap(f) - f.quai));
     if (take > 0 && tot > 0){ const k = take / tot; f.parcels.forEach(p => p.pend -= p.pend * k); f.quai += take; }
   }
-  // les parcelles
   f.parcels.forEach((p, i) => {
-    const a = p.mgr ? dt : Math.min(dt, p.run); p.run = Math.max(0, p.run - dt);
-    if (a <= 0) return;
-    const r = BAL.parcelRate(i, p.lvl) * boost, cap = BAL.pendCap(r);
-    const nv = p.pend + r * a;
+    if (!p.mgr) return;
+    const r = BAL.parcelRate(i, p.lvl) * boost, cap = BAL.pendCap(r), nv = p.pend + r * dt;
     if (nv > cap){ f.lost += nv - cap; p.pend = cap; } else p.pend = nv;
   });
 }
-function step(s, dt, now){ for (const k in s.farms) stepFarm(s, k, s.farms[k], dt, now); return ovenTick(s, now); }
-// rattrapage hors ligne (ou après un onglet en veille)
 function catchUp(s, now){
   let from = s.last || now; if (now <= from){ s.last = now; return 0; }
   const total = Math.min((now - from) / 1000, 7 * 86400);
   const before = s.stats.produced;
+  for (const k in s.farms) flush(s, k, s.farms[k]);
   let left = total, t = from;
   while (left > 0){
     const dt = Math.min(left, total > 600 ? 20 : 1);
-    t += dt * 1000; step(s, dt, t); left -= dt;
+    t += dt * 1000; for (const k in s.farms) stepAvg(s, k, s.farms[k], dt, t); ovenTick(s, t); left -= dt;
   }
   s.last = now; return s.stats.produced - before;
 }
@@ -265,13 +330,12 @@ function bottleneck(s, key, now){
   if (barnFree(s) < 1) return "barn";
   const anyMgr = f.parcels.some(p => p.mgr) || f.elev.mgr || f.cart.mgr;
   if (!anyMgr) return null;
-  const cap = f.quai >= BAL.quaiCap(r.C) * 0.9;
-  if (r.C < Math.min(r.P, r.E) * 0.95 || cap) return "cart";
+  if (f.quai >= quaiCap(f) * 0.9 || r.C < Math.min(r.P, r.E) * 0.95) return "cart";
   if (r.E < r.P * 0.95) return "elev";
   return null;
 }
 
-return { RAW, CRAFT, ALL, P, BAL, CHARS, MILES, isPalier, newState, newFarm, step, catchUp, farmRates, effRate, prodValue,
+return { RAW, CRAFT, ALL, P, BAL, newParcel, fixFarm, quaiCap, pendTotal, elevRate, cartRate, startParcel, startElev, startCart, CHARS, MILES, isPalier, newState, newFarm, step, catchUp, farmRates, effRate, prodValue,
   stockUnits, barnCap, barnFree, costs, canPay, pay, bulk, nextParcelCost, nice, ovenTick, ovenBatch, ovenDur, canBake,
   ensureOrders, genOrders, deliver, reserveLeft, reservePrice, fortune, unlocked, bottleneck };
 })();
@@ -400,6 +464,7 @@ function fixState(s){
   s.stats = Object.assign({ produced:0, invested:0, baked:0, orders:0, sold:0, bought:0, earned:0, villageSold:0 }, s.stats || {});
   s.seen = s.seen || {}; s.oven = s.oven || { lvl:0, slots:[] }; s.orders = s.orders || { slot:0, list:[], prog:{} };
   s.reserve = s.reserve || { slot:0, used:{} }; if (!s.farms[s.cur]) s.cur = s.spec;
+  for (const k in s.farms) BX.fixFarm(s.farms[k]);
   return s;
 }
 async function load(){
@@ -467,6 +532,16 @@ const STYLE = `
 .b2-fly{position:fixed;z-index:95;width:18px;height:18px;pointer-events:none;animation:b2-fly .9s cubic-bezier(.5,-.3,.7,1) forwards}
 @keyframes b2-fly{0%{transform:translate(0,0) scale(.6);opacity:0}15%{transform:translate(0,-28px) scale(1.1);opacity:1}100%{transform:translate(var(--dx),var(--dy)) scale(.7);opacity:.9}}
 .b2-float{position:fixed;z-index:95;transform:translateX(-50%);font:900 18px var(--round);color:#fff;text-shadow:0 2px 0 var(--up2),0 0 8px rgba(0,0,0,.25);pointer-events:none;animation:b2-up 1.05s ease forwards}
+.b2-float.small{font-size:14px;color:#FFF3DE;text-shadow:0 1px 0 rgba(0,0,0,.5),0 0 6px rgba(0,0,0,.35)}
+.b2-wk{position:absolute;top:44px;left:66%;width:30px;margin-left:-15px;pointer-events:none;z-index:2;text-align:center}
+.b2-wk .who{display:block;font-size:27px;line-height:1;filter:drop-shadow(0 2px 1px rgba(0,0,0,.25))}
+.b2-wk .carry{position:absolute;left:50%;top:-16px;transform:translateX(-50%);font-size:17px;display:none}
+.b2-wk.go .carry{display:block}
+.b2-wk.work .who{animation:b2-dig .45s ease-in-out infinite alternate;transform-origin:50% 100%}
+.b2-wk.go .who,.b2-wk.back .who{animation:b2-walk .3s ease-in-out infinite alternate}
+.b2-wk.idle{opacity:.85}
+@keyframes b2-dig{to{transform:rotate(-14deg) translateY(2px)}}
+@keyframes b2-walk{to{transform:translateY(-3px)}}
 .b2-float.gold{color:#FFE08A;text-shadow:0 2px 0 #9B6700}
 @keyframes b2-up{to{transform:translate(-50%,-46px);opacity:0}}
 .b2-pop{animation:b2-pop .32s cubic-bezier(.3,1.6,.5,1)}
@@ -513,13 +588,19 @@ const STYLE = `
 .b2-gbar.full i{background:var(--down);animation:b2-blink 1s infinite}
 @keyframes b2-blink{50%{opacity:.55}}
 .b2-glab{display:flex;justify-content:space-between;font:800 11.5px var(--round);color:var(--ink);margin-bottom:3px;text-shadow:0 1px 0 rgba(255,255,255,.6)}
-.b2-cartlane{position:absolute;left:74px;right:156px;bottom:12px;height:50px;padding:0!important;z-index:1}
-.b2-cart{position:absolute;left:0;bottom:0;width:62px;animation:b2-cart 8s ease-in-out infinite}
+.b2-cartlane{position:absolute;left:74px;right:118px;bottom:12px;height:50px;padding:0!important;z-index:1}
+.b2-cart{position:absolute;left:18px;bottom:0;width:62px;will-change:transform}
+.b2-cart .ld{position:absolute;left:50%;top:-20px;transform:translateX(-50%);background:var(--ink);color:#FFE6B8;border-radius:7px;padding:1px 6px;font:900 11.5px var(--round);transition:opacity .2s;white-space:nowrap}
+.b2-cart .pusher{position:absolute;left:-20px;bottom:2px;font-size:22px;line-height:1}
+.b2-cart.back .pusher{left:auto;right:-20px}
+.b2-cart.back svg{transform:scaleX(-1)}
+.b2-cart.mv .pusher{animation:b2-walk .3s ease-in-out infinite alternate}
 .b2-cart svg{display:block;width:100%}
-.b2-cart .wheel{transform-box:fill-box;transform-origin:center;animation:b2-spin .8s linear infinite}
-@keyframes b2-cart{0%,6%{left:0;transform:scaleX(1)}46%{left:calc(100% - 62px);transform:scaleX(1)}50%,56%{left:calc(100% - 62px);transform:scaleX(-1)}96%{left:0;transform:scaleX(-1)}100%{left:0;transform:scaleX(1)}}
+.b2-cart .wheel{transform-box:fill-box;transform-origin:center}
+.b2-cart.mv .wheel{animation:b2-spin .6s linear infinite}
+
 @keyframes b2-spin{to{transform:rotate(360deg)}}
-.idle .b2-cart,.idle .b2-cart .wheel,.idle .b2-cab,.idle.b2-cab{animation-play-state:paused}
+
 .b2-quai{position:absolute;left:70px;bottom:60px;width:56px;text-align:center;pointer-events:none;z-index:2}
 .b2-quai .sacks{display:flex;flex-wrap:wrap-reverse;justify-content:center;gap:1px;min-height:18px}
 .b2-quai .sk{width:13px;height:11px;border-radius:5px 5px 4px 4px;background:#E7C48B;box-shadow:inset 0 -2px 0 #C79B5C}
@@ -554,7 +635,9 @@ const STYLE = `
 .b2-stn .nm b{font:400 italic 18px/1 var(--disp);white-space:nowrap}
 .b2-stn .bot{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:7px}
 .b2-stn .meta{font:800 11.5px var(--round);color:var(--ink2);font-variant-numeric:tabular-nums;line-height:1.2}
-.b2-stn > .b2-btn{display:flex;width:100%;margin-top:2px;padding:7px 8px;font-size:13.5px!important}
+.b2-stn .btns{display:flex;gap:6px;margin-top:6px}
+.b2-stn .btns .b2-btn{flex:1;min-width:0;padding:7px 4px;font-size:13px!important}
+.b2-sign .b2-hire{padding:7px 8px;font-size:12.5px!important;flex:none}
 .b2-stn .b2-slow{position:absolute;right:6px;top:-9px;margin:0}
 .b2-seat{position:relative;width:38px;height:38px;flex:none;border-radius:50%!important;display:grid;place-items:center;font-size:21px!important;background:rgba(255,244,224,.7)!important;border:2px dashed var(--wood2)!important;padding:0!important;margin-bottom:6px}
 .b2-seat > i{position:absolute;left:50%;bottom:-8px;transform:translateX(-50%);font:900 8.5px var(--round);font-style:normal;white-space:nowrap;background:var(--wood2);color:#FFF3DE;border-radius:5px;padding:1px 4px}
@@ -590,19 +673,20 @@ const STYLE = `
 .b2-rail::before,.b2-rail::after{content:"";position:absolute;top:0;bottom:0;width:7px;background:linear-gradient(90deg,#8C5A30,#5E3517);border-radius:3px}
 .b2-rail::before{left:2px}.b2-rail::after{right:2px}
 .b2-rail .rope{position:absolute;left:24px;top:0;width:2px;height:var(--rope,40px);background:#3E220F}
-.b2-cab{position:absolute;left:6px;top:4px;width:38px;height:36px;animation:b2-lift var(--dur,6s) ease-in-out infinite alternate}
-@keyframes b2-lift{from{transform:translateY(0)}to{transform:translateY(var(--h,300px))}}
+.b2-cab{position:absolute;left:6px;top:4px;width:38px;height:36px;will-change:transform}
+.b2-cab .ld{position:absolute;left:50%;top:-16px;transform:translateX(-50%);background:var(--ink);color:#FFE6B8;border-radius:7px;padding:1px 5px;font:900 11px var(--round);transition:opacity .2s;white-space:nowrap;z-index:2}
+
 .b2-cab svg{display:block;width:100%}
 .b2-elev{margin:0 0 10px -62px}
 .b2-plot{position:relative;margin-bottom:12px;border-radius:14px;background:var(--soil,#8A5A33);box-shadow:inset 0 2px 0 rgba(255,255,255,.08),0 2px 0 rgba(0,0,0,.25)}
 .b2-plot .art{display:block;width:100%;height:96px;border-radius:14px 14px 0 0;overflow:hidden}
 .b2-plot .art svg{display:block;width:100%;height:100%}
-.b2-plot.idle .art *{animation-play-state:paused!important}
+.b2-plot.idle .art svg *{animation-play-state:paused!important}
 .b2-plot .b2-sign{margin:-10px 8px 8px}
-.b2-plot .pend{position:absolute;left:-58px;top:26px;width:52px;text-align:center}
+.b2-plot .pend{position:absolute;left:4px;top:46px;width:50px;text-align:center;z-index:3;pointer-events:none}
 .b2-plot .pend .b2-tag.warn{animation:b2-blink 1s infinite}
 .b2-plot .pend .bag{font-size:24px;line-height:1;filter:drop-shadow(0 2px 0 rgba(0,0,0,.25))}
-.b2-plot .tapme{position:absolute;inset:0 0 auto 0;height:96px;display:grid;place-items:center;pointer-events:none}
+.b2-plot .tapme{position:absolute;inset:0 0 auto 0;height:96px;display:grid;place-items:center start;padding-left:58px;pointer-events:none}
 .b2-plot .tapme span{background:rgba(255,255,255,.88);border-radius:999px;padding:6px 12px;font:900 13px var(--round);color:var(--ink);box-shadow:0 3px 10px rgba(0,0,0,.2);animation:b2-hint 1.4s ease-in-out infinite}
 @keyframes b2-hint{50%{transform:scale(1.07)}}
 .b2-plvl{position:absolute;left:8px;top:8px;background:rgba(59,31,23,.82);color:#FFE6B8;border-radius:9px;padding:3px 8px;font:800 11.5px var(--round);pointer-events:none}
@@ -954,22 +1038,78 @@ async function start(){
 }
 let lastSig = "";
 const unlockSig = () => ["grange","mgr","boost","marche","village","four","farm2"].map(k => BX.unlocked(S, k) ? 1 : 0).join("") + (view === "farm" ? (TIPS.find(x => !seen("tip_" + x.id) && x.when()) || {}).id : "");
+let raf = null;
+function frame(){
+  if (!wrapEl || !S){ raf = null; return; }
+  const t = now(), dt = (t - lastTick) / 1000; lastTick = t;
+  if (dt > 3){ BX.catchUp(S, t); }
+  else if (dt > 0){
+    const ev = [], done = BX.step(S, dt, t, ev) || []; S.last = t;
+    if (done.length){ const d = done[0]; toast(`${P[d.rec].e} ${fmtN(d.qty)} ${P[d.rec].label.toLowerCase()} sorti${d.qty > 1 ? "s" : ""} du four`, "gold"); sound("done"); if (view === "barn") draw(); }
+    if (view === "farm" && ev.length) showEvents(ev);
+  }
+  if (view === "farm") animate();
+  raf = requestAnimationFrame(frame);
+}
 function loop(){
-  clearInterval(loopT);
+  clearInterval(loopT); if (!raf) raf = requestAnimationFrame(frame);
   let n = 0;
   loopT = setInterval(() => {
     if (!wrapEl || !S) return;
-    const t = now(), dt = (t - lastTick) / 1000; lastTick = t;
-    let done = [];
-    if (dt > 5) BX.catchUp(S, t); else if (dt > 0){ done = BX.step(S, dt, t) || []; S.last = t; }
-    if (done.length){ const d = done[0]; toast(`${P[d.rec].e} ${fmtN(d.qty)} ${P[d.rec].label.toLowerCase()} sorti${d.qty > 1 ? "s" : ""} du four`, "gold"); sound("done"); if (view === "barn") draw(); }
-    if (BX.ensureOrders(S, t, ME.id, groupProd())){ dirty = true; if (view === "village") draw(); }
+    if (!raf) raf = requestAnimationFrame(frame);
+    if (BX.ensureOrders(S, now(), ME.id, groupProd())){ dirty = true; if (view === "village") draw(); }
     live();
     n++;
     if (n % 4 === 0 && !sheetOpen){ const sig = unlockSig(); if (sig !== lastSig){ lastSig = sig; draw(); } }
     if (n % 80 === 0) save();                       // toutes les 20 s si quelque chose a changé
     if (n % 120 === 0) loadWorld((view === "market" || view === "village"));
   }, 250);
+}
+/* l'animation suit exactement la simulation : où est chaque fermier, la cabine, la charrette */
+let geo = null;
+function measure(){
+  const sh = wrapEl && wrapEl.querySelector(".b2-shaft"); if (!sh){ geo = null; return; }
+  const ys = [0]; wrapEl.querySelectorAll(".b2-plot").forEach(el => ys.push(el.offsetTop + 22));
+  const lane = wrapEl.querySelector(".b2-cartlane");
+  geo = { ys, lane: lane ? Math.max(40, lane.clientWidth - 72) : 100 };
+  const rope = wrapEl.querySelector(".b2-rail .rope"); if (rope) rope.style.height = (ys[ys.length - 1] + 24) + "px";
+}
+function animate(){
+  if (!geo) measure(); if (!geo) return;
+  const f = S.farms[S.cur]; if (!f) return;
+  f.parcels.forEach((p, i) => {
+    const w = wrapEl.querySelector(`[data-wk="${i}"]`); if (!w) return;
+    const k = Math.min(1, p.t / BAL.walk);
+    const x = p.ph === "go" ? 70 - 52 * k : p.ph === "back" ? 18 + 52 * k : 70;
+    w.style.left = x + "%"; const cls = "b2-wk " + p.ph; if (w.className !== cls) w.className = cls;
+  });
+  const e = f.elev, cab = wrapEl.querySelector(".b2-cab");
+  if (cab){
+    const a = Math.max(0, Math.floor(e.pos)), b2 = Math.min(geo.ys.length - 1, a + 1), fr = e.pos - a;
+    const ya = geo.ys[Math.min(a, geo.ys.length - 1)] || 0, yb = geo.ys[b2] || ya;
+    cab.style.transform = `translateY(${ya + (yb - ya) * fr}px)`;
+    const l = cab.querySelector(".ld"); if (l){ l.textContent = fmtN(e.load); l.style.opacity = e.load >= 1 ? 1 : 0; }
+  }
+  const c = f.cart, ce = wrapEl.querySelector(".b2-cart");
+  if (ce){
+    ce.style.transform = `translateX(${c.pos * geo.lane}px)`;
+    ce.classList.toggle("mv", c.ph === "go" || c.ph === "back"); ce.classList.toggle("back", c.ph === "back");
+    const l = ce.querySelector(".ld"); if (l){ l.textContent = fmtN(c.load); l.style.opacity = c.load >= 1 ? 1 : 0; }
+  }
+}
+const lastPop = {};
+function pop(el, text, key){
+  const t = now(); if (lastPop[key] && t - lastPop[key] < 700) return; lastPop[key] = t;
+  floatText(el, text, "small");
+}
+function showEvents(ev){
+  ev.forEach(x => {
+    if (x.key !== S.cur) return;
+    if (x.k === "drop"){ const el = wrapEl.querySelector(`[data-plot="${x.i}"] .pend`); if (el){ pop(el, "+" + fmtN(x.amt, 1), "d" + x.i); bounce(el.querySelector(".bag")); } }
+    if (x.k === "lift"){ const el = wrapEl.querySelector(".b2-cab"); if (el) pop(el, "+" + fmtN(x.amt, 1), "l"); }
+    if (x.k === "top"){ const el = wrapEl.querySelector(".b2-quai"); if (el) pop(el, "+" + fmtN(x.amt, 1), "t"); }
+    if (x.k === "barn"){ const el = wrapEl.querySelector(".b2-barn"); if (el){ pop(el, "+" + fmtN(x.amt, 1) + " " + P[x.key].e, "b"); bounce(el); } }
+  });
 }
 document.addEventListener("visibilitychange", () => { if (document.hidden && S && wrapEl) save(true); else if (!document.hidden && S && wrapEl){ lastTick = now(); } });
 
@@ -986,15 +1126,8 @@ function draw(){
     const dot = !lock && t.need && !seen("tab_" + t.id);
     return `<button class="b2-tab ${view === t.id ? "on" : ""} ${lock ? "locked" : ""}" data-a="tab" data-v="${t.id}"><span class="i">${lock ? "🔒" : t.i}</span>${t.label}${dot ? `<span class="dot"></span>` : ""}</button>`;
   }).join("")}</div>`;
-  if (view === "farm") fitShaft();
+  geo = null; if (view === "farm") requestAnimationFrame(measure);
   live(true);
-}
-function fitShaft(){
-  const sh = wrapEl.querySelector(".b2-shaft"), cab = wrapEl.querySelector(".b2-cab");
-  if (!sh || !cab) return;
-  const h = Math.max(60, sh.offsetHeight - 60);
-  cab.style.setProperty("--h", h + "px");
-  cab.style.setProperty("--dur", Math.max(2.5, Math.min(7, h / 120)) + "s");
 }
 let shown = { coins: null, wood: null };
 function live(force){
@@ -1016,24 +1149,19 @@ function live(force){
     const key = S.cur, f = S.farms[key]; if (!f) return;
     f.parcels.forEach((p, i) => {
       const el = wrapEl.querySelector(`[data-plot="${i}"]`); if (!el) return;
-      const run = p.mgr || p.run > 0;
-      el.classList.toggle("idle", !run);
+      el.classList.toggle("idle", p.ph === "idle");
       const pe = el.querySelector("[data-pend]"); if (pe) pe.textContent = fmtN(p.pend);
-      const rb = el.querySelector(".runbar"); if (rb) rb.style.width = p.mgr ? "0" : (p.run / BAL.cycle * 100) + "%";
-      const tm = el.querySelector(".tapme"); if (tm) tm.style.display = run ? "none" : "";
+      const tm = el.querySelector(".tapme"); if (tm) tm.style.display = p.ph === "idle" && !p.mgr ? "" : "none";
       const full = p.pend >= BAL.pendCap(BAL.parcelRate(i, p.lvl) * (f.boost > t ? 2 : 1)) * .98;
       pe && pe.classList.toggle("warn", full);
     });
-    const er = f.elev.mgr || f.elev.run > 0, cr = f.cart.mgr || f.cart.run > 0;
-    wrapEl.querySelector(".b2-cab")?.classList.toggle("idle", !er);
-    wrapEl.querySelector(".b2-sky")?.classList.toggle("idle", !cr);
-    wrapEl.querySelector(".b2-tower")?.classList.toggle("idle", !er);
-    const tot = f.parcels.reduce((a, p) => a + p.pend, 0);
-    const he = wrapEl.querySelector("[data-hint=elev]"); if (he) he.style.display = !f.elev.mgr && f.elev.run <= 0 && tot >= 1 ? "" : "none";
-    const hc = wrapEl.querySelector("[data-hint=cart]"); if (hc) hc.style.display = !f.cart.mgr && f.cart.run <= 0 && f.quai >= 1 ? "" : "none";
+    wrapEl.querySelector(".b2-tower")?.classList.toggle("idle", f.elev.ph === "idle");
+    const tot = BX.pendTotal(f);
+    const he = wrapEl.querySelector("[data-hint=elev]"); if (he) he.style.display = !f.elev.mgr && f.elev.ph === "idle" && tot >= 1 ? "" : "none";
+    const hc = wrapEl.querySelector("[data-hint=cart]"); if (hc) hc.style.display = !f.cart.mgr && f.cart.ph === "idle" && f.quai >= 1 ? "" : "none";
     const qe = wrapEl.querySelector("[data-live=quai]"); if (qe) qe.textContent = fmtN(f.quai);
     const sk = wrapEl.querySelector(".b2-quai .sacks");
-    if (sk){ const n = Math.min(8, Math.ceil(f.quai / Math.max(1, BX.BAL.quaiCap(BAL.elevRate(f.elev.lvl))) * 8)); if (+sk.dataset.n !== n){ sk.dataset.n = n; sk.innerHTML = "<i class='sk'></i>".repeat(n); } }
+    if (sk){ const n = Math.min(8, Math.ceil(f.quai / Math.max(1, BX.quaiCap(f)) * 8)); if (+sk.dataset.n !== n){ sk.dataset.n = n; sk.innerHTML = "<i class='sk'></i>".repeat(n); } }
     const cap = BX.barnCap(S), used = BX.stockUnits(S), fill = Math.min(1, used / cap);
     const gb = wrapEl.querySelector(".b2-sky .b2-gbar"); if (gb){ gb.querySelector("i").style.width = (fill * 100) + "%"; gb.classList.toggle("full", fill >= .999); }
     const gl = wrapEl.querySelector("[data-live=barn]"); if (gl) gl.textContent = `${fmtN(used)} / ${fmtN(cap)}`;
@@ -1066,7 +1194,7 @@ function live(force){
 function seatHTML(kind, has, cost, i){
   const di = i !== undefined ? `data-i="${i}"` : "";
   return has ? `<button class="b2-seat on" data-a="station" data-k="${kind}" ${di} aria-label="Contremaître engagé">${MGR[kind]}<i>Auto</i></button>`
-    : `<button class="b2-seat" data-a="station" data-k="${kind}" ${di} data-mgrc="${cost}" aria-label="Engager un contremaître">${MGR[kind]}<i>Engager</i></button>`;
+    : `<button class="b2-btn gold b2-hire" data-a="hire" data-k="${kind}" ${di} data-cc="${cost}" aria-label="Engager un contremaître pour ${fmtN(cost)} pièces">+${MGR[kind]} ${COIN}${fmtN(cost)}</button>`;
 }
 function upCost(kind, f, i){
   const at = kind === "parcel" ? L => BAL.parcelCost(i, L) : kind === "elev" ? BAL.elevCost : BAL.cartCost;
@@ -1076,13 +1204,13 @@ function upCost(kind, f, i){
   return b;
 }
 const upLabel = u => `⬆ ${u.n > 1 ? `+${u.n} ` : ""}${COIN}${fmtN(u.coins)}`;
-function stationChip(kind, f, r){
-  const u = upCost(kind, f), lvl = f[kind].lvl, cap = (kind === "elev" ? r.E * BAL.elevTrip : r.C * BAL.cartTrip);
-  const cost = kind === "elev" ? BAL.elevMgr : BAL.cartMgr;
+function stationChip(kind, f){
+  const u = upCost(kind, f), lvl = f[kind].lvl, cap = kind === "elev" ? BAL.elevCap(lvl) : BAL.cartCap(lvl);
+  const cost = kind === "elev" ? BAL.elevMgr : BAL.cartMgr, has = f[kind].mgr;
   return `<div class="b2-stn ${kind}" data-a="station" data-k="${kind}">
     <span class="b2-slow" data-slow="${kind}" style="display:none">Lent</span>
-    <div class="top">${seatHTML(kind, f[kind].mgr, cost)}<div class="nm"><b>${kind === "elev" ? "Monte-charge" : "Charrette"}</b><span class="meta">Niv ${lvl} · ${fmtN(cap)}/trajet</span></div></div>
-    <button class="b2-btn" data-a="up-${kind}" data-cc="${u.coins}">${upLabel(u)}</button></div>`;
+    <div class="top">${has ? `<span class="b2-seat on">${MGR[kind]}<i>Auto</i></span>` : ""}<div class="nm"><b>${kind === "elev" ? "Monte-charge" : "Charrette"}</b><span class="meta">Niv ${lvl} · ${fmtN(cap)} par trajet</span></div></div>
+    <div class="btns"><button class="b2-btn" data-a="up-${kind}" data-cc="${u.coins}">${upLabel(u)}</button>${has ? "" : seatHTML(kind, false, cost)}</div></div>`;
 }
 function farmHTML(){
   const key = S.cur, f = S.farms[key], t = now(), pr = P[key];
@@ -1095,8 +1223,7 @@ function farmHTML(){
     const next = BX.MILES.find(m => m > p.lvl);
     return `<div class="b2-plot" data-plot="${i}" style="--soil:${depth(i)}">
       <div class="pend"><div class="bag">🧺</div><span class="b2-tag" data-pend>${fmtN(p.pend)}</span></div>
-      <div class="art" data-a="tap-parcel" data-i="${i}">${plotArt(key, i, p.lvl)}</div><span class="b2-plvl">Niv <b>${p.lvl}</b></span>
-      <div class="runbar"></div>
+      <div class="art" data-a="tap-parcel" data-i="${i}">${plotArt(key, i, p.lvl)}<div class="b2-wk ${p.ph}" data-wk="${i}"><span class="carry">${pr.e}</span><span class="who">${MGR.parcel}</span></div></div><span class="b2-plvl">Niv <b>${p.lvl}</b></span>
       <div class="tapme"><span>👆 Touche pour récolter</span></div>
       <div class="b2-sign"><div class="row">
         ${seatHTML("parcel", p.mgr, BX.nice(BAL.parcelMgr(i)), i)}
@@ -1113,20 +1240,20 @@ function farmHTML(){
     <div class="b2-sky">
       <div class="sun"></div><div class="b2-cloud" style="top:92px;width:58px;animation-duration:70s;animation-delay:-20s"></div><div class="b2-cloud" style="top:120px;width:44px;animation-duration:95s;animation-delay:-60s"></div>
       <svg class="b2-hills" viewBox="0 0 400 70" preserveAspectRatio="none" aria-hidden="true"><path d="M0 50 Q60 10 130 38 T260 30 T400 34 V70 H0Z" fill="#A9D47D"/><path d="M0 60 Q90 34 180 54 T400 50 V70 H0Z" fill="#94C66A"/></svg>
-      ${stationChip("elev", f, r)}
-      ${stationChip("cart", f, r)}
+      ${stationChip("elev", f)}
+      ${stationChip("cart", f)}
       <div class="b2-gauge" data-a="tab" data-v="barn"><div class="b2-glab"><span>Grange</span><span data-live="barn">${fmtN(used)} / ${fmtN(cap)}</span></div><div class="b2-gbar"><i style="width:${Math.min(100, used / cap * 100)}%"></i></div>
         <div data-slow="barn" style="display:none;margin-top:4px;text-align:right"><span class="b2-tag warn">Pleine : la récolte s'arrête</span></div></div>
       <div class="b2-barn" data-a="tab" data-v="barn" data-n="-1"></div>
       <div class="b2-ground"></div><div class="b2-road"></div>
       <button class="b2-tower" data-a="tap-elev" aria-label="Faire monter le monte-charge">${TOWER}<span class="b2-hand" data-hint="elev">👆</span></button>
       <div class="b2-quai"><div class="sacks" data-n="-1"></div><span class="b2-tag" data-live="quai">${fmtN(f.quai)}</span></div>
-      <button class="b2-cartlane" data-a="tap-cart" aria-label="Faire rouler la charrette"><div class="b2-cart" style="animation-duration:${Math.max(3, BAL.cartTrip - Math.min(4, f.cart.lvl / 12))}s">${CART}</div><span class="b2-hand" data-hint="cart">👆</span></button>
+      <button class="b2-cartlane" data-a="tap-cart" aria-label="Faire rouler la charrette"><div class="b2-cart"><span class="ld">0</span>${CART}<span class="pusher">${MGR.cart}</span></div><span class="b2-hand" data-hint="cart">👆</span></button>
     </div>
     ${farmsK.length > 1 ? `<div class="b2-farmsw">${farmsK.map(k => `<button class="${k === key ? "on" : ""}" data-a="farm" data-k="${k}">${P[k].e} ${P[k].label}</button>`).join("")}</div>` : ""}
     ${tip}
     <div class="b2-shaft">
-      <button class="b2-rail" data-a="tap-elev" aria-label="Faire monter le monte-charge"><div class="rope" style="height:100%"></div><div class="b2-cab">${CABIN}</div></button>
+      <button class="b2-rail" data-a="tap-elev" aria-label="Faire monter le monte-charge"><div class="rope"></div><div class="b2-cab"><span class="ld">0</span>${CABIN}</div></button>
       ${plots}
     </div>
     ${farm2HTML()}
@@ -1138,16 +1265,16 @@ function stationSheet(kind, i){ sheetCtx = { type:"station", kind, i }; sheet(st
 function stationInner(){
   const { kind, i } = sheetCtx, f = S.farms[S.cur], t = now(), boost = f.boost > t ? 2 : 1;
   const st = kind === "parcel" ? f.parcels[i] : f[kind], L = st.lvl, u = upCost(kind, f, i), L2 = L + u.n;
-  const rate = l => kind === "parcel" ? BAL.parcelRate(i, l) * boost : kind === "elev" ? BAL.elevRate(l) : BAL.cartRate(l);
-  const trip = kind === "elev" ? BAL.elevTrip : BAL.cartTrip;
+  const rate = l => BAL.parcelRate(i, l) * boost;
   const name = kind === "parcel" ? `${P[S.cur].short} ${i + 1}` : kind === "elev" ? "Monte-charge" : "Charrette";
   const what = kind === "parcel" ? `Produit ${P[S.cur].e} ${esc(P[S.cur].label.toLowerCase())} dans son panier, en bas à gauche.`
-    : kind === "elev" ? "Remonte les paniers des parcelles jusqu'en haut du puits." : "Porte la récolte du haut du monte-charge jusqu'à la grange.";
+    : kind === "elev" ? "Descend étage par étage, vide le panier de chaque parcelle dans sa cabine, puis remonte et dépose tout en haut." : "Charge le tas en haut du monte-charge, le roule jusqu'à la grange, décharge et revient.";
   const cost = kind === "parcel" ? BX.nice(BAL.parcelMgr(i)) : kind === "elev" ? BAL.elevMgr : BAL.cartMgr;
   const manual = kind === "parcel" ? "toucher la parcelle" : kind === "elev" ? "toucher le monte-charge" : "toucher la charrette";
   const next = BX.MILES.find(m => m > L);
   const rows = (kind === "parcel" ? [["Production", `${fmtN(rate(L), 1)}/s`, `${fmtN(rate(L2), 1)}/s`]]
-    : [["Par trajet", fmtN(rate(L) * trip), fmtN(rate(L2) * trip)], ["Débit", `${fmtN(rate(L), 1)}/s`, `${fmtN(rate(L2), 1)}/s`]]);
+    : kind === "elev" ? [["Par trajet", fmtN(BAL.elevCap(L)), fmtN(BAL.elevCap(L2))], ["Vitesse", `${fmtN(BAL.elevSpeed(L), 1)} étage/s`, `${fmtN(BAL.elevSpeed(L2), 1)} étage/s`]]
+    : [["Par trajet", fmtN(BAL.cartCap(L)), fmtN(BAL.cartCap(L2))], ["Aller jusqu'à la grange", `${fmtN(BAL.cartTime(L), 1)} s`, `${fmtN(BAL.cartTime(L2), 1)} s`]]);
   return `<div class="grab"></div><h3>${MGR[kind]} ${name} <span class="b2-lvl">Niv ${L}</span></h3><p>${what}</p>
     <div class="b2-stat">${rows.map(([a, b, c]) => `<div><span>${a}</span><b>${b}</b><span class="ar">→</span><b class="up2">${c}</b></div>`).join("")}</div>
     ${next ? `<p class="b2-note" style="margin:6px 0 0">Au niveau ${next}, ${kind === "parcel" ? "la production" : "la capacité"} double.</p>` : ""}
@@ -1526,19 +1653,31 @@ function onClick(e){
     case "tap-parcel": {
       const p = f.parcels[+b.dataset.i];
       if (p.mgr){ floatText(b, "Ton contremaître s'en occupe"); return; }
-      if (p.run <= 0){ p.run = BAL.cycle; sound("tap"); bounce(b); }
+      if (BX.startParcel(p)){ sound("tap"); bounce(b.querySelector(".b2-wk") || b); }
       live(); return;
     }
     case "harvest": {
-      f.parcels.forEach(p => { if (!p.mgr) p.run = Math.max(p.run, BAL.cycle); });
-      if (!f.elev.mgr) f.elev.run = Math.max(f.elev.run, BAL.cycle); if (!f.cart.mgr) f.cart.run = Math.max(f.cart.run, BAL.cycle);
+      f.parcels.forEach(p => BX.startParcel(p));
+      if (BX.pendTotal(f) >= 1) BX.startElev(f); if (f.quai >= 1) BX.startCart(f);
       sound("tap"); bounce(b); buzz(10); markSeen("tip_start"); live(); return;
     }
     case "tap-elev": case "tap-cart": {
-      const st = a === "tap-elev" ? f.elev : f.cart;
-      if (st.mgr){ floatText(b, "Ton contremaître s'en occupe"); return; }
-      if (st.run <= 0){ st.run = BAL.cycle; sound("tap"); bounce(b.querySelector(".b2-cab, .b2-cart, svg") || b); }
+      const el = a === "tap-elev";
+      const st = el ? f.elev : f.cart;
+      if (st.ph !== "idle"){ floatText(b, st.mgr ? "Ton contremaître s'en occupe" : "Déjà en route"); return; }
+      if (el && BX.pendTotal(f) < 1){ toast("Les paniers sont vides : touche d'abord un champ pour récolter."); return; }
+      if (!el && f.quai < 1){ toast("Rien à transporter : le monte-charge doit d'abord remonter un panier."); return; }
+      if (el ? BX.startElev(f) : BX.startCart(f)){ sound("tap"); }
       live(); return;
+    }
+    case "hire": {
+      const kind = b.dataset.k, i = b.dataset.i !== undefined ? +b.dataset.i : undefined;
+      const st = kind === "parcel" ? f.parcels[i] : f[kind]; if (st.mgr) return;
+      const c = { coins: kind === "parcel" ? BX.nice(BAL.parcelMgr(i)) : kind === "elev" ? BAL.elevMgr : BAL.cartMgr };
+      if (!paid(c, b)) return;
+      st.mgr = true; markSeen("tip_mgr"); sound("done"); buzz(20); draw(); save(true);
+      toast(`${MGR[kind]} Contremaître engagé : ${kind === "parcel" ? "il récolte" : kind === "elev" ? "il fait marcher le monte-charge" : "il conduit la charrette"} tout seul, même appli fermée`);
+      return;
     }
     case "station": stationSheet(b.dataset.k, b.dataset.i !== undefined ? +b.dataset.i : undefined); return;
     case "st-mult": mult = b.dataset.m === "max" ? "max" : +b.dataset.m; refreshStation(); draw(); return;
@@ -1581,7 +1720,7 @@ function onClick(e){
     }
     case "unlock": {
       const c = BX.nextParcelCost(f); if (!paid(c, b)) return;
-      f.parcels.push({ lvl:1, mgr:false, run:0, pend:0 }); sound("done"); buzz(25); draw(); save(true);
+      f.parcels.push(BX.newParcel()); sound("done"); buzz(25); draw(); save(true);
       const el = wrapEl.querySelector(`[data-plot="${f.parcels.length - 1}"]`); if (el){ el.classList.add("lvlup"); el.scrollIntoView({ behavior:"smooth", block:"center" }); }
       const np = S.farms[S.spec].parcels.length;
       if (S.cur === S.spec && (np === 2 || np === 3 || np === BAL.farmNeeds)) setTimeout(() => toast(np === 2 ? "📈 Le marché est ouvert !" : np === 3 ? "🏘️ Le village et le four sont ouverts !" : "⚔️ Tu peux ouvrir une 2e exploitation"), 700);
