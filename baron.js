@@ -578,12 +578,12 @@ const STYLE = `
 .b2-sellbtn{position:absolute!important;right:40px;bottom:92px;z-index:3;display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 14px 7px!important;border-radius:14px!important;
   background:linear-gradient(#FFD45E,#F2B33D)!important;color:#4A2C00!important;box-shadow:0 4px 0 var(--gold2),0 8px 16px rgba(0,0,0,.25);transition:transform .08s}
 .b2-sellbtn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--gold2)}
-.b2-sellbtn .l{font:900 16px/1.1 var(--round)}
-.b2-sellbtn .v{display:flex;align-items:center;font:900 13px var(--round);font-variant-numeric:tabular-nums}
-.b2-sellbtn .v .b2-coin{width:13px;height:13px}
-.b2-sellbtn.empty{filter:saturate(.3) brightness(.95);opacity:.8}
+
+.b2-sellbtn .v{display:flex;align-items:center;font:900 17px var(--round);font-variant-numeric:tabular-nums}
+.b2-sellbtn .v .b2-coin{width:18px;height:18px}
+.b2-sellbtn.empty{display:none!important}
 .b2-sellbtn.ready{animation:b2-call 1.2s ease-in-out infinite}
-.b2-sellbtn.ready::after{content:"👆";position:absolute;right:-22px;top:6px;font-size:26px;animation:b2-tap 1.1s ease-in-out infinite}
+.b2-sellbtn.ready::after{display:none;content:"👆";position:absolute;right:-22px;top:6px;font-size:26px;animation:b2-tap 1.1s ease-in-out infinite}
 .b2-gauge{position:absolute;right:14px;top:112px;width:140px;z-index:1}
 .b2-gbar{height:12px;border-radius:999px;background:rgba(59,31,23,.25);overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,.25)}
 .b2-gbar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#F6C543,#F2873B);transition:width .5s}
@@ -634,7 +634,8 @@ const STYLE = `
 .b2-stn{position:absolute;top:10px;z-index:3;width:calc(50% - 14px);max-width:210px;box-sizing:border-box;border-radius:12px;padding:7px 8px 8px;color:var(--ink);cursor:pointer;
   box-shadow:0 3px 0 #9A6334,0 6px 14px rgba(59,31,23,.18);background-image:repeating-linear-gradient(0deg,rgba(124,74,36,.07) 0 2px,transparent 2px 9px),linear-gradient(180deg,#EDC28C,#D9A066)}
 .b2-stn.elev{left:8px}.b2-stn.cart{right:8px}
-.b2-stn .top{display:flex;align-items:center;gap:7px}
+.b2-stn{display:flex;align-items:center;gap:8px;padding:10px 8px 8px 14px!important;width:auto!important}
+.b2-stn > .b2-btn{flex:1;padding:8px 6px;font-size:14px!important}
 .b2-stn .nm{min-width:0;display:flex;flex-direction:column;gap:3px}
 .b2-stn .nm b{font:400 italic 18px/1 var(--disp);white-space:nowrap}
 .b2-stn .bot{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:7px}
@@ -644,12 +645,12 @@ const STYLE = `
 .b2-sign .b2-hire{padding:7px 8px;font-size:12.5px!important;flex:none}
 .b2-stn .b2-slow{position:absolute;right:6px;top:-9px;margin:0}
 .b2-seat{position:relative;width:38px;height:38px;flex:none;border-radius:50%!important;display:grid;place-items:center;font-size:21px!important;background:rgba(255,244,224,.7)!important;border:2px dashed var(--wood2)!important;padding:0!important;margin-bottom:6px}
-.b2-seat > i{position:absolute;left:50%;bottom:-8px;transform:translateX(-50%);font:900 8.5px var(--round);font-style:normal;white-space:nowrap;background:var(--wood2);color:#FFF3DE;border-radius:5px;padding:1px 4px}
+.b2-seat > i:not(.b2-face){position:absolute;left:50%;bottom:-8px;transform:translateX(-50%);font:900 8.5px var(--round);font-style:normal;white-space:nowrap;background:var(--wood2);color:#FFF3DE;border-radius:5px;padding:1px 4px}
 .b2-seat:not(.on){filter:saturate(.35)}
 .b2-seat.can{filter:none;animation:b2-call 1.6s ease-in-out infinite}
-.b2-seat.can > i{background:var(--up)}
+.b2-seat.can > i:not(.b2-face){background:var(--up)}
 .b2-seat.on{background:#FFF4E0!important;border:0!important;box-shadow:0 0 0 2.5px var(--gold),0 2px 0 3px rgba(0,0,0,.12)}
-.b2-seat.on > i{background:var(--gold);color:#4A2C00}
+.b2-seat.on > i:not(.b2-face){background:var(--gold);color:#4A2C00}
 .b2-tower{position:absolute!important;left:10px;bottom:34px;width:58px;padding:0!important;z-index:2}
 .b2-tower svg{display:block;width:100%}
 .b2-tower .pulley{transform-box:fill-box;transform-origin:center;animation:b2-spin 1.4s linear infinite}
@@ -727,6 +728,32 @@ const STYLE = `
 @keyframes b2-leg{from{transform:rotate(-22deg)}to{transform:rotate(22deg)}}
 @keyframes b2-arm{from{transform:rotate(-25deg)}to{transform:rotate(25deg)}}
 @keyframes b2-fork{from{transform:rotate(-10deg)}to{transform:rotate(-60deg)}}
+.b2-point{position:absolute;width:34px;height:40px;pointer-events:none;z-index:8;display:none;filter:drop-shadow(0 3px 3px rgba(0,0,0,.35))}
+.b2-point.on{display:block;animation:b2-poke .9s ease-in-out infinite}
+.b2-point svg{display:block;width:100%;height:100%}
+@keyframes b2-poke{0%,100%{transform:translate(0,0)}50%{transform:translate(-5px,-9px)}}
+.b2-wk .b2-point{left:22px;top:20px}
+.b2-tower .b2-point{left:40px;top:40px}
+.b2-cart .b2-point{left:44px;top:6px}
+.b2-sellbtn .b2-point{left:auto;right:-26px;top:16px}
+.b2-sign .b2-point{left:28px;top:22px}
+.b2-up{width:14px;height:14px;margin-right:2px;flex:none}
+.b2-btn small{font-size:11px;margin-right:3px;opacity:.85}
+.b2-lv{position:absolute;left:-6px;top:-7px;min-width:26px;height:26px;padding:0 5px;border-radius:13px;background:var(--ink);color:#FFE6B8;display:grid;place-items:center;font:900 13px var(--round);box-shadow:0 2px 0 rgba(0,0,0,.25);z-index:2}
+.b2-rate{display:inline-flex;align-items:center;gap:3px;font:900 17px var(--round);font-variant-numeric:tabular-nums;color:var(--ink)}
+.b2-rate .b2-ic{font-size:20px}
+.b2-rate small{font-size:12px;color:var(--ink2)}
+.b2-seat.hire{position:relative;width:44px;height:44px;border-radius:50%!important;border:2.5px dashed var(--wood2)!important;background:rgba(255,244,224,.6)!important;padding:0!important;display:grid;place-items:center;flex:none;margin-bottom:8px}
+.b2-seat.hire .b2-face{width:36px;height:36px;filter:saturate(.35) opacity(.75);background:transparent}
+.b2-seat.hire > i:not(.b2-face){position:absolute;left:50%;bottom:-10px;transform:translateX(-50%);display:flex;align-items:center;white-space:nowrap;background:var(--gold);color:#4A2C00;border-radius:7px;padding:1px 5px;font:900 10.5px var(--round);font-style:normal;box-shadow:0 2px 0 var(--gold2)}
+.b2-seat.hire > i:not(.b2-face) .b2-coin{width:10px;height:10px;margin-right:2px}
+.b2-seat.hire.can{animation:b2-call 1.4s ease-in-out infinite}
+.b2-seat.hire.can .b2-face{filter:none}
+.b2-seat.on{width:44px!important;height:44px!important;overflow:hidden}
+.b2-seat.on .b2-face{width:100%;height:100%}
+.b2-locked .lock{display:block;width:40px;height:44px;margin:0 auto 8px}
+.b2-locked .lock svg{display:block;width:100%;height:100%}
+.b2-locked.palier{border-color:var(--gold)}
 .b2-plvl{position:absolute;left:8px;top:8px;background:rgba(59,31,23,.82);color:#FFE6B8;border-radius:9px;padding:3px 8px;font:800 11.5px var(--round);pointer-events:none}
 .b2-plvl b{font-size:15px;font-weight:900}
 .b2-plot .runbar{position:absolute;left:0;top:0;height:4px;border-radius:14px 0 0 0;background:#FFE08A;transition:width .25s linear}
@@ -1016,6 +1043,9 @@ const TOWER = `<svg viewBox="0 0 60 110" aria-hidden="true"><path d="M8 20 L8 11
   <path d="M8 40 L52 66 M52 40 L8 66 M8 72 L52 98 M52 72 L8 98" stroke="#9A6334" stroke-width="3"/><path d="M4 20 H56" stroke="#5B3519" stroke-width="6" stroke-linecap="round"/>
   <path d="M2 18 L30 2 L58 18Z" fill="#CC3F27"/><path d="M30 28 V110" stroke="#3E220F" stroke-width="2"/>
   <g class="pulley"><circle cx="30" cy="22" r="9" fill="#C98F55" stroke="#5B3519" stroke-width="2.5"/><path d="M30 14 V30 M22 22 H38" stroke="#5B3519" stroke-width="2"/></g></svg>`;
+const HAND = `<svg viewBox="0 0 40 46" aria-hidden="true"><path d="M15 4 a4 4 0 0 1 8 0 v15 l9 2 a5 5 0 0 1 4 6 l-2 12 a6 6 0 0 1 -6 5 h-11 a6 6 0 0 1 -5 -3 l-8 -12 a3.5 3.5 0 0 1 5 -4.5 l6 5z" fill="#fff" stroke="#3B1F17" stroke-width="2.6" stroke-linejoin="round"/><path d="M23 20 v8 M28 21 v7" stroke="#3B1F17" stroke-width="2" stroke-linecap="round"/></svg>`;
+const UP = `<svg class="b2-up" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 L14 9 H10.5 V14 H5.5 V9 H2Z" fill="#fff"/></svg>`;
+const LOCK = `<svg viewBox="0 0 40 44" aria-hidden="true"><path d="M11 19 v-6 a9 9 0 0 1 18 0 v6" fill="none" stroke="#D9C3A0" stroke-width="5"/><rect x="6" y="18" width="28" height="23" rx="5" fill="#F2B33D" stroke="#9E6A0A" stroke-width="2"/><circle cx="20" cy="28" r="3.5" fill="#6B4400"/><rect x="18.5" y="29" width="3" height="7" rx="1.5" fill="#6B4400"/></svg>`;
 const CRATE = `<svg viewBox="0 0 44 30" aria-hidden="true"><path d="M3 8 h38 l-3 20 h-32z" fill="#B07D4A" stroke="#6B3E1E" stroke-width="2"/><path d="M5 15 h34 M6 21 h32" stroke="#8C5A30" stroke-width="1.6"/><ellipse cx="22" cy="8" rx="19" ry="4" fill="#E7C48B" stroke="#6B3E1E" stroke-width="1.5"/></svg>`;
 const CABIN = `<svg viewBox="0 0 38 36" aria-hidden="true"><path d="M19 0 v6" stroke="#3E220F" stroke-width="2"/><rect x="2" y="6" width="34" height="28" rx="4" fill="#D9A066" stroke="#7C4A24" stroke-width="2"/><path d="M2 14 h34" stroke="#7C4A24" stroke-width="2"/><rect x="8" y="17" width="10" height="12" rx="4" fill="#E7C48B" stroke="#B88A50"/><rect x="19" y="19" width="10" height="10" rx="4" fill="#DDB57A" stroke="#B88A50"/></svg>`;
 function ovenArt(hot){
@@ -1178,7 +1208,7 @@ function animate(){
     const k = Math.min(1, p.t / BAL.walk), sm = k * k * (3 - 2 * k);
     const x = p.ph === "go" ? 66 - 44 * sm : p.ph === "back" ? 22 + 44 * sm : 66;
     w.style.left = x + "%";
-    const cls = "b2-wk " + p.ph + (p.ph === "idle" && !p.mgr ? " tap" : "") + (p.mgr ? " mgr" : ""); if (w.className !== cls) w.className = cls;
+    const cls = "b2-wk " + p.ph + (p.mgr ? " mgr" : ""); if (w.className !== cls) w.className = cls;
     const bar = w.firstElementChild.firstElementChild; if (bar) bar.style.width = (p.ph === "work" ? Math.min(100, p.t / BAL.work * 100) : 0) + "%";
   });
   const e = f.elev, cab = wrapEl.querySelector(".b2-cab");
@@ -1256,6 +1286,7 @@ function live(force){
   // boutons trop chers
   q("[data-cc]").forEach(b => { const ok = S.coins >= +b.dataset.cc && S.stock.bois >= +(b.dataset.cw || 0); b.classList.toggle("no", !ok); });
   q("[data-mgrc]").forEach(b => b.classList.toggle("can", S.coins >= +b.dataset.mgrc));
+  q(".b2-seat.hire").forEach(b => b.classList.toggle("can", S.coins >= +b.dataset.cc));
   const t = now();
   if (view === "farm"){
     const key = S.cur, f = S.farms[key]; if (!f) return;
@@ -1268,8 +1299,8 @@ function live(force){
     });
     wrapEl.querySelector(".b2-tower")?.classList.toggle("idle", f.elev.ph === "idle");
     const tot = BX.pendTotal(f);
-    const he = wrapEl.querySelector("[data-hint=elev]"); if (he) he.style.display = !f.elev.mgr && f.elev.ph === "idle" && tot >= 1 ? "" : "none";
-    const hc = wrapEl.querySelector("[data-hint=cart]"); if (hc) hc.style.display = !f.cart.mgr && f.cart.ph === "idle" && f.quai >= 1 ? "" : "none";
+    const want = nextStep(f, tot);
+    wrapEl.querySelectorAll("[data-hint]").forEach(h => { const on = h.dataset.hint === want; if (h.classList.contains("on") !== on) h.classList.toggle("on", on); });
     const qe = wrapEl.querySelector("[data-live=quai]"); if (qe) qe.textContent = fmtN(f.quai);
     const sk = wrapEl.querySelector(".b2-quai .sacks");
     if (sk){ const n = Math.min(8, Math.ceil(f.quai / Math.max(1, BX.quaiCap(f)) * 8)); if (+sk.dataset.n !== n){ sk.dataset.n = n; sk.innerHTML = "<i class='sk'></i>".repeat(n); } }
@@ -1306,8 +1337,8 @@ function live(force){
 // le rond du contremaître : vide (à engager) ou occupé
 function seatHTML(kind, has, cost, i){
   const di = i !== undefined ? `data-i="${i}"` : "";
-  return has ? `<button class="b2-seat on" data-a="station" data-k="${kind}" ${di} aria-label="Contremaître engagé">${MGR[kind]}<i>Auto</i></button>`
-    : `<button class="b2-btn gold b2-hire" data-a="hire" data-k="${kind}" ${di} data-cc="${cost}" aria-label="Engager un contremaître pour ${fmtN(cost)} pièces">+${MGR[kind]} ${COIN}${fmtN(cost)}</button>`;
+  return has ? `<button class="b2-seat on" data-a="station" data-k="${kind}" ${di} aria-label="Contremaître engagé">${MGR[kind]}</button>`
+    : `<button class="b2-seat hire" data-a="hire" data-k="${kind}" ${di} data-cc="${cost}" aria-label="Engager un contremaître pour ${fmtN(cost)} pièces">${MGR[kind]}<i>${COIN}${fmtN(cost)}</i></button>`;
 }
 function upCost(kind, f, i){
   const at = kind === "parcel" ? L => BAL.parcelCost(i, L) : kind === "elev" ? BAL.elevCost : BAL.cartCost;
@@ -1316,14 +1347,14 @@ function upCost(kind, f, i){
   if (b.n === 0) return { n: 1, coins: BX.nice(at(L)) };
   return b;
 }
-const upLabel = u => `⬆ ${u.n > 1 ? `+${u.n} ` : ""}${COIN}${fmtN(u.coins)}`;
+const upLabel = u => `${UP}${u.n > 1 ? `<small>+${u.n}</small>` : ""}${COIN}${fmtN(u.coins)}`;
 function stationChip(kind, f){
   const u = upCost(kind, f), lvl = f[kind].lvl, cap = kind === "elev" ? BAL.elevCap(lvl) : BAL.cartCap(lvl);
   const cost = kind === "elev" ? BAL.elevMgr : BAL.cartMgr, has = f[kind].mgr;
   return `<div class="b2-stn ${kind}" data-a="station" data-k="${kind}">
     <span class="b2-slow" data-slow="${kind}" style="display:none">Lent</span>
-    <div class="top">${has ? `<span class="b2-seat on">${MGR[kind]}<i>Auto</i></span>` : ""}<div class="nm"><b>${kind === "elev" ? "Monte-charge" : "Charrette"}</b><span class="meta">Niv ${lvl} · ${fmtN(cap)} par trajet</span></div></div>
-    <div class="btns"><button class="b2-btn" data-a="up-${kind}" data-cc="${u.coins}">${upLabel(u)}</button>${has ? "" : seatHTML(kind, false, cost)}</div></div>`;
+    <span class="b2-lv">${lvl}</span>${has ? `<span class="b2-seat on">${MGR[kind]}</span>` : seatHTML(kind, false, cost)}
+    <button class="b2-btn" data-a="up-${kind}" data-cc="${u.coins}">${upLabel(u)}</button></div>`;
 }
 function farmHTML(){
   const key = S.cur, f = S.farms[key], t = now(), pr = P[key];
@@ -1337,33 +1368,31 @@ function farmHTML(){
     return `<div class="b2-plot" data-plot="${i}" style="--soil:${depth(i)}">
       <div class="art" data-a="tap-parcel" data-i="${i}">${plotArt(key, i, p.lvl)}<div class="b2-path"></div>
         <div class="pend"><span class="b2-tag" data-pend>${fmtN(p.pend)}</span>${CRATE}</div>
-        <div class="b2-wk ${p.ph}" data-wk="${i}"><div class="bar"><i></i></div><span class="carry">${pr.e}</span><span class="who">${BODY.parcel}</span><span class="b2-call">👆 Récolter</span></div>
+        <div class="b2-wk ${p.ph}" data-wk="${i}"><div class="bar"><i></i></div><span class="carry">${pr.e}</span><span class="who">${BODY.parcel}</span><span class="b2-point" data-hint="p${i}">${HAND}</span></div>
       </div><span class="b2-plvl">Niv <b>${p.lvl}</b></span>
       <div class="b2-sign"><div class="row">
-        ${seatHTML("parcel", p.mgr, BX.nice(BAL.parcelMgr(i)), i)}
-        <div class="sp" data-a="station" data-k="parcel" data-i="${i}"><h3>${esc(pr.short)} ${i + 1}</h3>
-        <div class="meta">${pr.e} ${fmtN(rate, 1)}/s</div>${next ? `<div class="meta" style="font-size:11.5px;opacity:.8">×2 au niveau ${next}</div>` : ""}</div>
+        ${seatHTML("parcel", p.mgr, BX.nice(BAL.parcelMgr(i)), i)}${i === 0 && !p.mgr ? `<span class="b2-point" data-hint="hire">${HAND}</span>` : ""}
+        <div class="sp" data-a="station" data-k="parcel" data-i="${i}"><span class="b2-rate">${pr.e}<b>${fmtN(rate, 1)}</b><small>/s</small></span></div>
         <button class="b2-btn" data-a="up-parcel" data-i="${i}" data-cc="${pu.coins}">${upLabel(pu)}</button>
       </div></div></div>`;
   }).join("");
   const nc = BX.nextParcelCost(f), ni = f.parcels.length;
-  plots += `<div class="b2-locked">${nc.palier ? `<span class="palier">Palier</span>` : ""}<h3>${esc(pr.short)} ${ni + 1}</h3>
-    <p>${nc.wood ? `Il faut aussi du bois pour la construire.${S.stock.bois < nc.wood && key !== "bois" ? " Le bois s'achète au marché." : ""}` : "Une nouvelle parcelle produit beaucoup plus que la précédente."}</p>
-    <button class="b2-btn gold" data-a="unlock" data-cc="${nc.coins}" data-cw="${nc.wood}">🔓 Débloquer ${price(nc)}</button></div>`;
+  plots += `<div class="b2-locked ${nc.palier ? "palier" : ""}"><span class="lock">${LOCK}</span>
+    <button class="b2-btn gold" data-a="unlock" data-cc="${nc.coins}" data-cw="${nc.wood}">${price(nc)}</button></div>`;
   return `<div class="b2-farm"><div class="b2-col">
     <div class="b2-sky">
       <div class="sun"></div><div class="b2-cloud" style="top:92px;width:58px;animation-duration:70s;animation-delay:-20s"></div><div class="b2-cloud" style="top:120px;width:44px;animation-duration:95s;animation-delay:-60s"></div>
       <svg class="b2-hills" viewBox="0 0 400 70" preserveAspectRatio="none" aria-hidden="true"><path d="M0 50 Q60 10 130 38 T260 30 T400 34 V70 H0Z" fill="#A9D47D"/><path d="M0 60 Q90 34 180 54 T400 50 V70 H0Z" fill="#94C66A"/></svg>
       ${stationChip("elev", f)}
       ${stationChip("cart", f)}
-      <div class="b2-gauge" data-a="tab" data-v="barn"><div class="b2-glab"><span>Grange</span><span data-live="barn">${fmtN(used)} / ${fmtN(cap)}</span></div><div class="b2-gbar"><i style="width:${Math.min(100, used / cap * 100)}%"></i></div>
+      <div class="b2-gauge" data-a="tab" data-v="barn"><div class="b2-glab"><span></span><span data-live="barn">${fmtN(used)} / ${fmtN(cap)}</span></div><div class="b2-gbar"><i style="width:${Math.min(100, used / cap * 100)}%"></i></div>
         <div data-slow="barn" style="display:none;margin-top:4px;text-align:right"><span class="b2-tag warn">Pleine : la récolte s'arrête</span></div></div>
       <div class="b2-barn" data-a="tab" data-v="barn" data-n="-1"></div>
-      <button class="b2-sellbtn" data-a="quick-sell" aria-label="Vendre ta récolte au village"><span class="l">Vendre</span><span class="v">${COIN}<b data-live="sellv">0</b></span></button>
+      <button class="b2-sellbtn" data-a="quick-sell" aria-label="Vendre ta récolte au village"><span class="v">${COIN}<b data-live="sellv">0</b></span><span class="b2-point" data-hint="sell">${HAND}</span></button>
       <div class="b2-ground"></div><div class="b2-road"></div>
-      <button class="b2-tower" data-a="tap-elev" aria-label="Faire monter le monte-charge">${TOWER}<span class="b2-call up" data-hint="elev">👆 Ramasser</span></button>
-      <div class="b2-quai"><span class="b2-tag" data-live="quai">${fmtN(f.quai)}</span><div class="sacks" data-n="-1"></div><small>Dépôt</small></div>
-      <button class="b2-cartlane" data-a="tap-cart" aria-label="Faire rouler la charrette"><div class="b2-cart"><span class="ld">0</span>${CART}<span class="pusher">${BODY.cart}</span><span class="b2-call up" data-hint="cart">👆 Livrer</span></div></button>
+      <button class="b2-tower" data-a="tap-elev" aria-label="Faire monter le monte-charge">${TOWER}<span class="b2-point" data-hint="elev">${HAND}</span></button>
+      <div class="b2-quai"><span class="b2-tag" data-live="quai">${fmtN(f.quai)}</span><div class="sacks" data-n="-1"></div></div>
+      <button class="b2-cartlane" data-a="tap-cart" aria-label="Faire rouler la charrette"><div class="b2-cart"><span class="ld">0</span>${CART}<span class="pusher">${BODY.cart}</span><span class="b2-point" data-hint="cart">${HAND}</span></div></button>
     </div>
     ${farmsK.length > 1 ? `<div class="b2-farmsw">${farmsK.map(k => `<button class="${k === key ? "on" : ""}" data-a="farm" data-k="${k}">${P[k].e} ${P[k].label}</button>`).join("")}</div>` : ""}
     ${tip}
@@ -1426,7 +1455,19 @@ const TIPS = [
   { id:"village",when: () => BX.unlocked(S, "village"), i:"🏘️", txt:"Le village passe commande toutes les 20 minutes, avec de grosses primes. Et le four est prêt à être construit dans la grange." },
   { id:"farm2",  when: () => BX.unlocked(S, "farm2"), i:"⚔️", txt:"Tu peux maintenant ouvrir une 2e exploitation, d'un produit d'un ami. Tout en bas de ta ferme." },
 ];
-function farmTip(){
+// le tutoriel façon Idle Miner : une main qui montre la seule chose à toucher maintenant
+function nextStep(f, tot){
+  if (S.cur !== S.spec || f.parcels.every(p => p.mgr) && f.elev.mgr && f.cart.mgr) return null;
+  if (S.stock[S.cur] >= 1 && S.stats.earned === 0) return "sell";
+  if (S.stats.earned > 0 && S.coins >= BX.nice(BAL.parcelMgr(0)) && !f.parcels[0].mgr) return "hire";
+  if (!f.cart.mgr && f.cart.ph === "idle" && f.quai >= 1) return "cart";
+  if (!f.elev.mgr && f.elev.ph === "idle" && tot >= 1 && f.elev.load < 1) return "elev";
+  const p = f.parcels.findIndex(p => !p.mgr && p.ph === "idle");
+  if (p >= 0 && f.elev.ph === "idle" && f.cart.ph === "idle" && f.quai < 1) return "p" + p;
+  return null;
+}
+function farmTip(){ return ""; }
+function farmTipOld(){
   const t = TIPS.find(x => !seen("tip_" + x.id) && x.when());
   const v = x => typeof x === "function" ? x() : x;
   return t ? `<div class="b2-tip"><span class="i">${v(t.i)}</span><span>${v(t.txt)}</span><button data-a="tipx" data-id="${t.id}" aria-label="J'ai compris">×</button></div>` : "";
@@ -1791,7 +1832,7 @@ function onClick(e){
       const c = { coins: kind === "parcel" ? BX.nice(BAL.parcelMgr(i)) : kind === "elev" ? BAL.elevMgr : BAL.cartMgr };
       if (!paid(c, b)) return;
       st.mgr = true; markSeen("tip_mgr"); sound("done"); buzz(20); draw(); save(true);
-      toast(`${MGR[kind]} Contremaître engagé : ${kind === "parcel" ? "il récolte" : kind === "elev" ? "il fait marcher le monte-charge" : "il conduit la charrette"} tout seul, même appli fermée`);
+      toast(`${MGR[kind]} Engagé ! Il travaille tout seul, même appli fermée`);
       return;
     }
     case "station": stationSheet(b.dataset.k, b.dataset.i !== undefined ? +b.dataset.i : undefined); return;

@@ -92,7 +92,7 @@ function animate(){
     const k = Math.min(1, p.t / BAL.walk), sm = k * k * (3 - 2 * k);
     const x = p.ph === "go" ? 66 - 44 * sm : p.ph === "back" ? 22 + 44 * sm : 66;
     w.style.left = x + "%";
-    const cls = "b2-wk " + p.ph + (p.ph === "idle" && !p.mgr ? " tap" : "") + (p.mgr ? " mgr" : ""); if (w.className !== cls) w.className = cls;
+    const cls = "b2-wk " + p.ph + (p.mgr ? " mgr" : ""); if (w.className !== cls) w.className = cls;
     const bar = w.firstElementChild.firstElementChild; if (bar) bar.style.width = (p.ph === "work" ? Math.min(100, p.t / BAL.work * 100) : 0) + "%";
   });
   const e = f.elev, cab = wrapEl.querySelector(".b2-cab");
@@ -170,6 +170,7 @@ function live(force){
   // boutons trop chers
   q("[data-cc]").forEach(b => { const ok = S.coins >= +b.dataset.cc && S.stock.bois >= +(b.dataset.cw || 0); b.classList.toggle("no", !ok); });
   q("[data-mgrc]").forEach(b => b.classList.toggle("can", S.coins >= +b.dataset.mgrc));
+  q(".b2-seat.hire").forEach(b => b.classList.toggle("can", S.coins >= +b.dataset.cc));
   const t = now();
   if (view === "farm"){
     const key = S.cur, f = S.farms[key]; if (!f) return;
@@ -182,8 +183,8 @@ function live(force){
     });
     wrapEl.querySelector(".b2-tower")?.classList.toggle("idle", f.elev.ph === "idle");
     const tot = BX.pendTotal(f);
-    const he = wrapEl.querySelector("[data-hint=elev]"); if (he) he.style.display = !f.elev.mgr && f.elev.ph === "idle" && tot >= 1 ? "" : "none";
-    const hc = wrapEl.querySelector("[data-hint=cart]"); if (hc) hc.style.display = !f.cart.mgr && f.cart.ph === "idle" && f.quai >= 1 ? "" : "none";
+    const want = nextStep(f, tot);
+    wrapEl.querySelectorAll("[data-hint]").forEach(h => { const on = h.dataset.hint === want; if (h.classList.contains("on") !== on) h.classList.toggle("on", on); });
     const qe = wrapEl.querySelector("[data-live=quai]"); if (qe) qe.textContent = fmtN(f.quai);
     const sk = wrapEl.querySelector(".b2-quai .sacks");
     if (sk){ const n = Math.min(8, Math.ceil(f.quai / Math.max(1, BX.quaiCap(f)) * 8)); if (+sk.dataset.n !== n){ sk.dataset.n = n; sk.innerHTML = "<i class='sk'></i>".repeat(n); } }
@@ -220,8 +221,8 @@ function live(force){
 // le rond du contremaître : vide (à engager) ou occupé
 function seatHTML(kind, has, cost, i){
   const di = i !== undefined ? `data-i="${i}"` : "";
-  return has ? `<button class="b2-seat on" data-a="station" data-k="${kind}" ${di} aria-label="Contremaître engagé">${MGR[kind]}<i>Auto</i></button>`
-    : `<button class="b2-btn gold b2-hire" data-a="hire" data-k="${kind}" ${di} data-cc="${cost}" aria-label="Engager un contremaître pour ${fmtN(cost)} pièces">+${MGR[kind]} ${COIN}${fmtN(cost)}</button>`;
+  return has ? `<button class="b2-seat on" data-a="station" data-k="${kind}" ${di} aria-label="Contremaître engagé">${MGR[kind]}</button>`
+    : `<button class="b2-seat hire" data-a="hire" data-k="${kind}" ${di} data-cc="${cost}" aria-label="Engager un contremaître pour ${fmtN(cost)} pièces">${MGR[kind]}<i>${COIN}${fmtN(cost)}</i></button>`;
 }
 function upCost(kind, f, i){
   const at = kind === "parcel" ? L => BAL.parcelCost(i, L) : kind === "elev" ? BAL.elevCost : BAL.cartCost;
@@ -230,14 +231,14 @@ function upCost(kind, f, i){
   if (b.n === 0) return { n: 1, coins: BX.nice(at(L)) };
   return b;
 }
-const upLabel = u => `⬆ ${u.n > 1 ? `+${u.n} ` : ""}${COIN}${fmtN(u.coins)}`;
+const upLabel = u => `${UP}${u.n > 1 ? `<small>+${u.n}</small>` : ""}${COIN}${fmtN(u.coins)}`;
 function stationChip(kind, f){
   const u = upCost(kind, f), lvl = f[kind].lvl, cap = kind === "elev" ? BAL.elevCap(lvl) : BAL.cartCap(lvl);
   const cost = kind === "elev" ? BAL.elevMgr : BAL.cartMgr, has = f[kind].mgr;
   return `<div class="b2-stn ${kind}" data-a="station" data-k="${kind}">
     <span class="b2-slow" data-slow="${kind}" style="display:none">Lent</span>
-    <div class="top">${has ? `<span class="b2-seat on">${MGR[kind]}<i>Auto</i></span>` : ""}<div class="nm"><b>${kind === "elev" ? "Monte-charge" : "Charrette"}</b><span class="meta">Niv ${lvl} · ${fmtN(cap)} par trajet</span></div></div>
-    <div class="btns"><button class="b2-btn" data-a="up-${kind}" data-cc="${u.coins}">${upLabel(u)}</button>${has ? "" : seatHTML(kind, false, cost)}</div></div>`;
+    <span class="b2-lv">${lvl}</span>${has ? `<span class="b2-seat on">${MGR[kind]}</span>` : seatHTML(kind, false, cost)}
+    <button class="b2-btn" data-a="up-${kind}" data-cc="${u.coins}">${upLabel(u)}</button></div>`;
 }
 function farmHTML(){
   const key = S.cur, f = S.farms[key], t = now(), pr = P[key];
@@ -251,33 +252,31 @@ function farmHTML(){
     return `<div class="b2-plot" data-plot="${i}" style="--soil:${depth(i)}">
       <div class="art" data-a="tap-parcel" data-i="${i}">${plotArt(key, i, p.lvl)}<div class="b2-path"></div>
         <div class="pend"><span class="b2-tag" data-pend>${fmtN(p.pend)}</span>${CRATE}</div>
-        <div class="b2-wk ${p.ph}" data-wk="${i}"><div class="bar"><i></i></div><span class="carry">${pr.e}</span><span class="who">${BODY.parcel}</span><span class="b2-call">👆 Récolter</span></div>
+        <div class="b2-wk ${p.ph}" data-wk="${i}"><div class="bar"><i></i></div><span class="carry">${pr.e}</span><span class="who">${BODY.parcel}</span><span class="b2-point" data-hint="p${i}">${HAND}</span></div>
       </div><span class="b2-plvl">Niv <b>${p.lvl}</b></span>
       <div class="b2-sign"><div class="row">
-        ${seatHTML("parcel", p.mgr, BX.nice(BAL.parcelMgr(i)), i)}
-        <div class="sp" data-a="station" data-k="parcel" data-i="${i}"><h3>${esc(pr.short)} ${i + 1}</h3>
-        <div class="meta">${pr.e} ${fmtN(rate, 1)}/s</div>${next ? `<div class="meta" style="font-size:11.5px;opacity:.8">×2 au niveau ${next}</div>` : ""}</div>
+        ${seatHTML("parcel", p.mgr, BX.nice(BAL.parcelMgr(i)), i)}${i === 0 && !p.mgr ? `<span class="b2-point" data-hint="hire">${HAND}</span>` : ""}
+        <div class="sp" data-a="station" data-k="parcel" data-i="${i}"><span class="b2-rate">${pr.e}<b>${fmtN(rate, 1)}</b><small>/s</small></span></div>
         <button class="b2-btn" data-a="up-parcel" data-i="${i}" data-cc="${pu.coins}">${upLabel(pu)}</button>
       </div></div></div>`;
   }).join("");
   const nc = BX.nextParcelCost(f), ni = f.parcels.length;
-  plots += `<div class="b2-locked">${nc.palier ? `<span class="palier">Palier</span>` : ""}<h3>${esc(pr.short)} ${ni + 1}</h3>
-    <p>${nc.wood ? `Il faut aussi du bois pour la construire.${S.stock.bois < nc.wood && key !== "bois" ? " Le bois s'achète au marché." : ""}` : "Une nouvelle parcelle produit beaucoup plus que la précédente."}</p>
-    <button class="b2-btn gold" data-a="unlock" data-cc="${nc.coins}" data-cw="${nc.wood}">🔓 Débloquer ${price(nc)}</button></div>`;
+  plots += `<div class="b2-locked ${nc.palier ? "palier" : ""}"><span class="lock">${LOCK}</span>
+    <button class="b2-btn gold" data-a="unlock" data-cc="${nc.coins}" data-cw="${nc.wood}">${price(nc)}</button></div>`;
   return `<div class="b2-farm"><div class="b2-col">
     <div class="b2-sky">
       <div class="sun"></div><div class="b2-cloud" style="top:92px;width:58px;animation-duration:70s;animation-delay:-20s"></div><div class="b2-cloud" style="top:120px;width:44px;animation-duration:95s;animation-delay:-60s"></div>
       <svg class="b2-hills" viewBox="0 0 400 70" preserveAspectRatio="none" aria-hidden="true"><path d="M0 50 Q60 10 130 38 T260 30 T400 34 V70 H0Z" fill="#A9D47D"/><path d="M0 60 Q90 34 180 54 T400 50 V70 H0Z" fill="#94C66A"/></svg>
       ${stationChip("elev", f)}
       ${stationChip("cart", f)}
-      <div class="b2-gauge" data-a="tab" data-v="barn"><div class="b2-glab"><span>Grange</span><span data-live="barn">${fmtN(used)} / ${fmtN(cap)}</span></div><div class="b2-gbar"><i style="width:${Math.min(100, used / cap * 100)}%"></i></div>
+      <div class="b2-gauge" data-a="tab" data-v="barn"><div class="b2-glab"><span></span><span data-live="barn">${fmtN(used)} / ${fmtN(cap)}</span></div><div class="b2-gbar"><i style="width:${Math.min(100, used / cap * 100)}%"></i></div>
         <div data-slow="barn" style="display:none;margin-top:4px;text-align:right"><span class="b2-tag warn">Pleine : la récolte s'arrête</span></div></div>
       <div class="b2-barn" data-a="tab" data-v="barn" data-n="-1"></div>
-      <button class="b2-sellbtn" data-a="quick-sell" aria-label="Vendre ta récolte au village"><span class="l">Vendre</span><span class="v">${COIN}<b data-live="sellv">0</b></span></button>
+      <button class="b2-sellbtn" data-a="quick-sell" aria-label="Vendre ta récolte au village"><span class="v">${COIN}<b data-live="sellv">0</b></span><span class="b2-point" data-hint="sell">${HAND}</span></button>
       <div class="b2-ground"></div><div class="b2-road"></div>
-      <button class="b2-tower" data-a="tap-elev" aria-label="Faire monter le monte-charge">${TOWER}<span class="b2-call up" data-hint="elev">👆 Ramasser</span></button>
-      <div class="b2-quai"><span class="b2-tag" data-live="quai">${fmtN(f.quai)}</span><div class="sacks" data-n="-1"></div><small>Dépôt</small></div>
-      <button class="b2-cartlane" data-a="tap-cart" aria-label="Faire rouler la charrette"><div class="b2-cart"><span class="ld">0</span>${CART}<span class="pusher">${BODY.cart}</span><span class="b2-call up" data-hint="cart">👆 Livrer</span></div></button>
+      <button class="b2-tower" data-a="tap-elev" aria-label="Faire monter le monte-charge">${TOWER}<span class="b2-point" data-hint="elev">${HAND}</span></button>
+      <div class="b2-quai"><span class="b2-tag" data-live="quai">${fmtN(f.quai)}</span><div class="sacks" data-n="-1"></div></div>
+      <button class="b2-cartlane" data-a="tap-cart" aria-label="Faire rouler la charrette"><div class="b2-cart"><span class="ld">0</span>${CART}<span class="pusher">${BODY.cart}</span><span class="b2-point" data-hint="cart">${HAND}</span></div></button>
     </div>
     ${farmsK.length > 1 ? `<div class="b2-farmsw">${farmsK.map(k => `<button class="${k === key ? "on" : ""}" data-a="farm" data-k="${k}">${P[k].e} ${P[k].label}</button>`).join("")}</div>` : ""}
     ${tip}
@@ -340,7 +339,19 @@ const TIPS = [
   { id:"village",when: () => BX.unlocked(S, "village"), i:"🏘️", txt:"Le village passe commande toutes les 20 minutes, avec de grosses primes. Et le four est prêt à être construit dans la grange." },
   { id:"farm2",  when: () => BX.unlocked(S, "farm2"), i:"⚔️", txt:"Tu peux maintenant ouvrir une 2e exploitation, d'un produit d'un ami. Tout en bas de ta ferme." },
 ];
-function farmTip(){
+// le tutoriel façon Idle Miner : une main qui montre la seule chose à toucher maintenant
+function nextStep(f, tot){
+  if (S.cur !== S.spec || f.parcels.every(p => p.mgr) && f.elev.mgr && f.cart.mgr) return null;
+  if (S.stock[S.cur] >= 1 && S.stats.earned === 0) return "sell";
+  if (S.stats.earned > 0 && S.coins >= BX.nice(BAL.parcelMgr(0)) && !f.parcels[0].mgr) return "hire";
+  if (!f.cart.mgr && f.cart.ph === "idle" && f.quai >= 1) return "cart";
+  if (!f.elev.mgr && f.elev.ph === "idle" && tot >= 1 && f.elev.load < 1) return "elev";
+  const p = f.parcels.findIndex(p => !p.mgr && p.ph === "idle");
+  if (p >= 0 && f.elev.ph === "idle" && f.cart.ph === "idle" && f.quai < 1) return "p" + p;
+  return null;
+}
+function farmTip(){ return ""; }
+function farmTipOld(){
   const t = TIPS.find(x => !seen("tip_" + x.id) && x.when());
   const v = x => typeof x === "function" ? x() : x;
   return t ? `<div class="b2-tip"><span class="i">${v(t.i)}</span><span>${v(t.txt)}</span><button data-a="tipx" data-id="${t.id}" aria-label="J'ai compris">×</button></div>` : "";
@@ -705,7 +716,7 @@ function onClick(e){
       const c = { coins: kind === "parcel" ? BX.nice(BAL.parcelMgr(i)) : kind === "elev" ? BAL.elevMgr : BAL.cartMgr };
       if (!paid(c, b)) return;
       st.mgr = true; markSeen("tip_mgr"); sound("done"); buzz(20); draw(); save(true);
-      toast(`${MGR[kind]} Contremaître engagé : ${kind === "parcel" ? "il récolte" : kind === "elev" ? "il fait marcher le monte-charge" : "il conduit la charrette"} tout seul, même appli fermée`);
+      toast(`${MGR[kind]} Engagé ! Il travaille tout seul, même appli fermée`);
       return;
     }
     case "station": stationSheet(b.dataset.k, b.dataset.i !== undefined ? +b.dataset.i : undefined); return;

@@ -76,12 +76,12 @@ const STYLE = `
 .b2-sellbtn{position:absolute!important;right:40px;bottom:92px;z-index:3;display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 14px 7px!important;border-radius:14px!important;
   background:linear-gradient(#FFD45E,#F2B33D)!important;color:#4A2C00!important;box-shadow:0 4px 0 var(--gold2),0 8px 16px rgba(0,0,0,.25);transition:transform .08s}
 .b2-sellbtn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--gold2)}
-.b2-sellbtn .l{font:900 16px/1.1 var(--round)}
-.b2-sellbtn .v{display:flex;align-items:center;font:900 13px var(--round);font-variant-numeric:tabular-nums}
-.b2-sellbtn .v .b2-coin{width:13px;height:13px}
-.b2-sellbtn.empty{filter:saturate(.3) brightness(.95);opacity:.8}
+
+.b2-sellbtn .v{display:flex;align-items:center;font:900 17px var(--round);font-variant-numeric:tabular-nums}
+.b2-sellbtn .v .b2-coin{width:18px;height:18px}
+.b2-sellbtn.empty{display:none!important}
 .b2-sellbtn.ready{animation:b2-call 1.2s ease-in-out infinite}
-.b2-sellbtn.ready::after{content:"👆";position:absolute;right:-22px;top:6px;font-size:26px;animation:b2-tap 1.1s ease-in-out infinite}
+.b2-sellbtn.ready::after{display:none;content:"👆";position:absolute;right:-22px;top:6px;font-size:26px;animation:b2-tap 1.1s ease-in-out infinite}
 .b2-gauge{position:absolute;right:14px;top:112px;width:140px;z-index:1}
 .b2-gbar{height:12px;border-radius:999px;background:rgba(59,31,23,.25);overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,.25)}
 .b2-gbar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#F6C543,#F2873B);transition:width .5s}
@@ -132,7 +132,8 @@ const STYLE = `
 .b2-stn{position:absolute;top:10px;z-index:3;width:calc(50% - 14px);max-width:210px;box-sizing:border-box;border-radius:12px;padding:7px 8px 8px;color:var(--ink);cursor:pointer;
   box-shadow:0 3px 0 #9A6334,0 6px 14px rgba(59,31,23,.18);background-image:repeating-linear-gradient(0deg,rgba(124,74,36,.07) 0 2px,transparent 2px 9px),linear-gradient(180deg,#EDC28C,#D9A066)}
 .b2-stn.elev{left:8px}.b2-stn.cart{right:8px}
-.b2-stn .top{display:flex;align-items:center;gap:7px}
+.b2-stn{display:flex;align-items:center;gap:8px;padding:10px 8px 8px 14px!important;width:auto!important}
+.b2-stn > .b2-btn{flex:1;padding:8px 6px;font-size:14px!important}
 .b2-stn .nm{min-width:0;display:flex;flex-direction:column;gap:3px}
 .b2-stn .nm b{font:400 italic 18px/1 var(--disp);white-space:nowrap}
 .b2-stn .bot{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:7px}
@@ -142,12 +143,12 @@ const STYLE = `
 .b2-sign .b2-hire{padding:7px 8px;font-size:12.5px!important;flex:none}
 .b2-stn .b2-slow{position:absolute;right:6px;top:-9px;margin:0}
 .b2-seat{position:relative;width:38px;height:38px;flex:none;border-radius:50%!important;display:grid;place-items:center;font-size:21px!important;background:rgba(255,244,224,.7)!important;border:2px dashed var(--wood2)!important;padding:0!important;margin-bottom:6px}
-.b2-seat > i{position:absolute;left:50%;bottom:-8px;transform:translateX(-50%);font:900 8.5px var(--round);font-style:normal;white-space:nowrap;background:var(--wood2);color:#FFF3DE;border-radius:5px;padding:1px 4px}
+.b2-seat > i:not(.b2-face){position:absolute;left:50%;bottom:-8px;transform:translateX(-50%);font:900 8.5px var(--round);font-style:normal;white-space:nowrap;background:var(--wood2);color:#FFF3DE;border-radius:5px;padding:1px 4px}
 .b2-seat:not(.on){filter:saturate(.35)}
 .b2-seat.can{filter:none;animation:b2-call 1.6s ease-in-out infinite}
-.b2-seat.can > i{background:var(--up)}
+.b2-seat.can > i:not(.b2-face){background:var(--up)}
 .b2-seat.on{background:#FFF4E0!important;border:0!important;box-shadow:0 0 0 2.5px var(--gold),0 2px 0 3px rgba(0,0,0,.12)}
-.b2-seat.on > i{background:var(--gold);color:#4A2C00}
+.b2-seat.on > i:not(.b2-face){background:var(--gold);color:#4A2C00}
 .b2-tower{position:absolute!important;left:10px;bottom:34px;width:58px;padding:0!important;z-index:2}
 .b2-tower svg{display:block;width:100%}
 .b2-tower .pulley{transform-box:fill-box;transform-origin:center;animation:b2-spin 1.4s linear infinite}
@@ -225,6 +226,32 @@ const STYLE = `
 @keyframes b2-leg{from{transform:rotate(-22deg)}to{transform:rotate(22deg)}}
 @keyframes b2-arm{from{transform:rotate(-25deg)}to{transform:rotate(25deg)}}
 @keyframes b2-fork{from{transform:rotate(-10deg)}to{transform:rotate(-60deg)}}
+.b2-point{position:absolute;width:34px;height:40px;pointer-events:none;z-index:8;display:none;filter:drop-shadow(0 3px 3px rgba(0,0,0,.35))}
+.b2-point.on{display:block;animation:b2-poke .9s ease-in-out infinite}
+.b2-point svg{display:block;width:100%;height:100%}
+@keyframes b2-poke{0%,100%{transform:translate(0,0)}50%{transform:translate(-5px,-9px)}}
+.b2-wk .b2-point{left:22px;top:20px}
+.b2-tower .b2-point{left:40px;top:40px}
+.b2-cart .b2-point{left:44px;top:6px}
+.b2-sellbtn .b2-point{left:auto;right:-26px;top:16px}
+.b2-sign .b2-point{left:28px;top:22px}
+.b2-up{width:14px;height:14px;margin-right:2px;flex:none}
+.b2-btn small{font-size:11px;margin-right:3px;opacity:.85}
+.b2-lv{position:absolute;left:-6px;top:-7px;min-width:26px;height:26px;padding:0 5px;border-radius:13px;background:var(--ink);color:#FFE6B8;display:grid;place-items:center;font:900 13px var(--round);box-shadow:0 2px 0 rgba(0,0,0,.25);z-index:2}
+.b2-rate{display:inline-flex;align-items:center;gap:3px;font:900 17px var(--round);font-variant-numeric:tabular-nums;color:var(--ink)}
+.b2-rate .b2-ic{font-size:20px}
+.b2-rate small{font-size:12px;color:var(--ink2)}
+.b2-seat.hire{position:relative;width:44px;height:44px;border-radius:50%!important;border:2.5px dashed var(--wood2)!important;background:rgba(255,244,224,.6)!important;padding:0!important;display:grid;place-items:center;flex:none;margin-bottom:8px}
+.b2-seat.hire .b2-face{width:36px;height:36px;filter:saturate(.35) opacity(.75);background:transparent}
+.b2-seat.hire > i:not(.b2-face){position:absolute;left:50%;bottom:-10px;transform:translateX(-50%);display:flex;align-items:center;white-space:nowrap;background:var(--gold);color:#4A2C00;border-radius:7px;padding:1px 5px;font:900 10.5px var(--round);font-style:normal;box-shadow:0 2px 0 var(--gold2)}
+.b2-seat.hire > i:not(.b2-face) .b2-coin{width:10px;height:10px;margin-right:2px}
+.b2-seat.hire.can{animation:b2-call 1.4s ease-in-out infinite}
+.b2-seat.hire.can .b2-face{filter:none}
+.b2-seat.on{width:44px!important;height:44px!important;overflow:hidden}
+.b2-seat.on .b2-face{width:100%;height:100%}
+.b2-locked .lock{display:block;width:40px;height:44px;margin:0 auto 8px}
+.b2-locked .lock svg{display:block;width:100%;height:100%}
+.b2-locked.palier{border-color:var(--gold)}
 .b2-plvl{position:absolute;left:8px;top:8px;background:rgba(59,31,23,.82);color:#FFE6B8;border-radius:9px;padding:3px 8px;font:800 11.5px var(--round);pointer-events:none}
 .b2-plvl b{font-size:15px;font-weight:900}
 .b2-plot .runbar{position:absolute;left:0;top:0;height:4px;border-radius:14px 0 0 0;background:#FFE08A;transition:width .25s linear}
@@ -514,6 +541,9 @@ const TOWER = `<svg viewBox="0 0 60 110" aria-hidden="true"><path d="M8 20 L8 11
   <path d="M8 40 L52 66 M52 40 L8 66 M8 72 L52 98 M52 72 L8 98" stroke="#9A6334" stroke-width="3"/><path d="M4 20 H56" stroke="#5B3519" stroke-width="6" stroke-linecap="round"/>
   <path d="M2 18 L30 2 L58 18Z" fill="#CC3F27"/><path d="M30 28 V110" stroke="#3E220F" stroke-width="2"/>
   <g class="pulley"><circle cx="30" cy="22" r="9" fill="#C98F55" stroke="#5B3519" stroke-width="2.5"/><path d="M30 14 V30 M22 22 H38" stroke="#5B3519" stroke-width="2"/></g></svg>`;
+const HAND = `<svg viewBox="0 0 40 46" aria-hidden="true"><path d="M15 4 a4 4 0 0 1 8 0 v15 l9 2 a5 5 0 0 1 4 6 l-2 12 a6 6 0 0 1 -6 5 h-11 a6 6 0 0 1 -5 -3 l-8 -12 a3.5 3.5 0 0 1 5 -4.5 l6 5z" fill="#fff" stroke="#3B1F17" stroke-width="2.6" stroke-linejoin="round"/><path d="M23 20 v8 M28 21 v7" stroke="#3B1F17" stroke-width="2" stroke-linecap="round"/></svg>`;
+const UP = `<svg class="b2-up" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 L14 9 H10.5 V14 H5.5 V9 H2Z" fill="#fff"/></svg>`;
+const LOCK = `<svg viewBox="0 0 40 44" aria-hidden="true"><path d="M11 19 v-6 a9 9 0 0 1 18 0 v6" fill="none" stroke="#D9C3A0" stroke-width="5"/><rect x="6" y="18" width="28" height="23" rx="5" fill="#F2B33D" stroke="#9E6A0A" stroke-width="2"/><circle cx="20" cy="28" r="3.5" fill="#6B4400"/><rect x="18.5" y="29" width="3" height="7" rx="1.5" fill="#6B4400"/></svg>`;
 const CRATE = `<svg viewBox="0 0 44 30" aria-hidden="true"><path d="M3 8 h38 l-3 20 h-32z" fill="#B07D4A" stroke="#6B3E1E" stroke-width="2"/><path d="M5 15 h34 M6 21 h32" stroke="#8C5A30" stroke-width="1.6"/><ellipse cx="22" cy="8" rx="19" ry="4" fill="#E7C48B" stroke="#6B3E1E" stroke-width="1.5"/></svg>`;
 const CABIN = `<svg viewBox="0 0 38 36" aria-hidden="true"><path d="M19 0 v6" stroke="#3E220F" stroke-width="2"/><rect x="2" y="6" width="34" height="28" rx="4" fill="#D9A066" stroke="#7C4A24" stroke-width="2"/><path d="M2 14 h34" stroke="#7C4A24" stroke-width="2"/><rect x="8" y="17" width="10" height="12" rx="4" fill="#E7C48B" stroke="#B88A50"/><rect x="19" y="19" width="10" height="10" rx="4" fill="#DDB57A" stroke="#B88A50"/></svg>`;
 function ovenArt(hot){
