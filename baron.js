@@ -72,6 +72,8 @@ const BAL = {
   farm2Mul: 0.25,                               // l'exploitation en plus produit 4× moins que ta spécialité
   farmNeeds: 5,                                 // parcelles nécessaires dans ta ferme principale
   slotMs: 20 * 60 * 1000,                       // commandes renouvelées toutes les 20 min
+  bigQty: 1.5, bigBonus: 1.5,                   // la grande commande : même produit pour tout le village, 1,5× la quantité, 1,5× la prime
+  fullBonus: 0.3,                               // carton plein (toutes les commandes livrées) : +30 % des primes
   orders: 4,
   orderSecs: [150, 360], recipeSecs: [60, 150], // quantité = X s de ta production
   bonusMins: [5, 10], recipeBonus: 1.4,        // prime = X min de production (moyenne du groupe ou la tienne)
@@ -277,6 +279,7 @@ const CHARS = {
   patissiere: { name:"La pâtissière",  e:"👩‍🍳", wants:["gateau","tarte"] },
   epiciere:   { name:"L'épicière",     e:"👵", wants:["confiture","fruits","miel"] },
   charpentier:{ name:"Le charpentier", e:"👷", wants:["bois"] },
+  maire:      { name:"Le maire",       e:"🎩", wants:[] },
 };
 const charFor = (k, r) => { const c = Object.keys(CHARS).filter(id => CHARS[id].wants.includes(k)); return c[Math.floor(r() * c.length)] || "epiciere"; };
 function genOrders(s, slot, playerId, groupProd){
@@ -288,8 +291,8 @@ function genOrders(s, slot, playerId, groupProd){
   const pick = a => a[Math.floor(r() * a.length)];
   const between = (a, b) => a + r() * (b - a);
   const prods = [pick(others), recipes.length ? pick(recipes) : pick(others), pick(others), pick(recipes.length && r() < .5 ? recipes : others)];
-  const used = new Set();
-  return prods.slice(0, BAL.orders).map((k, i) => {
+  const used = new Set([bigOf(slot)]);
+  const list = prods.slice(0, BAL.orders).map((k, i) => {
     if (used.has(k)) k = pick(ALL.filter(x => !used.has(x) && x !== s.spec && (recipes.length || !P[x].rec)));
     used.add(k);
     const rec = !!P[k].rec, n = rec ? Object.keys(P[k].rec).length : 1;
@@ -297,7 +300,16 @@ function genOrders(s, slot, playerId, groupProd){
     const bonus = nice(prime * 60 * between(...BAL.bonusMins) * (rec ? BAL.recipeBonus : 1));
     return { id: slot + "-" + i, k, qty, bonus, who: charFor(k, r) };
   });
+  // la grande commande : le même produit pour tout le monde (annoncée 20 min à l'avance)
+  const gk = bigOf(slot);
+  list.unshift({ id: slot + "-G", k: gk, big: true, who: "maire",
+    qty: Math.max(15, nice(eff * between(...BAL.orderSecs) * BAL.bigQty)),
+    bonus: nice(prime * 60 * between(...BAL.bonusMins) * BAL.bigBonus) });
+  return list;
 }
+// produit de la grande commande d'un créneau (identique pour tous les joueurs)
+const bigOf = slot => RAW[Math.floor(rng(hash("grande:" + slot))() * RAW.length)];
+const fullBonus = s => nice(s.orders.list.reduce((a, o) => a + o.bonus, 0) * BAL.fullBonus);
 function ensureOrders(s, now, playerId, groupProd){
   const slot = Math.floor(now / BAL.slotMs);
   if (s.orders.slot !== slot){ s.orders = { slot, list: genOrders(s, slot, playerId, groupProd), prog:{} }; return true; }
@@ -311,9 +323,11 @@ function deliver(s, id){
   if (give <= 0) return null;
   s.stock[o.k] -= give; s.orders.prog[id] = done + give;
   let paid = give * P[o.k].floor, complete = false;
-  if (s.orders.prog[id] >= o.qty){ paid += o.bonus; complete = true; s.stats.orders++; }
+  let full = 0;
+  if (s.orders.prog[id] >= o.qty){ paid += o.bonus; complete = true; s.stats.orders++;
+    if (!s.orders.full && s.orders.list.every(x => (s.orders.prog[x.id] || 0) >= x.qty)){ full = fullBonus(s); paid += full; s.orders.full = true; } }
   s.coins += paid; s.stats.earned += paid;
-  return { give, paid, complete };
+  return { give, paid, complete, full };
 }
 
 /* ---------- Réserve du village (le plafond) ---------- */
@@ -389,7 +403,7 @@ function bottleneck(s, key, now){
 
 return { RAW, CRAFT, ALL, P, BAL, gateOf, gateState, newParcel, fixFarm, quaiCap, pendTotal, elevRate, cartRate, startParcel, startElev, startCart, CHARS, MILES, isPalier, newState, newFarm, step, catchUp, farmRates, effRate, prodValue,
   stockUnits, barnCap, barnFree, costs, canPay, pay, bulk, nextParcelCost, nice, ovenTick, ovenBatch, ovenDur, canBake,
-  ensureOrders, genOrders, deliver, reserveLeft, reservePrice, fortune, unlocked, bottleneck, farmMul, pRate, vMul, vPrice, vMyPrice, vValue, vSell };
+  ensureOrders, genOrders, deliver, bigOf, fullBonus, reserveLeft, reservePrice, fortune, unlocked, bottleneck, farmMul, pRate, vMul, vPrice, vMyPrice, vValue, vSell };
 })();
 
 try{ window.BARON_ENGINE = BX; }catch(e){}
@@ -1000,6 +1014,12 @@ const STYLE = `
 .b2-order .ft{display:flex;align-items:center;gap:8px;font:700 12.5px var(--round);color:var(--ink2);font-variant-numeric:tabular-nums}
 .b2-order .ft .sp{flex:1}
 .b2-order.done{opacity:.6}
+.b2-order.big{background:linear-gradient(#FFF1CC,#FFE3A3);box-shadow:0 0 0 2px var(--gold),0 3px 0 var(--gold2),0 8px 18px rgba(59,31,23,.18);padding-top:22px}
+.b2-bigtag{position:absolute;top:-10px;left:12px;background:var(--ink);color:#FFE6B8;border-radius:999px;padding:3px 10px;font:800 11px var(--round)}
+.b2-ann{margin-top:10px;background:var(--ink);color:#FFE6B8;border-radius:14px;padding:10px 12px;font:700 13.5px var(--round)}
+.b2-ann b{color:#fff}.b2-ann small{display:block;font-weight:700;font-size:11.5px;opacity:.75;margin-top:2px}
+.b2-full{display:flex;align-items:center;gap:8px;margin-top:8px;background:var(--paper2);border-radius:12px;padding:8px 12px;font:800 13px var(--round);color:var(--ink2);font-variant-numeric:tabular-nums}
+.b2-full .sp{flex:1}.b2-full.ok{background:#DDF3E2;color:var(--up2)}
 .b2-order.done .stamp{position:absolute;right:14px;top:30px;transform:rotate(-12deg);border:3px solid var(--up);color:var(--up);border-radius:8px;padding:2px 8px;font:900 15px var(--round)}
 .b2-baron{position:relative;margin-top:18px;background:linear-gradient(135deg,#3B1F17,#6B2E1F);color:#FFE6B8;border-radius:18px;padding:16px;display:flex;align-items:center;gap:12px;box-shadow:0 4px 0 #22100A}
 .b2-baron .crown{font-size:38px;animation:b2-hint 2.4s ease-in-out infinite}
@@ -1701,7 +1721,7 @@ function marketHTML(){
   if (!mkt.k) mkt.k = BX.RAW.find(k => k !== S.spec) || "bois";
   const k = mkt.k, qv = quote(k);
   const prods = BX.ALL.filter(x => !P[x].rec || BX.unlocked(S, "four"));
-  const pills = prods.map(x => `<button class="b2-chip ${x === k ? "on" : ""}" data-a="mkt-k" data-k="${x}"><span class="n">${P[x].e} ${esc(P[x].label)}</span><span class="p">${fmtP(BX.vPrice(x, now()))}</span><span class="c">${chg(vChg(x))}</span></button>`).join("");
+  const pills = prods.map(x => `<button class="b2-chip ${x === k ? "on" : ""}" data-a="mkt-k" data-k="${x}"><span class="n">${P[x].e} ${esc(P[x].label)}${x === BX.bigOf(Math.floor(now() / BAL.slotMs)) ? " 🎩" : ""}</span><span class="p">${fmtP(BX.vPrice(x, now()))}</span><span class="c">${chg(vChg(x))}</span></button>`).join("");
   const offers = W.listings.filter(l => l.product === k).sort((a, b) => a.price - b.price || a.id - b.id);
   const resL = BX.reserveLeft(S, k, now());
   const rows = offers.map(l => {
@@ -1734,7 +1754,7 @@ function villageHTML(){
     const action = done ? "" : have >= 1 ? `<button class="b2-btn" data-a="deliver" data-id="${o.id}">Livrer ${fmtN(Math.min(have, o.qty - got))}</button>`
       : canBake ? `<button class="b2-btn gold" data-a="bake" data-k="${o.k}">Au four</button>`
       : `<button class="b2-btn red" data-a="goto-mkt" data-k="${o.k}">Acheter</button>`;
-    return `<div class="b2-order ${done ? "done" : ""}"><div class="hd"><span class="face">${c.e}</span><div class="sp"><div class="who">${c.name}</div><div class="want">veut ${fmtN(o.qty)} ${P[o.k].e} ${esc(P[o.k].label)}</div></div>
+    return `<div class="b2-order ${done ? "done" : ""} ${o.big ? "big" : ""}">${o.big ? `<span class="b2-bigtag">Grande commande · tout le village</span>` : ""}<div class="hd"><span class="face">${c.e}</span><div class="sp"><div class="who">${c.name}</div><div class="want">veut ${fmtN(o.qty)} ${P[o.k].e} ${esc(P[o.k].label)}</div></div>
       <div class="prime">+${COIN}${fmtN(o.bonus)}<small>de prime</small></div></div>
       <div class="pb"><i style="width:${Math.min(100, got / o.qty * 100)}%"></i></div>
       <div class="ft"><span>${fmtN(got)} / ${fmtN(o.qty)} livrés</span><span class="sp"></span><span>Tu en as ${fmtN(have)}</span>${action}</div>${done ? `<span class="stamp">Livré !</span>` : ""}</div>`;
@@ -1744,6 +1764,9 @@ function villageHTML(){
   const best = (key, label, i, unit) => { const p = players.slice().sort((a, b) => (+b.stats?.[key] || 0) - (+a.stats?.[key] || 0))[0]; return p && +p.stats?.[key] > 0 ? `<div class="b2-ttl"><span class="i">${i}</span><b>${label}</b><span>${esc(p.id === ME.id ? "Toi" : p.name)}</span></div>` : `<div class="b2-ttl"><span class="i" style="filter:grayscale(1)">${i}</span><b>${label}</b><span style="color:var(--ink3)">Personne encore</span></div>`; };
   return `<div class="b2-vil"><div class="b2-col b2-pad">
     <div class="b2-paper" style="background:#FFF4E0"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><h2 class="b2-h2" style="margin:0">Commandes du village<small>Livre en plusieurs fois. La prime tombe à la fin.</small></h2><span class="b2-clock">⏳ <span data-live="clock">${fmtT((S.orders.slot + 1) * BAL.slotMs - now())}</span></span></div></div>
+    ${(() => { const nk = BX.bigOf(S.orders.slot + 1), nd = S.orders.list.filter(o => (S.orders.prog[o.id] || 0) >= o.qty).length, nt = S.orders.list.length;
+      return `<div class="b2-ann"><span>📣 Prochaine grande commande : <b>${P[nk].e} ${esc(P[nk].label)}</b><small>Tout le village en voudra. Fais ton stock avant !</small></span></div>
+      <div class="b2-full ${S.orders.full ? "ok" : ""}"><span>${S.orders.full ? "Carton plein ✓" : `Carton plein : ${nd} / ${nt}`}</span><span class="sp"></span><span>+${COIN}${fmtN(BX.fullBonus(S))}</span></div>`; })()}
     <div class="b2-notes">${notes}</div>
     ${top ? `<div class="b2-baron"><span class="crown">${CROWN}</span><div class="sp"><small>Le Baron du moment</small><b>${esc(top.id === ME.id ? "C'est toi !" : top.name)}</b><span class="f">${COIN}${fmtN(top.stats?.fortune || 0)} · ${P[top.specialty]?.e || ""} ${esc(P[top.specialty]?.label || "")}</span></div></div>` : ""}
     <div class="b2-paper b2-rank"><h2 class="b2-h2">Classement<small>Fortune : argent, stock et la moitié de ce que tu as construit.</small></h2>
@@ -2100,7 +2123,7 @@ function onClick(e){
     case "deliver": {
       const r = BX.deliver(S, b.dataset.id); if (!r) return; dirty = true;
       sound(r.complete ? "done" : "coin"); coinsFly(b, r.complete ? 8 : 4);
-      toast(r.complete ? `Commande livrée ! +${COIN}${fmtN(r.paid)}` : `${fmtN(r.give)} livrés · +${COIN}${fmtN(r.paid)}`, "gold");
+      toast(r.full ? `Carton plein ! +${COIN}${fmtN(r.paid)}` : r.complete ? `Commande livrée ! +${COIN}${fmtN(r.paid)}` : `${fmtN(r.give)} livrés · +${COIN}${fmtN(r.paid)}`, "gold");
       draw(); if (r.complete) save(true); return;
     }
     case "bake": bakeSheet(b.dataset.k); return;
