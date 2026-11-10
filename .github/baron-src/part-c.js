@@ -91,10 +91,11 @@ const STYLE = `
 .b2-cartlane{position:absolute;left:74px;right:118px;bottom:12px;height:50px;padding:0!important;z-index:1}
 .b2-cart{position:absolute;left:12px;bottom:0;width:80px;will-change:transform}
 .b2-cart .ld{position:absolute;left:50%;top:-20px;transform:translateX(-50%);background:var(--ink);color:#FFE6B8;border-radius:7px;padding:1px 6px;font:900 11.5px var(--round);transition:opacity .2s;white-space:nowrap}
-.b2-cart .pusher{position:absolute;left:-20px;bottom:2px;font-size:22px;line-height:1}
-.b2-cart.back .pusher{left:auto;right:-20px}
+.b2-cart .pusher{position:absolute;left:-24px;bottom:-2px;width:30px;height:44px}
+.b2-cart .pusher svg{width:100%;height:100%;display:block}
+.b2-cart.back .pusher{left:auto;right:-24px;transform:scaleX(-1)}
 .b2-cart.back svg{transform:scaleX(-1)}
-.b2-cart.mv .pusher{animation:b2-walk .3s ease-in-out infinite alternate}
+.b2-cart.mv .pusher svg{animation:b2-walk .3s ease-in-out infinite alternate}
 .b2-cart svg{display:block;width:100%}
 .b2-cart .wheel{transform-box:fill-box;transform-origin:center}
 .b2-cart.mv .wheel{animation:b2-spin .6s linear infinite}
@@ -188,16 +189,17 @@ const STYLE = `
 .b2-plot .pend .b2-tag{position:relative;top:-2px}
 .b2-plot .pend .b2-tag.warn{animation:b2-blink 1s infinite}
 .b2-wk{position:absolute;bottom:4px;left:66%;width:40px;margin-left:-20px;pointer-events:none;z-index:4;text-align:center}
-.b2-wk .who{display:block;font-size:34px;line-height:1;filter:drop-shadow(0 3px 1px rgba(0,0,0,.3))}
+.b2-wk .who{display:block;width:40px;height:58px;filter:drop-shadow(0 2px 1px rgba(0,0,0,.2))}
+.b2-wk .who svg{width:100%;height:100%;display:block}
 .b2-wk .carry{position:absolute;left:50%;top:-20px;transform:translateX(-50%);font-size:24px;display:none;filter:drop-shadow(0 2px 1px rgba(0,0,0,.3))}
 .b2-wk.go .carry{display:block}
+.b2-wk .carry{top:-4px!important;font-size:26px!important;z-index:2}
 .b2-wk.go .who{transform:scaleX(1)}
 .b2-wk.back .who{transform:scaleX(-1)}
 .b2-wk .bar{position:absolute;left:2px;right:2px;top:-12px;height:7px;border-radius:9px;background:rgba(59,31,23,.45);overflow:hidden;opacity:0;transition:opacity .15s}
 .b2-wk .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#9BE07A,#3FAF4E);border-radius:9px}
 .b2-wk.work .bar{opacity:1}
-.b2-wk.work .who{animation:b2-dig .4s ease-in-out infinite alternate;transform-origin:50% 100%}
-.b2-wk.go .who,.b2-wk.back .who{animation:b2-walk .28s ease-in-out infinite alternate}
+.b2-wk.go .who svg,.b2-wk.back .who svg{animation:b2-walk .32s ease-in-out infinite alternate}
 .b2-call{display:none;position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);white-space:nowrap;background:#fff;color:var(--ink);border-radius:999px;padding:4px 10px;font:900 13px var(--round);box-shadow:0 3px 10px rgba(0,0,0,.25);animation:b2-hint 1.2s ease-in-out infinite;pointer-events:none;z-index:6}
 .b2-call::after{content:"";position:absolute;left:50%;top:100%;margin-left:-6px;border:6px solid transparent;border-top-color:#fff}
 .b2-wk.tap .b2-call{display:block}
@@ -208,6 +210,21 @@ const STYLE = `
 .b2-cart .b2-call{bottom:calc(100% + 18px)}
 .b2-good{position:fixed;z-index:94;font-size:20px;pointer-events:none;animation:b2-good .8s cubic-bezier(.4,0,.3,1) forwards}
 @keyframes b2-good{0%{transform:translate(0,0) scale(.7);opacity:0}15%{opacity:1;transform:translate(0,-10px) scale(1.1)}100%{transform:translate(var(--dx),var(--dy)) scale(.8);opacity:.6}}
+.b2-ic{display:inline-block;width:1.2em;height:1.2em;vertical-align:-.25em;font-style:normal;line-height:0}
+.b2-ic svg,.b2-face svg{display:block;width:100%;height:100%}
+.b2-face{display:inline-block;width:1.25em;height:1.25em;vertical-align:-.3em;font-style:normal;line-height:0;border-radius:50%;background:#FFF4E0;overflow:hidden}
+.b2-person .lg,.b2-person .ar{transform-box:fill-box;transform-origin:50% 8%}
+.b2-wk.go .lg.l,.b2-wk.back .lg.l,.b2-cart.mv .lg.l{animation:b2-leg .32s ease-in-out infinite alternate}
+.b2-wk.go .lg.r,.b2-wk.back .lg.r,.b2-cart.mv .lg.r{animation:b2-leg .32s ease-in-out infinite alternate-reverse}
+.b2-wk.go .ar.l,.b2-wk.back .ar.l{animation:b2-arm .32s ease-in-out infinite alternate-reverse}
+.b2-wk.back .ar.r{animation:b2-arm .32s ease-in-out infinite alternate}
+.b2-wk.work .ar.r{animation:b2-fork .4s ease-in-out infinite alternate}
+.b2-wk.work .ar.l{animation:b2-arm .4s ease-in-out infinite alternate}
+.b2-cart.mv .ar{animation:none;transform:rotate(-55deg)}
+.b2-cart .ar{transform:rotate(-55deg)}
+@keyframes b2-leg{from{transform:rotate(-22deg)}to{transform:rotate(22deg)}}
+@keyframes b2-arm{from{transform:rotate(-25deg)}to{transform:rotate(25deg)}}
+@keyframes b2-fork{from{transform:rotate(-10deg)}to{transform:rotate(-60deg)}}
 .b2-plvl{position:absolute;left:8px;top:8px;background:rgba(59,31,23,.82);color:#FFE6B8;border-radius:9px;padding:3px 8px;font:800 11.5px var(--round);pointer-events:none}
 .b2-plvl b{font-size:15px;font-weight:900}
 .b2-plot .runbar{position:absolute;left:0;top:0;height:4px;border-radius:14px 0 0 0;background:#FFE08A;transition:width .25s linear}
@@ -507,4 +524,61 @@ function ovenArt(hot){
   <g><path class="b2-flame" d="M44 96 q4 -22 12 -26 q-2 12 6 16 q2 -10 8 -14 q2 14 6 24z" fill="#F2873B"/><path class="b2-flame" style="animation-delay:-.2s" d="M52 96 q3 -14 8 -16 q0 8 4 10 q2 -6 5 -8 q1 8 3 14z" fill="#FFD15C"/></g>
   <rect x="4" y="92" width="112" height="8" rx="3" fill="#8C7B6B"/></svg>`;
 }
-const MGR = { parcel:"🧑‍🌾", elev:"👷", cart:"🧔" };
+/* =================== Personnages et produits dessinés =================== */
+// un personnage (corps entier ou portrait), bras et jambes animables
+function person(o, portrait){
+  const sk = o.skin || "#F2C29B", ink = "#3B1F17", sh = o.shirt || "#D9533B", pa = o.pants || "#3F6FB0", hr = o.hair || "#6B3E1E";
+  const legs = portrait ? "" : `<g class="lg l"><rect x="14" y="41" width="5.5" height="13" rx="2.5" fill="${pa}"/><rect x="12.5" y="52" width="8" height="4.5" rx="2.2" fill="#4A2C17"/></g>
+    <g class="lg r"><rect x="20.5" y="41" width="5.5" height="13" rx="2.5" fill="${pa}"/><rect x="19.5" y="52" width="8" height="4.5" rx="2.2" fill="#4A2C17"/></g>`;
+  const back = `<g class="ar l"><rect x="8.5" y="27" width="5" height="13" rx="2.5" fill="${sh}"/><circle cx="11" cy="40.5" r="2.6" fill="${sk}"/></g>`;
+  const tool = o.tool === "fork" ? `<path d="M30 24 L30 50" stroke="#8C5A30" stroke-width="2" stroke-linecap="round"/><path d="M27 19 v6 M30 18 v7 M33 19 v6 M27 25 h6" stroke="#9AA6AE" stroke-width="1.6" stroke-linecap="round" fill="none"/>`
+    : o.tool === "whip" ? `<path d="M30 40 q6 -10 2 -20" stroke="#6B3E1E" stroke-width="1.6" fill="none"/>` : "";
+  const front = `<g class="ar r">${tool}<rect x="26.5" y="27" width="5" height="13" rx="2.5" fill="${sh}"/><circle cx="29" cy="40.5" r="2.6" fill="${sk}"/></g>`;
+  const body = `<rect x="12" y="25.5" width="16" height="18" rx="6" fill="${sh}"/>` + (o.over !== false ? `<rect x="14" y="31" width="12" height="12.5" rx="2.5" fill="${pa}"/><path d="M15 31 L14.5 26.5 M25 31 L25.5 26.5" stroke="${pa}" stroke-width="2.4"/><circle cx="15.5" cy="32.5" r="1" fill="#F2D27A"/><circle cx="24.5" cy="32.5" r="1" fill="#F2D27A"/>` : "")
+    + (o.apron ? `<path d="M14 30 h12 v13 a2 2 0 0 1 -2 2 h-8 a2 2 0 0 1 -2 -2z" fill="${o.apron}"/>` : "") + (o.vest ? `<path d="M12.5 28 h4 v15 h-4z M23.5 28 h4 v15 h-4z" fill="${o.vest}"/><path d="M12.5 35 h4 M23.5 35 h4" stroke="#F4F1E8" stroke-width="1.5"/>` : "");
+  let hat = "", hair = "";
+  if (o.hair2 === "bun") hair = `<circle cx="20" cy="7.5" r="4.5" fill="${hr}"/>`;
+  hair += `<path d="M11.2 16 a8.8 8.8 0 0 1 17.6 0 q-3 -3.5 -8.8 -3.5 q-5.8 0 -8.8 3.5z" fill="${hr}"/>`;
+  if (o.hat === "straw") hat = `<ellipse cx="20" cy="11.5" rx="13.5" ry="3.2" fill="#E2B85A"/><path d="M13.5 11.5 q0 -7.5 6.5 -7.5 q6.5 0 6.5 7.5z" fill="#F2D27A"/><path d="M13.6 10 h12.8" stroke="#C0392B" stroke-width="2"/>`;
+  if (o.hat === "hard") hat = `<path d="M11 13.5 a9 8.5 0 0 1 18 0z" fill="#F2B33D"/><rect x="9" y="12.5" width="22" height="3" rx="1.5" fill="#D99A1C"/><path d="M20 5.5 v8" stroke="#D99A1C" stroke-width="2"/>`;
+  if (o.hat === "cap") hat = `<path d="M11.3 13.5 a8.7 7.8 0 0 1 17.4 0z" fill="${o.capc || "#3A7E45"}"/><path d="M27 13 h6.5 a1.5 1.5 0 0 1 0 3 h-7z" fill="${o.capc || "#3A7E45"}"/>`;
+  if (o.hat === "chef") hat = `<rect x="13.5" y="8" width="13" height="5.5" rx="1.5" fill="#FFFFFF" stroke="#E2DCCF"/><circle cx="15.5" cy="6" r="4" fill="#fff" stroke="#E2DCCF"/><circle cx="20" cy="4" r="4.5" fill="#fff" stroke="#E2DCCF"/><circle cx="24.5" cy="6" r="4" fill="#fff" stroke="#E2DCCF"/><rect x="14" y="7" width="12" height="5" fill="#fff"/>`;
+  if (o.hat === "scarf") hat = `<path d="M10.5 18 a9.5 10 0 0 1 19 0 l-1.5 3 q-8 -9 -16 0z" fill="${o.scarfc || "#5E8FCB"}"/><circle cx="14" cy="11" r=".9" fill="#fff"/><circle cx="21" cy="9" r=".9" fill="#fff"/><circle cx="26" cy="12" r=".9" fill="#fff"/>`;
+  const beard = o.beard ? `<path d="M12 18 q1 9 8 9 q7 0 8 -9 q-2 4 -8 4 q-6 0 -8 -4z" fill="${hr}"/>` : "";
+  const head = `<circle cx="11.3" cy="18.5" r="2" fill="${sk}"/><circle cx="28.7" cy="18.5" r="2" fill="${sk}"/><circle cx="20" cy="17.5" r="9" fill="${sk}"/>${hair}${beard}
+    <circle cx="16.8" cy="17.6" r="1.25" fill="${ink}"/><circle cx="23.2" cy="17.6" r="1.25" fill="${ink}"/><circle cx="15" cy="20.6" r="1.6" fill="#F28C7A" opacity=".55"/><circle cx="25" cy="20.6" r="1.6" fill="#F28C7A" opacity=".55"/>
+    ${o.beard ? `<path d="M17.8 21.6 q2.2 1.4 4.4 0" stroke="${ink}" stroke-width="1" fill="none" stroke-linecap="round"/>` : `<path d="M17.6 21 q2.4 2.2 4.8 0" stroke="${ink}" stroke-width="1.1" fill="none" stroke-linecap="round"/>`}${o.mous ? `<path d="M16.5 20.4 q3.5 -1.6 7 0 q-3.5 1.2 -7 0z" fill="${hr}"/>` : ""}${hat}`;
+  const vb = portrait ? "5 -0.5 30 30" : "0 0 40 58";
+  return `<svg class="b2-person" viewBox="${vb}" aria-hidden="true">${portrait ? "" : `<ellipse cx="20" cy="56.5" rx="10" ry="1.8" fill="rgba(0,0,0,.18)"/>`}${legs}${back}${body}${front}${head}</svg>`;
+}
+const PEOPLE = {
+  parcel: { hat:"straw", shirt:"#D9533B", pants:"#3F6FB0", tool:"fork" },
+  elev:   { hat:"hard", shirt:"#4E7FB8", pants:"#46505C", vest:"#F2873B", over:false, skin:"#E0A87E" },
+  cart:   { hat:"cap", capc:"#3A7E45", shirt:"#EAD9B5", pants:"#7C4A24", beard:true, hair:"#5B3519", over:false, skin:"#F0BE96" },
+  boulanger:  { hat:"chef", shirt:"#FFFFFF", pants:"#E9E2D3", over:false, mous:true, hair:"#3B2A20" },
+  aubergiste: { shirt:"#B65C3B", pants:"#5B3519", over:false, apron:"#F2E6CC", beard:true, hair:"#A0522D", skin:"#E8B48C" },
+  patissiere: { hat:"chef", shirt:"#F4A9B8", pants:"#F4A9B8", over:false, apron:"#FFFFFF", hair:"#8B4A2B", skin:"#C98E6B" },
+  epiciere:   { hat:"scarf", scarfc:"#5E8FCB", shirt:"#8E6BB8", pants:"#8E6BB8", over:false, hair:"#C9C3BA", apron:"#F2D27A" },
+  charpentier:{ hat:"cap", capc:"#C0392B", shirt:"#C0392B", pants:"#3F6FB0", hair:"#2B1D14", skin:"#B07A55" },
+};
+const face = k => `<i class="b2-face">${person(PEOPLE[k], true)}</i>`;
+const MGR = { parcel: face("parcel"), elev: face("elev"), cart: face("cart") };
+const BODY = { parcel: person(PEOPLE.parcel), cart: person(Object.assign({}, PEOPLE.cart, { tool:null })) };
+for (const k in BX.CHARS) if (PEOPLE[k]) BX.CHARS[k].e = face(k);
+
+// les 11 produits
+const PIC = {
+  ble: `<path d="M16 30 L9 7 M16 30 L16 4 M16 30 L23 7" stroke="#B9862B" stroke-width="1.6" stroke-linecap="round"/>${[[9,7],[16,4],[23,7]].map(([x,y]) => [0,1,2,3].map(j => `<ellipse cx="${x + (j % 2 ? 1.8 : -1.8) + (x - 16) * j * .03}" cy="${y + 2 + j * 3}" rx="1.9" ry="3.2" fill="${j % 2 ? "#E8B53A" : "#F5CB52"}" stroke="#C98A12" stroke-width=".6" transform="rotate(${j % 2 ? 22 : -22} ${x} ${y + 2 + j * 3})"/>`).join("")).join("")}<path d="M11 20 q5 3 10 0 l0.5 3 q-5.5 3 -11 0z" fill="#C0392B"/>`,
+  oeufs: `<ellipse cx="12" cy="18" rx="7" ry="9" fill="#FFF8EA" stroke="#D9C3A0" stroke-width="1.2"/><ellipse cx="21.5" cy="20.5" rx="7" ry="8.5" fill="#F3D9B5" stroke="#C9A77A" stroke-width="1.2"/><ellipse cx="9.5" cy="14" rx="1.8" ry="2.8" fill="#fff"/><ellipse cx="19.3" cy="16.5" rx="1.6" ry="2.4" fill="#FFF3E0"/>`,
+  lait: `<path d="M12 4 h8 v4 l3 4 v15 a3 3 0 0 1 -3 3 h-8 a3 3 0 0 1 -3 -3 v-15 l3 -4z" fill="#FFFFFF" stroke="#9FB3C8" stroke-width="1.3"/><rect x="11.5" y="2.5" width="9" height="3.5" rx="1.2" fill="#3F6FB0"/><rect x="9" y="15" width="14" height="7" fill="#7FB2E5"/><path d="M12 18.5 q4 -3 8 0" stroke="#fff" stroke-width="1.3" fill="none"/><rect x="10.5" y="10" width="2" height="4" rx="1" fill="#EEF4FA"/>`,
+  fruits: `<path d="M16 9 C 9 5, 3 11, 5 19 C 7 27, 12 30, 16 28 C 20 30, 25 27, 27 19 C 29 11, 23 5, 16 9z" fill="#E0392B" stroke="#A82418" stroke-width="1.2"/><path d="M16 9 q0 -4 2 -6" stroke="#6B3E1E" stroke-width="1.8" stroke-linecap="round" fill="none"/><path d="M18 5 q6 -3 8 1 q-5 3 -8 -1z" fill="#5FAE4A"/><ellipse cx="10" cy="14" rx="2" ry="3.4" fill="#FF8A7A" opacity=".8" transform="rotate(25 10 14)"/>`,
+  miel: `<path d="M8 11 h16 l1 4 q1 13 -9 14 q-10 -1 -9 -14z" fill="#F2B33D" stroke="#B87A10" stroke-width="1.2"/><rect x="7" y="7" width="18" height="5" rx="2" fill="#B85C2A"/><path d="M10 12 q1 5 2.5 0 q1.5 7 3 0" fill="#F2B33D"/><rect x="10.5" y="17" width="11" height="6.5" rx="1.5" fill="#FFF0C7"/><path d="M13 20.3 h6" stroke="#B87A10" stroke-width="1.3" stroke-linecap="round"/><ellipse cx="11" cy="19" rx="1" ry="2.5" fill="#FFE08A" opacity=".7"/>`,
+  bois: `<rect x="4" y="16" width="22" height="9" rx="4.5" fill="#A86B3C" stroke="#6B3E1E" stroke-width="1.2"/><circle cx="25" cy="20.5" r="4.5" fill="#E2B27A" stroke="#6B3E1E" stroke-width="1.2"/><circle cx="25" cy="20.5" r="2.2" fill="none" stroke="#B07D4A" stroke-width="1"/><rect x="7" y="7" width="20" height="9" rx="4.5" fill="#B87A46" stroke="#6B3E1E" stroke-width="1.2"/><circle cx="26" cy="11.5" r="4.5" fill="#E8BC86" stroke="#6B3E1E" stroke-width="1.2"/><circle cx="26" cy="11.5" r="2.2" fill="none" stroke="#B07D4A" stroke-width="1"/><path d="M9 20 h8 M11 11 h7" stroke="#8C5A30" stroke-width="1" stroke-linecap="round"/>`,
+  pain: `<path d="M4 20 q0 -9 12 -11 q12 -2 12 7 q0 8 -12 10 q-12 1 -12 -6z" fill="#D9903F" stroke="#9E5E1E" stroke-width="1.2"/><path d="M10 13.5 l3 5 M15 12 l3 5 M20 11.5 l3 5" stroke="#F6D190" stroke-width="2" stroke-linecap="round"/>`,
+  crepes: `<ellipse cx="16" cy="25" rx="13" ry="3.5" fill="#E8F0F5" stroke="#B9C7D2"/>${[21, 17.5, 14].map(y => `<ellipse cx="16" cy="${y}" rx="11" ry="3.2" fill="#F0C46A" stroke="#C98A2B" stroke-width="1"/>`).join("")}<path d="M10 13 q6 -3 12 0 q1 4 -2 6 q-1 -3 -3 -2 q-2 3 -4 0 q-3 1 -3 -4z" fill="#9E5A1E" opacity=".85"/><rect x="14" y="8" width="5" height="4" rx="1" fill="#FFF3C4" stroke="#E2C77A" stroke-width=".8"/>`,
+  tarte: `<ellipse cx="16" cy="19" rx="13" ry="9" fill="#D9903F" stroke="#9E5E1E" stroke-width="1.2"/><ellipse cx="16" cy="18" rx="10" ry="6.5" fill="#C0392B"/><path d="M8 15.5 l16 5 M8 20.5 l16 -5 M12 12.5 l1 11 M20 12.5 l-1 11" stroke="#F0B562" stroke-width="2.2" stroke-linecap="round"/>`,
+  confiture: `<rect x="8" y="11" width="16" height="17" rx="4" fill="#C2263A" stroke="#8E1828" stroke-width="1.2"/><path d="M6 10 q10 -6 20 0 l-2 4 q-8 -3 -16 0z" fill="#fff" stroke="#E2DCCF"/><path d="M8.5 9 l3 1.5 M13 7.5 l3 1.5 M18 7.5 l3 1.5 M22 9 l2.5 1.5" stroke="#E0392B" stroke-width="1.6"/><path d="M8 13.5 h16" stroke="#7C4A24" stroke-width="1.2"/><rect x="11" y="17" width="10" height="6" rx="1.5" fill="#FFF0C7"/><ellipse cx="11" cy="20" rx="1" ry="3" fill="#E85A6B" opacity=".7"/>`,
+  gateau: `<rect x="5" y="17" width="22" height="10" rx="2.5" fill="#F4A9B8" stroke="#C26A7E" stroke-width="1.2"/><rect x="5" y="20.5" width="22" height="2.5" fill="#FFF3E0"/><path d="M5 17 q2.75 3 5.5 0 q2.75 3 5.5 0 q2.75 3 5.5 0 q2.75 3 5.5 0 v-3 q-11 -4 -22 0z" fill="#FFFFFF" stroke="#E2DCCF"/><circle cx="16" cy="10.5" r="3" fill="#E0392B"/><path d="M16 7.5 q1 -3 3.5 -3.5" stroke="#5FAE4A" stroke-width="1.3" fill="none"/><rect x="4" y="27" width="24" height="2.5" rx="1.2" fill="#C7D3DC"/>`,
+};
+for (const k in PIC) P[k].e = `<i class="b2-ic"><svg viewBox="0 0 32 32" aria-hidden="true">${PIC[k]}</svg></i>`;
+

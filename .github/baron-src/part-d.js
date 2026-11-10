@@ -120,7 +120,7 @@ function flyGoods(from, to, e, n){
     const a = from.getBoundingClientRect(), b = to.getBoundingClientRect();
     if (a.bottom < 0 || a.top > innerHeight) return;
     for (let j = 0; j < (n || 3); j++){
-      const g = document.createElement("span"); g.className = "b2-good"; g.textContent = e;
+      const g = document.createElement("span"); g.className = "b2-good"; g.innerHTML = e;
       g.style.left = (a.left + a.width / 2 - 10) + "px"; g.style.top = (a.top + a.height / 2 - 10) + "px";
       g.style.setProperty("--dx", (b.left + b.width / 2 - a.left - a.width / 2) + "px"); g.style.setProperty("--dy", (b.top + b.height / 2 - a.top - a.height / 2) + "px");
       g.style.animationDelay = (j * 90) + "ms"; document.body.appendChild(g); setTimeout(() => g.remove(), 900 + j * 90);
@@ -251,7 +251,7 @@ function farmHTML(){
     return `<div class="b2-plot" data-plot="${i}" style="--soil:${depth(i)}">
       <div class="art" data-a="tap-parcel" data-i="${i}">${plotArt(key, i, p.lvl)}<div class="b2-path"></div>
         <div class="pend"><span class="b2-tag" data-pend>${fmtN(p.pend)}</span>${CRATE}</div>
-        <div class="b2-wk ${p.ph}" data-wk="${i}"><div class="bar"><i></i></div><span class="carry">${pr.e}</span><span class="who">${MGR.parcel}</span><span class="b2-call">👆 Récolter</span></div>
+        <div class="b2-wk ${p.ph}" data-wk="${i}"><div class="bar"><i></i></div><span class="carry">${pr.e}</span><span class="who">${BODY.parcel}</span><span class="b2-call">👆 Récolter</span></div>
       </div><span class="b2-plvl">Niv <b>${p.lvl}</b></span>
       <div class="b2-sign"><div class="row">
         ${seatHTML("parcel", p.mgr, BX.nice(BAL.parcelMgr(i)), i)}
@@ -277,7 +277,7 @@ function farmHTML(){
       <div class="b2-ground"></div><div class="b2-road"></div>
       <button class="b2-tower" data-a="tap-elev" aria-label="Faire monter le monte-charge">${TOWER}<span class="b2-call up" data-hint="elev">👆 Ramasser</span></button>
       <div class="b2-quai"><span class="b2-tag" data-live="quai">${fmtN(f.quai)}</span><div class="sacks" data-n="-1"></div><small>Dépôt</small></div>
-      <button class="b2-cartlane" data-a="tap-cart" aria-label="Faire rouler la charrette"><div class="b2-cart"><span class="ld">0</span>${CART}<span class="pusher">${MGR.cart}</span><span class="b2-call up" data-hint="cart">👆 Livrer</span></div></button>
+      <button class="b2-cartlane" data-a="tap-cart" aria-label="Faire rouler la charrette"><div class="b2-cart"><span class="ld">0</span>${CART}<span class="pusher">${BODY.cart}</span><span class="b2-call up" data-hint="cart">👆 Livrer</span></div></button>
     </div>
     ${farmsK.length > 1 ? `<div class="b2-farmsw">${farmsK.map(k => `<button class="${k === key ? "on" : ""}" data-a="farm" data-k="${k}">${P[k].e} ${P[k].label}</button>`).join("")}</div>` : ""}
     ${tip}

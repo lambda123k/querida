@@ -67,7 +67,7 @@ function coinsFly(fromEl, n){
 function floatText(el, text, cls){
   try{
     const r = el.getBoundingClientRect(), d = document.createElement("div");
-    d.className = "b2-float " + (cls || ""); d.textContent = text;
+    d.className = "b2-float " + (cls || ""); d.innerHTML = text;
     d.style.left = (r.left + r.width / 2) + "px"; d.style.top = (r.top + 6) + "px";
     document.body.appendChild(d); setTimeout(() => d.remove(), 1100);
   }catch(e){}
