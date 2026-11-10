@@ -533,13 +533,6 @@ const STYLE = `
 @keyframes b2-fly{0%{transform:translate(0,0) scale(.6);opacity:0}15%{transform:translate(0,-28px) scale(1.1);opacity:1}100%{transform:translate(var(--dx),var(--dy)) scale(.7);opacity:.9}}
 .b2-float{position:fixed;z-index:95;transform:translateX(-50%);font:900 18px var(--round);color:#fff;text-shadow:0 2px 0 var(--up2),0 0 8px rgba(0,0,0,.25);pointer-events:none;animation:b2-up 1.05s ease forwards}
 .b2-float.small{font-size:14px;color:#FFF3DE;text-shadow:0 1px 0 rgba(0,0,0,.5),0 0 6px rgba(0,0,0,.35)}
-.b2-wk{position:absolute;top:44px;left:66%;width:30px;margin-left:-15px;pointer-events:none;z-index:2;text-align:center}
-.b2-wk .who{display:block;font-size:27px;line-height:1;filter:drop-shadow(0 2px 1px rgba(0,0,0,.25))}
-.b2-wk .carry{position:absolute;left:50%;top:-16px;transform:translateX(-50%);font-size:17px;display:none}
-.b2-wk.go .carry{display:block}
-.b2-wk.work .who{animation:b2-dig .45s ease-in-out infinite alternate;transform-origin:50% 100%}
-.b2-wk.go .who,.b2-wk.back .who{animation:b2-walk .3s ease-in-out infinite alternate}
-.b2-wk.idle{opacity:.85}
 @keyframes b2-dig{to{transform:rotate(-14deg) translateY(2px)}}
 @keyframes b2-walk{to{transform:translateY(-3px)}}
 .b2-float.gold{color:#FFE08A;text-shadow:0 2px 0 #9B6700}
@@ -598,7 +591,7 @@ const STYLE = `
 @keyframes b2-blink{50%{opacity:.55}}
 .b2-glab{display:flex;justify-content:space-between;font:800 11.5px var(--round);color:var(--ink);margin-bottom:3px;text-shadow:0 1px 0 rgba(255,255,255,.6)}
 .b2-cartlane{position:absolute;left:74px;right:118px;bottom:12px;height:50px;padding:0!important;z-index:1}
-.b2-cart{position:absolute;left:18px;bottom:0;width:62px;will-change:transform}
+.b2-cart{position:absolute;left:12px;bottom:0;width:80px;will-change:transform}
 .b2-cart .ld{position:absolute;left:50%;top:-20px;transform:translateX(-50%);background:var(--ink);color:#FFE6B8;border-radius:7px;padding:1px 6px;font:900 11.5px var(--round);transition:opacity .2s;white-space:nowrap}
 .b2-cart .pusher{position:absolute;left:-20px;bottom:2px;font-size:22px;line-height:1}
 .b2-cart.back .pusher{left:auto;right:-20px}
@@ -610,7 +603,8 @@ const STYLE = `
 
 @keyframes b2-spin{to{transform:rotate(360deg)}}
 
-.b2-quai{position:absolute;left:70px;bottom:60px;width:56px;text-align:center;pointer-events:none;z-index:2}
+.b2-quai{position:absolute;left:68px;bottom:56px;width:56px;text-align:center;pointer-events:none;z-index:2}
+.b2-quai small{display:block;font:800 10.5px var(--round);color:var(--ink);opacity:.75;margin-top:1px}
 .b2-quai .sacks{display:flex;flex-wrap:wrap-reverse;justify-content:center;gap:1px;min-height:18px}
 .b2-quai .sk{width:13px;height:11px;border-radius:5px 5px 4px 4px;background:#E7C48B;box-shadow:inset 0 -2px 0 #C79B5C}
 .b2-tag{display:inline-block;background:rgba(59,31,23,.78);color:#FFF3DE;border-radius:8px;padding:2px 6px;font:800 11px var(--round);font-variant-numeric:tabular-nums}
@@ -659,9 +653,6 @@ const STYLE = `
 .b2-tower svg{display:block;width:100%}
 .b2-tower .pulley{transform-box:fill-box;transform-origin:center;animation:b2-spin 1.4s linear infinite}
 .b2-tower.idle .pulley{animation-play-state:paused}
-.b2-hand{position:absolute;font-size:28px;line-height:1;pointer-events:none;filter:drop-shadow(0 2px 2px rgba(0,0,0,.3));animation:b2-tap 1.1s ease-in-out infinite;z-index:4}
-.b2-tower .b2-hand{right:-14px;top:30px}
-.b2-cartlane .b2-hand{left:22px;top:-20px}
 @keyframes b2-tap{0%,100%{transform:translateY(0)}50%{transform:translateY(7px) scale(.92)}}
 .b2-plot .b2-sign .sp{cursor:pointer}
 .b2-stat > div{display:flex;align-items:baseline;gap:8px;padding:8px 0;border-bottom:1px solid rgba(59,31,23,.1);font:700 14px var(--round);font-variant-numeric:tabular-nums}
@@ -682,22 +673,43 @@ const STYLE = `
 .b2-rail::before,.b2-rail::after{content:"";position:absolute;top:0;bottom:0;width:7px;background:linear-gradient(90deg,#8C5A30,#5E3517);border-radius:3px}
 .b2-rail::before{left:2px}.b2-rail::after{right:2px}
 .b2-rail .rope{position:absolute;left:24px;top:0;width:2px;height:var(--rope,40px);background:#3E220F}
-.b2-cab{position:absolute;left:6px;top:4px;width:38px;height:36px;will-change:transform}
+.b2-cab{position:absolute;left:2px;top:4px;width:46px;height:44px;will-change:transform;z-index:2}
 .b2-cab .ld{position:absolute;left:50%;top:-16px;transform:translateX(-50%);background:var(--ink);color:#FFE6B8;border-radius:7px;padding:1px 5px;font:900 11px var(--round);transition:opacity .2s;white-space:nowrap;z-index:2}
 
 .b2-cab svg{display:block;width:100%}
 .b2-elev{margin:0 0 10px -62px}
 .b2-plot{position:relative;margin-bottom:12px;border-radius:14px;background:var(--soil,#8A5A33);box-shadow:inset 0 2px 0 rgba(255,255,255,.08),0 2px 0 rgba(0,0,0,.25)}
-.b2-plot .art{display:block;width:100%;height:96px;border-radius:14px 14px 0 0;overflow:hidden}
+.b2-plot .art{position:relative;display:block;width:100%;height:124px;border-radius:14px 14px 0 0;overflow:hidden}
 .b2-plot .art svg{display:block;width:100%;height:100%}
 .b2-plot.idle .art svg *{animation-play-state:paused!important}
-.b2-plot .b2-sign{margin:-10px 8px 8px}
-.b2-plot .pend{position:absolute;left:4px;top:46px;width:50px;text-align:center;z-index:3;pointer-events:none}
-.b2-plot .pend .b2-tag.warn{animation:b2-blink 1s infinite}
-.b2-plot .pend .bag{font-size:24px;line-height:1;filter:drop-shadow(0 2px 0 rgba(0,0,0,.25))}
-.b2-plot .tapme{position:absolute;inset:0 0 auto 0;height:96px;display:grid;place-items:center start;padding-left:58px;pointer-events:none}
-.b2-plot .tapme span{background:rgba(255,255,255,.88);border-radius:999px;padding:6px 12px;font:900 13px var(--round);color:var(--ink);box-shadow:0 3px 10px rgba(0,0,0,.2);animation:b2-hint 1.4s ease-in-out infinite}
+.b2-plot .b2-sign{margin:6px 8px 8px}
 @keyframes b2-hint{50%{transform:scale(1.07)}}
+.b2-path{position:absolute;left:0;right:0;bottom:0;height:30px;background:linear-gradient(#B98552,#9C6A3B);border-top:2px solid rgba(255,255,255,.25);box-shadow:inset 0 3px 4px rgba(0,0,0,.15)}
+.b2-plot .pend{position:absolute;left:2px;bottom:2px;width:46px;text-align:center;z-index:3;pointer-events:none}
+.b2-plot .pend svg{display:block;width:44px;margin:0 auto}
+.b2-plot .pend .b2-tag{position:relative;top:-2px}
+.b2-plot .pend .b2-tag.warn{animation:b2-blink 1s infinite}
+.b2-wk{position:absolute;bottom:4px;left:66%;width:40px;margin-left:-20px;pointer-events:none;z-index:4;text-align:center}
+.b2-wk .who{display:block;font-size:34px;line-height:1;filter:drop-shadow(0 3px 1px rgba(0,0,0,.3))}
+.b2-wk .carry{position:absolute;left:50%;top:-20px;transform:translateX(-50%);font-size:24px;display:none;filter:drop-shadow(0 2px 1px rgba(0,0,0,.3))}
+.b2-wk.go .carry{display:block}
+.b2-wk.go .who{transform:scaleX(1)}
+.b2-wk.back .who{transform:scaleX(-1)}
+.b2-wk .bar{position:absolute;left:2px;right:2px;top:-12px;height:7px;border-radius:9px;background:rgba(59,31,23,.45);overflow:hidden;opacity:0;transition:opacity .15s}
+.b2-wk .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#9BE07A,#3FAF4E);border-radius:9px}
+.b2-wk.work .bar{opacity:1}
+.b2-wk.work .who{animation:b2-dig .4s ease-in-out infinite alternate;transform-origin:50% 100%}
+.b2-wk.go .who,.b2-wk.back .who{animation:b2-walk .28s ease-in-out infinite alternate}
+.b2-call{display:none;position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);white-space:nowrap;background:#fff;color:var(--ink);border-radius:999px;padding:4px 10px;font:900 13px var(--round);box-shadow:0 3px 10px rgba(0,0,0,.25);animation:b2-hint 1.2s ease-in-out infinite;pointer-events:none;z-index:6}
+.b2-call::after{content:"";position:absolute;left:50%;top:100%;margin-left:-6px;border:6px solid transparent;border-top-color:#fff}
+.b2-wk.tap .b2-call{display:block}
+.b2-wk.tap .who{animation:b2-hint 1.2s ease-in-out infinite}
+.b2-wk.tap::before{content:"";position:absolute;left:50%;bottom:-2px;width:46px;height:14px;margin-left:-23px;border-radius:50%;background:rgba(255,224,138,.8);animation:b2-blink 1.1s infinite}
+.b2-call.up{display:block}
+.b2-tower .b2-call{left:50%;bottom:auto;top:-30px}
+.b2-cart .b2-call{bottom:calc(100% + 18px)}
+.b2-good{position:fixed;z-index:94;font-size:20px;pointer-events:none;animation:b2-good .8s cubic-bezier(.4,0,.3,1) forwards}
+@keyframes b2-good{0%{transform:translate(0,0) scale(.7);opacity:0}15%{opacity:1;transform:translate(0,-10px) scale(1.1)}100%{transform:translate(var(--dx),var(--dy)) scale(.8);opacity:.6}}
 .b2-plvl{position:absolute;left:8px;top:8px;background:rgba(59,31,23,.82);color:#FFE6B8;border-radius:9px;padding:3px 8px;font:800 11.5px var(--round);pointer-events:none}
 .b2-plvl b{font-size:15px;font-weight:900}
 .b2-plot .runbar{position:absolute;left:0;top:0;height:4px;border-radius:14px 0 0 0;background:#FFE08A;transition:width .25s linear}
@@ -987,6 +999,7 @@ const TOWER = `<svg viewBox="0 0 60 110" aria-hidden="true"><path d="M8 20 L8 11
   <path d="M8 40 L52 66 M52 40 L8 66 M8 72 L52 98 M52 72 L8 98" stroke="#9A6334" stroke-width="3"/><path d="M4 20 H56" stroke="#5B3519" stroke-width="6" stroke-linecap="round"/>
   <path d="M2 18 L30 2 L58 18Z" fill="#CC3F27"/><path d="M30 28 V110" stroke="#3E220F" stroke-width="2"/>
   <g class="pulley"><circle cx="30" cy="22" r="9" fill="#C98F55" stroke="#5B3519" stroke-width="2.5"/><path d="M30 14 V30 M22 22 H38" stroke="#5B3519" stroke-width="2"/></g></svg>`;
+const CRATE = `<svg viewBox="0 0 44 30" aria-hidden="true"><path d="M3 8 h38 l-3 20 h-32z" fill="#B07D4A" stroke="#6B3E1E" stroke-width="2"/><path d="M5 15 h34 M6 21 h32" stroke="#8C5A30" stroke-width="1.6"/><ellipse cx="22" cy="8" rx="19" ry="4" fill="#E7C48B" stroke="#6B3E1E" stroke-width="1.5"/></svg>`;
 const CABIN = `<svg viewBox="0 0 38 36" aria-hidden="true"><path d="M19 0 v6" stroke="#3E220F" stroke-width="2"/><rect x="2" y="6" width="34" height="28" rx="4" fill="#D9A066" stroke="#7C4A24" stroke-width="2"/><path d="M2 14 h34" stroke="#7C4A24" stroke-width="2"/><rect x="8" y="17" width="10" height="12" rx="4" fill="#E7C48B" stroke="#B88A50"/><rect x="19" y="19" width="10" height="10" rx="4" fill="#DDB57A" stroke="#B88A50"/></svg>`;
 function ovenArt(hot){
   return `<svg viewBox="0 0 120 100" aria-hidden="true"><rect x="52" y="0" width="16" height="30" fill="#8C7B6B"/><rect x="49" y="0" width="22" height="5" fill="#6E5F51"/>
@@ -1078,7 +1091,7 @@ function loop(){
 let geo = null;
 function measure(){
   const sh = wrapEl && wrapEl.querySelector(".b2-shaft"); if (!sh){ geo = null; return; }
-  const ys = [0]; wrapEl.querySelectorAll(".b2-plot").forEach(el => ys.push(el.offsetTop + 22));
+  const ys = [0]; wrapEl.querySelectorAll(".b2-plot").forEach(el => ys.push(el.offsetTop + 80));
   const lane = wrapEl.querySelector(".b2-cartlane");
   geo = { ys, lane: lane ? Math.max(40, lane.clientWidth - 72) : 100 };
   const rope = wrapEl.querySelector(".b2-rail .rope"); if (rope) rope.style.height = (ys[ys.length - 1] + 24) + "px";
@@ -1088,9 +1101,11 @@ function animate(){
   const f = S.farms[S.cur]; if (!f) return;
   f.parcels.forEach((p, i) => {
     const w = wrapEl.querySelector(`[data-wk="${i}"]`); if (!w) return;
-    const k = Math.min(1, p.t / BAL.walk);
-    const x = p.ph === "go" ? 70 - 52 * k : p.ph === "back" ? 18 + 52 * k : 70;
-    w.style.left = x + "%"; const cls = "b2-wk " + p.ph; if (w.className !== cls) w.className = cls;
+    const k = Math.min(1, p.t / BAL.walk), sm = k * k * (3 - 2 * k);
+    const x = p.ph === "go" ? 66 - 44 * sm : p.ph === "back" ? 22 + 44 * sm : 66;
+    w.style.left = x + "%";
+    const cls = "b2-wk " + p.ph + (p.ph === "idle" && !p.mgr ? " tap" : "") + (p.mgr ? " mgr" : ""); if (w.className !== cls) w.className = cls;
+    const bar = w.firstElementChild.firstElementChild; if (bar) bar.style.width = (p.ph === "work" ? Math.min(100, p.t / BAL.work * 100) : 0) + "%";
   });
   const e = f.elev, cab = wrapEl.querySelector(".b2-cab");
   if (cab){
@@ -1111,13 +1126,27 @@ function pop(el, text, key){
   const t = now(); if (lastPop[key] && t - lastPop[key] < 700) return; lastPop[key] = t;
   floatText(el, text, "small");
 }
+function flyGoods(from, to, e, n){
+  try{
+    if (!from || !to) return;
+    const a = from.getBoundingClientRect(), b = to.getBoundingClientRect();
+    if (a.bottom < 0 || a.top > innerHeight) return;
+    for (let j = 0; j < (n || 3); j++){
+      const g = document.createElement("span"); g.className = "b2-good"; g.textContent = e;
+      g.style.left = (a.left + a.width / 2 - 10) + "px"; g.style.top = (a.top + a.height / 2 - 10) + "px";
+      g.style.setProperty("--dx", (b.left + b.width / 2 - a.left - a.width / 2) + "px"); g.style.setProperty("--dy", (b.top + b.height / 2 - a.top - a.height / 2) + "px");
+      g.style.animationDelay = (j * 90) + "ms"; document.body.appendChild(g); setTimeout(() => g.remove(), 900 + j * 90);
+    }
+  }catch(_){}
+}
 function showEvents(ev){
   ev.forEach(x => {
     if (x.key !== S.cur) return;
-    if (x.k === "drop"){ const el = wrapEl.querySelector(`[data-plot="${x.i}"] .pend`); if (el){ pop(el, "+" + fmtN(x.amt, 1), "d" + x.i); bounce(el.querySelector(".bag")); } }
-    if (x.k === "lift"){ const el = wrapEl.querySelector(".b2-cab"); if (el) pop(el, "+" + fmtN(x.amt, 1), "l"); }
-    if (x.k === "top"){ const el = wrapEl.querySelector(".b2-quai"); if (el) pop(el, "+" + fmtN(x.amt, 1), "t"); }
-    if (x.k === "barn"){ const el = wrapEl.querySelector(".b2-barn"); if (el){ pop(el, "+" + fmtN(x.amt, 1) + " " + P[x.key].e, "b"); bounce(el); } }
+    const e = P[x.key].e;
+    if (x.k === "drop"){ const el = wrapEl.querySelector(`[data-plot="${x.i}"] .pend`); if (el){ pop(el, "+" + fmtN(x.amt, 1), "d" + x.i); bounce(el.querySelector("svg")); } }
+    if (x.k === "lift"){ const from = wrapEl.querySelector(`[data-plot="${x.i}"] .pend`), cab = wrapEl.querySelector(".b2-cab"); flyGoods(from, cab, e, 3); if (cab) pop(cab, "+" + fmtN(x.amt, 1), "l"); }
+    if (x.k === "top"){ const cab = wrapEl.querySelector(".b2-cab"), q = wrapEl.querySelector(".b2-quai"); flyGoods(wrapEl.querySelector(".b2-tower"), q, e, 3); if (q) pop(q, "+" + fmtN(x.amt, 1), "t"); }
+    if (x.k === "barn"){ const el = wrapEl.querySelector(".b2-barn"); flyGoods(wrapEl.querySelector(".b2-cart"), el, e, 4); if (el){ pop(el, "+" + fmtN(x.amt, 1) + " " + e, "b"); bounce(el); } }
   });
 }
 document.addEventListener("visibilitychange", () => { if (document.hidden && S && wrapEl) save(true); else if (!document.hidden && S && wrapEl){ lastTick = now(); } });
@@ -1160,7 +1189,6 @@ function live(force){
       const el = wrapEl.querySelector(`[data-plot="${i}"]`); if (!el) return;
       el.classList.toggle("idle", p.ph === "idle");
       const pe = el.querySelector("[data-pend]"); if (pe) pe.textContent = fmtN(p.pend);
-      const tm = el.querySelector(".tapme"); if (tm) tm.style.display = p.ph === "idle" && !p.mgr ? "" : "none";
       const full = p.pend >= BAL.pendCap(BAL.parcelRate(i, p.lvl) * (f.boost > t ? 2 : 1)) * .98;
       pe && pe.classList.toggle("warn", full);
     });
@@ -1233,9 +1261,10 @@ function farmHTML(){
     const pu = upCost("parcel", f, i), rate = BAL.parcelRate(i, p.lvl) * r.boost;
     const next = BX.MILES.find(m => m > p.lvl);
     return `<div class="b2-plot" data-plot="${i}" style="--soil:${depth(i)}">
-      <div class="pend"><div class="bag">🧺</div><span class="b2-tag" data-pend>${fmtN(p.pend)}</span></div>
-      <div class="art" data-a="tap-parcel" data-i="${i}">${plotArt(key, i, p.lvl)}<div class="b2-wk ${p.ph}" data-wk="${i}"><span class="carry">${pr.e}</span><span class="who">${MGR.parcel}</span></div></div><span class="b2-plvl">Niv <b>${p.lvl}</b></span>
-      <div class="tapme"><span>👆 Touche pour récolter</span></div>
+      <div class="art" data-a="tap-parcel" data-i="${i}">${plotArt(key, i, p.lvl)}<div class="b2-path"></div>
+        <div class="pend"><span class="b2-tag" data-pend>${fmtN(p.pend)}</span>${CRATE}</div>
+        <div class="b2-wk ${p.ph}" data-wk="${i}"><div class="bar"><i></i></div><span class="carry">${pr.e}</span><span class="who">${MGR.parcel}</span><span class="b2-call">👆 Récolter</span></div>
+      </div><span class="b2-plvl">Niv <b>${p.lvl}</b></span>
       <div class="b2-sign"><div class="row">
         ${seatHTML("parcel", p.mgr, BX.nice(BAL.parcelMgr(i)), i)}
         <div class="sp" data-a="station" data-k="parcel" data-i="${i}"><h3>${esc(pr.short)} ${i + 1}</h3>
@@ -1258,9 +1287,9 @@ function farmHTML(){
       <div class="b2-barn" data-a="tab" data-v="barn" data-n="-1"></div>
       <button class="b2-sellbtn" data-a="quick-sell" aria-label="Vendre ta récolte au village"><span class="l">Vendre</span><span class="v">${COIN}<b data-live="sellv">0</b></span></button>
       <div class="b2-ground"></div><div class="b2-road"></div>
-      <button class="b2-tower" data-a="tap-elev" aria-label="Faire monter le monte-charge">${TOWER}<span class="b2-hand" data-hint="elev">👆</span></button>
-      <div class="b2-quai"><div class="sacks" data-n="-1"></div><span class="b2-tag" data-live="quai">${fmtN(f.quai)}</span></div>
-      <button class="b2-cartlane" data-a="tap-cart" aria-label="Faire rouler la charrette"><div class="b2-cart"><span class="ld">0</span>${CART}<span class="pusher">${MGR.cart}</span></div><span class="b2-hand" data-hint="cart">👆</span></button>
+      <button class="b2-tower" data-a="tap-elev" aria-label="Faire monter le monte-charge">${TOWER}<span class="b2-call up" data-hint="elev">👆 Ramasser</span></button>
+      <div class="b2-quai"><span class="b2-tag" data-live="quai">${fmtN(f.quai)}</span><div class="sacks" data-n="-1"></div><small>Dépôt</small></div>
+      <button class="b2-cartlane" data-a="tap-cart" aria-label="Faire rouler la charrette"><div class="b2-cart"><span class="ld">0</span>${CART}<span class="pusher">${MGR.cart}</span><span class="b2-call up" data-hint="cart">👆 Livrer</span></div></button>
     </div>
     ${farmsK.length > 1 ? `<div class="b2-farmsw">${farmsK.map(k => `<button class="${k === key ? "on" : ""}" data-a="farm" data-k="${k}">${P[k].e} ${P[k].label}</button>`).join("")}</div>` : ""}
     ${tip}
