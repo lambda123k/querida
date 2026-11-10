@@ -32,14 +32,17 @@ const P = {
 /* ---------- Réglages (tout l'équilibrage est ici) ---------- */
 const MILES = [10, 25, 50, 100, 150, 200, 300, 400, 500, 750, 1000];
 const miles = L => { let n = 0; for (const m of MILES) if (L >= m) n++; return n; };
-const PALIERS = [3, 6, 9, 12];                 // parcelles 4, 7, 10, 13 : gros paliers (argent ×6, bois ×4)
-const isPalier = i => PALIERS.includes(i);
+// paliers façon Idle Miner : avant les champs 4, 7, 10, 13… il faut réunir une grosse somme, payer, puis attendre la fin des travaux
+const GATES = [{ coins:5e6, h:.5 }, { coins:5e9, h:2 }, { coins:5e12, h:6 }, { coins:5e15, h:12 }];
+const isPalier = i => i >= 3 && i % 3 === 0;
+const gateOf = i => { if (!isPalier(i)) return null; const k = i / 3 - 1; const g = GATES[Math.min(k, GATES.length - 1)]; const extra = Math.max(0, k - GATES.length + 1);
+  return { n: k + 1, coins: g.coins * Math.pow(1000, extra), ms: (extra ? 24 : g.h) * 3600000 }; };
 const BAL = {
   boostDur: 60, boostCd: 240,                   // corvée : ×2 pendant 1 min, toutes les 4 min
   parcelRate: (i, L) => 0.3 * Math.pow(5, i) * L * Math.pow(2, miles(L)),          // unités / s
   parcelCost: (i, L) => 4 * Math.pow(8, i) * Math.pow(1.13, L - 1),                // niveau L → L+1
-  parcelUnlock: i => i === 0 ? 0 : 60 * Math.pow(10, i - 1) * (isPalier(i) ? 6 : 1),
-  parcelWood: i => i < 2 ? 0 : Math.round(12 * Math.pow(8, i - 2) * (isPalier(i) ? 4 : 1)),
+  parcelUnlock: i => i === 0 ? 0 : 60 * Math.pow(10, i - 1),
+  parcelWood: i => i < 2 ? 0 : Math.round(12 * Math.pow(8, i - 2)),
   parcelMgr: i => 25 * Math.pow(12, i),
   // monte-charge : il descend étage par étage, remplit sa cabine, remonte et vide en haut
   elevCap: L => Math.round(8 * Math.pow(1.2, L - 1) * Math.pow(2, miles(L))),   // unités par trajet
@@ -205,6 +208,13 @@ function catchUp(s, now){
 /* ---------- Actions ---------- */
 const nice = n => { if (n < 100) return Math.ceil(n); const p = Math.pow(10, Math.floor(Math.log10(n)) - 1); return Math.ceil(n / p) * p; };
 const nextParcelCost = f => { const i = f.parcels.length; return { coins: nice(BAL.parcelUnlock(i)), wood: BAL.parcelWood(i), palier: isPalier(i) }; };
+// où en est le palier avant le prochain champ : "none" (pas de palier), "todo" (somme à réunir), "work" (travaux), "done"
+function gateState(f, now){
+  const i = f.parcels.length, g = gateOf(i); if (!g) return { st:"none" };
+  if ((f.gates || []).includes(i)) return { st:"done", g };
+  if (f.gate && f.gate.i === i){ if (now >= f.gate.until){ f.gates = (f.gates || []).concat(i); f.gate = null; return { st:"done", g, fresh:true }; } return { st:"work", g, left: f.gate.until - now }; }
+  return { st:"todo", g };
+}
 function canPay(s, c){ return s.coins >= (c.coins || 0) && s.stock.bois >= (c.wood || 0); }
 function pay(s, c, key){
   if (!canPay(s, c)) return false;
@@ -262,7 +272,7 @@ const charFor = (k, r) => { const c = Object.keys(CHARS).filter(id => CHARS[id].
 function genOrders(s, slot, playerId, groupProd){
   const r = rng(hash(playerId + ":" + slot));
   const eff = Math.max(effRate(s, 0), 0.5);
-  const own = eff * 10, prime = Math.max(groupProd || 0, own);
+  const own = eff * 10, prime = Math.min(Math.max(groupProd || 0, own), own * 5);
   const others = RAW.filter(k => k !== s.spec);
   const recipes = s.oven.lvl ? CRAFT : [];
   const pick = a => a[Math.floor(r() * a.length)];
@@ -335,7 +345,7 @@ function bottleneck(s, key, now){
   return null;
 }
 
-return { RAW, CRAFT, ALL, P, BAL, newParcel, fixFarm, quaiCap, pendTotal, elevRate, cartRate, startParcel, startElev, startCart, CHARS, MILES, isPalier, newState, newFarm, step, catchUp, farmRates, effRate, prodValue,
+return { RAW, CRAFT, ALL, P, BAL, gateOf, gateState, newParcel, fixFarm, quaiCap, pendTotal, elevRate, cartRate, startParcel, startElev, startCart, CHARS, MILES, isPalier, newState, newFarm, step, catchUp, farmRates, effRate, prodValue,
   stockUnits, barnCap, barnFree, costs, canPay, pay, bulk, nextParcelCost, nice, ovenTick, ovenBatch, ovenDur, canBake,
   ensureOrders, genOrders, deliver, reserveLeft, reservePrice, fortune, unlocked, bottleneck };
 })();
@@ -770,6 +780,19 @@ const STYLE = `
 .b2-chase.win{background:#DDF3E2;color:var(--up2)}
 .b2-rk .n .b2-cr{width:22px;height:17px}
 .b2-baron .crown .b2-cr{width:46px;height:35px}
+.b2-gate{position:relative;border-radius:16px;overflow:hidden;background:#4A2E19;padding:14px 12px;min-height:120px;display:grid;place-items:center;box-shadow:inset 0 0 0 3px var(--gold)}
+.b2-gate .b2-fence{position:absolute;inset:auto 0 0 0;width:100%;height:70px;opacity:.9}
+.b2-gate .in{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:8px;width:100%}
+.b2-gn{background:var(--gold);color:#4A2C00;border-radius:8px;padding:2px 10px;font:900 14px var(--round)}
+.b2-gbar.big{position:relative;width:86%;height:24px;border-radius:12px;background:rgba(0,0,0,.45);box-shadow:inset 0 2px 3px rgba(0,0,0,.4)}
+.b2-gbar.big i{background:linear-gradient(90deg,#F6C543,#F2873B);border-radius:12px}
+.b2-gbar.big.work i{background:linear-gradient(90deg,#7DCB8F,#2F9E57)}
+.b2-gbar.big span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:4px;color:#fff;font:900 13px var(--round);text-shadow:0 1px 2px rgba(0,0,0,.6);font-variant-numeric:tabular-nums}
+.b2-gate .b2-btn .dur{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding-left:8px;border-left:1.5px solid rgba(74,44,0,.3);font-size:13px}
+.b2-clk{width:15px;height:15px;flex:none}
+.b2-workers{display:flex;gap:6px;font-size:30px}
+.b2-workers .b2-face{animation:b2-walk .35s ease-in-out infinite alternate}
+.b2-workers .b2-face:nth-child(2){animation-delay:-.12s}.b2-workers .b2-face:nth-child(3){animation-delay:-.24s}
 .b2-plvl{position:absolute;left:8px;top:8px;background:rgba(59,31,23,.82);color:#FFE6B8;border-radius:9px;padding:3px 8px;font:800 11.5px var(--round);pointer-events:none}
 .b2-plvl b{font-size:15px;font-weight:900}
 .b2-plot .runbar{position:absolute;left:0;top:0;height:4px;border-radius:14px 0 0 0;background:#FFE08A;transition:width .25s linear}
@@ -1060,6 +1083,8 @@ const TOWER = `<svg viewBox="0 0 60 110" aria-hidden="true"><path d="M8 20 L8 11
   <path d="M2 18 L30 2 L58 18Z" fill="#CC3F27"/><path d="M30 28 V110" stroke="#3E220F" stroke-width="2"/>
   <g class="pulley"><circle cx="30" cy="22" r="9" fill="#C98F55" stroke="#5B3519" stroke-width="2.5"/><path d="M30 14 V30 M22 22 H38" stroke="#5B3519" stroke-width="2"/></g></svg>`;
 const CROWN = `<svg class="b2-cr" viewBox="0 0 40 30" aria-hidden="true"><path d="M4 26 L2 8 L12 15 L20 3 L28 15 L38 8 L36 26Z" fill="#F6C543" stroke="#B97A0C" stroke-width="2" stroke-linejoin="round"/><rect x="4" y="24" width="32" height="5" rx="2" fill="#E0A020" stroke="#B97A0C" stroke-width="1.5"/><circle cx="20" cy="17" r="2.6" fill="#E0392B"/><circle cx="11" cy="20" r="2" fill="#3F6FB0"/><circle cx="29" cy="20" r="2" fill="#3F6FB0"/><circle cx="2" cy="8" r="2" fill="#F6C543"/><circle cx="20" cy="3" r="2" fill="#F6C543"/><circle cx="38" cy="8" r="2" fill="#F6C543"/></svg>`;
+const FENCE = `<svg class="b2-fence" viewBox="0 0 320 70" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H320 M0 50 H320" stroke="#8C5A30" stroke-width="9"/>${Array.from({length:9},(_,j)=>`<path d="M${14+j*37} 66 V10 l7 -8 l7 8 V66z" fill="#C98F55" stroke="#6B3E1E" stroke-width="2.5"/>`).join("")}<path d="M0 22 H320 M0 50 H320" stroke="#6B3E1E" stroke-width="2" opacity=".5"/></svg>`;
+const CLOCK = `<svg class="b2-clk" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="#fff" stroke="currentColor" stroke-width="2.2"/><path d="M10 5 V10 L13.5 12" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg>`;
 const HAND = `<svg viewBox="0 0 40 46" aria-hidden="true"><path d="M15 4 a4 4 0 0 1 8 0 v15 l9 2 a5 5 0 0 1 4 6 l-2 12 a6 6 0 0 1 -6 5 h-11 a6 6 0 0 1 -5 -3 l-8 -12 a3.5 3.5 0 0 1 5 -4.5 l6 5z" fill="#fff" stroke="#3B1F17" stroke-width="2.6" stroke-linejoin="round"/><path d="M23 20 v8 M28 21 v7" stroke="#3B1F17" stroke-width="2" stroke-linecap="round"/></svg>`;
 const UP = `<svg class="b2-up" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 L14 9 H10.5 V14 H5.5 V9 H2Z" fill="#fff"/></svg>`;
 const LOCK = `<svg viewBox="0 0 40 44" aria-hidden="true"><path d="M11 19 v-6 a9 9 0 0 1 18 0 v6" fill="none" stroke="#D9C3A0" stroke-width="5"/><rect x="6" y="18" width="28" height="23" rx="5" fill="#F2B33D" stroke="#9E6A0A" stroke-width="2"/><circle cx="20" cy="28" r="3.5" fill="#6B4400"/><rect x="18.5" y="29" width="3" height="7" rx="1.5" fill="#6B4400"/></svg>`;
@@ -1325,6 +1350,13 @@ function live(force){
     const cap = BX.barnCap(S), used = BX.stockUnits(S), fill = Math.min(1, used / cap);
     const gb = wrapEl.querySelector(".b2-sky .b2-gbar"); if (gb){ gb.querySelector("i").style.width = (fill * 100) + "%"; gb.classList.toggle("full", fill >= .999); }
     const gl = wrapEl.querySelector("[data-live=barn]"); if (gl) gl.textContent = `${fmtN(used)} / ${fmtN(cap)}`;
+    const gtb = wrapEl.querySelector("[data-live=gatebar]");
+    if (gtb || wrapEl.querySelector("[data-live=gateleft]")){
+      const gs = BX.gateState(f, t);
+      if (gs.st === "done"){ if (gs.fresh){ sound("done"); buzz([30, 50, 30]); toast("Palier franchi ! De nouveaux champs t'attendent", "gold"); dirty = true; } draw(); return; }
+      if (gs.st === "todo" && gtb){ gtb.style.width = Math.min(100, S.coins / gs.g.coins * 100) + "%"; wrapEl.querySelector("[data-live=gatetxt]").innerHTML = `${COIN}${fmtN(S.coins)} / ${fmtN(gs.g.coins)}`; }
+      if (gs.st === "work"){ const l = wrapEl.querySelector("[data-live=gateleft]"); if (l) l.textContent = fmtT(gs.left); const w = wrapEl.querySelector("[data-live=gatework]"); if (w) w.style.width = (1 - gs.left / gs.g.ms) * 100 + "%"; }
+    }
     const sv = wrapEl.querySelector("[data-live=sellv]");
     if (sv){ const q = Math.floor(S.stock[S.cur] || 0); sv.textContent = fmtN(q * P[S.cur].floor); const btn = sv.closest(".b2-sellbtn"); btn.classList.toggle("empty", q < 1); btn.classList.toggle("ready", q >= 1 && S.stats.earned === 0); }
     const ba = wrapEl.querySelector(".b2-barn"); if (ba){ const n = Math.round(fill * 10); if (+ba.dataset.n !== n){ ba.dataset.n = n; ba.innerHTML = barnArt(fill); } }
@@ -1395,7 +1427,15 @@ function farmHTML(){
       </div></div></div>`;
   }).join("");
   const nc = BX.nextParcelCost(f), ni = f.parcels.length;
-  plots += `<div class="b2-locked ${nc.palier ? "palier" : ""}"><span class="lock">${LOCK}</span>
+  const gs = BX.gateState(f, t);
+  if (gs.st === "todo" || gs.st === "work"){
+    const g = gs.g, k = Math.min(1, S.coins / g.coins);
+    plots += `<div class="b2-gate" data-gate>${FENCE}<div class="in"><span class="b2-gn">Palier ${g.n}</span>
+      ${gs.st === "todo" ? `<div class="b2-gbar big"><i data-live="gatebar" style="width:${k * 100}%"></i><span data-live="gatetxt">${COIN}${fmtN(S.coins)} / ${fmtN(g.coins)}</span></div>
+        <button class="b2-btn gold" data-a="gate" data-cc="${g.coins}">${COIN}${fmtN(g.coins)} <span class="dur">${CLOCK}${fmtT(g.ms)}</span></button>`
+      : `<div class="b2-gbar big work"><i data-live="gatework" style="width:${(1 - gs.left / g.ms) * 100}%"></i><span>${CLOCK}<b data-live="gateleft">${fmtT(gs.left)}</b></span></div><div class="b2-workers">${MGR.parcel}${MGR.elev}${MGR.cart}</div>`}
+    </div></div>`;
+  } else plots += `<div class="b2-locked"><span class="lock">${LOCK}</span>
     <button class="b2-btn gold" data-a="unlock" data-cc="${nc.coins}" data-cw="${nc.wood}">${price(nc)}</button></div>`;
   return `<div class="b2-farm"><div class="b2-col">
     <div class="b2-sky">
@@ -1923,12 +1963,19 @@ function onClick(e){
       markSeen("tip_mgr"); sound("done"); draw(); toast(`${MGR[kind]} Contremaître engagé : il travaille même quand tu n'es pas là`); save(true); return;
     }
     case "unlock": {
+      const gs0 = BX.gateState(f, t); if (gs0.st === "todo" || gs0.st === "work") return;
       const c = BX.nextParcelCost(f); if (!paid(c, b)) return;
       f.parcels.push(BX.newParcel()); sound("done"); buzz(25); draw(); save(true);
       const el = wrapEl.querySelector(`[data-plot="${f.parcels.length - 1}"]`); if (el){ el.classList.add("lvlup"); el.scrollIntoView({ behavior:"smooth", block:"center" }); }
       const np = S.farms[S.spec].parcels.length;
       if (S.cur === S.spec && (np === 2 || np === 3 || np === BAL.farmNeeds)) setTimeout(() => toast(np === 2 ? "📈 Le marché est ouvert !" : np === 3 ? "🏘️ Le village et le four sont ouverts !" : "⚔️ Tu peux ouvrir une 2e exploitation"), 700);
       return;
+    }
+    case "gate": {
+      const gs = BX.gateState(f, t); if (gs.st !== "todo") return;
+      if (!paid({ coins: gs.g.coins }, b)) return;
+      f.gate = { i: f.parcels.length, until: t + gs.g.ms }; sound("done"); buzz(25); draw(); save(true);
+      toast(`Travaux lancés : ${fmtT(gs.g.ms)}`); return;
     }
     case "up-barn": { const c = BX.costs.barn(S); if (!paid(c, b)) return; S.barn++; sound("done"); draw(); toast(`Grange agrandie : ${fmtN(BX.barnCap(S))} places`); return; }
     case "up-oven": { const c = BX.costs.oven(S); if (!paid(c, b)) return; S.oven.lvl++; sound("done"); draw(); toast(S.oven.lvl === 1 ? "🔥 Le four est construit" : `Four niveau ${S.oven.lvl}`); return; }

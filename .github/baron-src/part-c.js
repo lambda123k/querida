@@ -268,6 +268,19 @@ const STYLE = `
 .b2-chase.win{background:#DDF3E2;color:var(--up2)}
 .b2-rk .n .b2-cr{width:22px;height:17px}
 .b2-baron .crown .b2-cr{width:46px;height:35px}
+.b2-gate{position:relative;border-radius:16px;overflow:hidden;background:#4A2E19;padding:14px 12px;min-height:120px;display:grid;place-items:center;box-shadow:inset 0 0 0 3px var(--gold)}
+.b2-gate .b2-fence{position:absolute;inset:auto 0 0 0;width:100%;height:70px;opacity:.9}
+.b2-gate .in{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:8px;width:100%}
+.b2-gn{background:var(--gold);color:#4A2C00;border-radius:8px;padding:2px 10px;font:900 14px var(--round)}
+.b2-gbar.big{position:relative;width:86%;height:24px;border-radius:12px;background:rgba(0,0,0,.45);box-shadow:inset 0 2px 3px rgba(0,0,0,.4)}
+.b2-gbar.big i{background:linear-gradient(90deg,#F6C543,#F2873B);border-radius:12px}
+.b2-gbar.big.work i{background:linear-gradient(90deg,#7DCB8F,#2F9E57)}
+.b2-gbar.big span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:4px;color:#fff;font:900 13px var(--round);text-shadow:0 1px 2px rgba(0,0,0,.6);font-variant-numeric:tabular-nums}
+.b2-gate .b2-btn .dur{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding-left:8px;border-left:1.5px solid rgba(74,44,0,.3);font-size:13px}
+.b2-clk{width:15px;height:15px;flex:none}
+.b2-workers{display:flex;gap:6px;font-size:30px}
+.b2-workers .b2-face{animation:b2-walk .35s ease-in-out infinite alternate}
+.b2-workers .b2-face:nth-child(2){animation-delay:-.12s}.b2-workers .b2-face:nth-child(3){animation-delay:-.24s}
 .b2-plvl{position:absolute;left:8px;top:8px;background:rgba(59,31,23,.82);color:#FFE6B8;border-radius:9px;padding:3px 8px;font:800 11.5px var(--round);pointer-events:none}
 .b2-plvl b{font-size:15px;font-weight:900}
 .b2-plot .runbar{position:absolute;left:0;top:0;height:4px;border-radius:14px 0 0 0;background:#FFE08A;transition:width .25s linear}
@@ -558,6 +571,8 @@ const TOWER = `<svg viewBox="0 0 60 110" aria-hidden="true"><path d="M8 20 L8 11
   <path d="M2 18 L30 2 L58 18Z" fill="#CC3F27"/><path d="M30 28 V110" stroke="#3E220F" stroke-width="2"/>
   <g class="pulley"><circle cx="30" cy="22" r="9" fill="#C98F55" stroke="#5B3519" stroke-width="2.5"/><path d="M30 14 V30 M22 22 H38" stroke="#5B3519" stroke-width="2"/></g></svg>`;
 const CROWN = `<svg class="b2-cr" viewBox="0 0 40 30" aria-hidden="true"><path d="M4 26 L2 8 L12 15 L20 3 L28 15 L38 8 L36 26Z" fill="#F6C543" stroke="#B97A0C" stroke-width="2" stroke-linejoin="round"/><rect x="4" y="24" width="32" height="5" rx="2" fill="#E0A020" stroke="#B97A0C" stroke-width="1.5"/><circle cx="20" cy="17" r="2.6" fill="#E0392B"/><circle cx="11" cy="20" r="2" fill="#3F6FB0"/><circle cx="29" cy="20" r="2" fill="#3F6FB0"/><circle cx="2" cy="8" r="2" fill="#F6C543"/><circle cx="20" cy="3" r="2" fill="#F6C543"/><circle cx="38" cy="8" r="2" fill="#F6C543"/></svg>`;
+const FENCE = `<svg class="b2-fence" viewBox="0 0 320 70" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H320 M0 50 H320" stroke="#8C5A30" stroke-width="9"/>${Array.from({length:9},(_,j)=>`<path d="M${14+j*37} 66 V10 l7 -8 l7 8 V66z" fill="#C98F55" stroke="#6B3E1E" stroke-width="2.5"/>`).join("")}<path d="M0 22 H320 M0 50 H320" stroke="#6B3E1E" stroke-width="2" opacity=".5"/></svg>`;
+const CLOCK = `<svg class="b2-clk" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="#fff" stroke="currentColor" stroke-width="2.2"/><path d="M10 5 V10 L13.5 12" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg>`;
 const HAND = `<svg viewBox="0 0 40 46" aria-hidden="true"><path d="M15 4 a4 4 0 0 1 8 0 v15 l9 2 a5 5 0 0 1 4 6 l-2 12 a6 6 0 0 1 -6 5 h-11 a6 6 0 0 1 -5 -3 l-8 -12 a3.5 3.5 0 0 1 5 -4.5 l6 5z" fill="#fff" stroke="#3B1F17" stroke-width="2.6" stroke-linejoin="round"/><path d="M23 20 v8 M28 21 v7" stroke="#3B1F17" stroke-width="2" stroke-linecap="round"/></svg>`;
 const UP = `<svg class="b2-up" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 L14 9 H10.5 V14 H5.5 V9 H2Z" fill="#fff"/></svg>`;
 const LOCK = `<svg viewBox="0 0 40 44" aria-hidden="true"><path d="M11 19 v-6 a9 9 0 0 1 18 0 v6" fill="none" stroke="#D9C3A0" stroke-width="5"/><rect x="6" y="18" width="28" height="23" rx="5" fill="#F2B33D" stroke="#9E6A0A" stroke-width="2"/><circle cx="20" cy="28" r="3.5" fill="#6B4400"/><rect x="18.5" y="29" width="3" height="7" rx="1.5" fill="#6B4400"/></svg>`;

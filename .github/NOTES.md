@@ -69,6 +69,8 @@ ne sont volontairement pas écrits ici : les demander à Naim.
   `fake.js` + `build-demo.py` fabriquent une démo autonome avec un faux serveur et 4 amis fictifs.
 - Mis en ligne le 10 nov. 2026 (notification envoyée aux amis). Ensuite : bouton doré « Vendre » sur la grange de l'écran Ferme
   (Naim trouvait la vente pas évidente sur l'onglet Grange).
+- Paliers (10 nov.) : avant les champs 4, 7, 10, 13… une somme à réunir puis des travaux (5M/30 min, 5B/2 h, 5T/6 h, 5Q/12 h, puis ×1000/24 h),
+  état par ferme dans `f.gate` / `f.gates`. Primes des commandes plafonnées à 5× ta propre production.
 - À faire : Naim trouve que l'interface « ne donne pas envie de jouer ». Piste : moins de marron et de texte, décor plus vif,
   retours plus satisfaisants, objectif visible.
 

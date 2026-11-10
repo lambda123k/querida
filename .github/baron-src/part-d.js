@@ -192,6 +192,13 @@ function live(force){
     const cap = BX.barnCap(S), used = BX.stockUnits(S), fill = Math.min(1, used / cap);
     const gb = wrapEl.querySelector(".b2-sky .b2-gbar"); if (gb){ gb.querySelector("i").style.width = (fill * 100) + "%"; gb.classList.toggle("full", fill >= .999); }
     const gl = wrapEl.querySelector("[data-live=barn]"); if (gl) gl.textContent = `${fmtN(used)} / ${fmtN(cap)}`;
+    const gtb = wrapEl.querySelector("[data-live=gatebar]");
+    if (gtb || wrapEl.querySelector("[data-live=gateleft]")){
+      const gs = BX.gateState(f, t);
+      if (gs.st === "done"){ if (gs.fresh){ sound("done"); buzz([30, 50, 30]); toast("Palier franchi ! De nouveaux champs t'attendent", "gold"); dirty = true; } draw(); return; }
+      if (gs.st === "todo" && gtb){ gtb.style.width = Math.min(100, S.coins / gs.g.coins * 100) + "%"; wrapEl.querySelector("[data-live=gatetxt]").innerHTML = `${COIN}${fmtN(S.coins)} / ${fmtN(gs.g.coins)}`; }
+      if (gs.st === "work"){ const l = wrapEl.querySelector("[data-live=gateleft]"); if (l) l.textContent = fmtT(gs.left); const w = wrapEl.querySelector("[data-live=gatework]"); if (w) w.style.width = (1 - gs.left / gs.g.ms) * 100 + "%"; }
+    }
     const sv = wrapEl.querySelector("[data-live=sellv]");
     if (sv){ const q = Math.floor(S.stock[S.cur] || 0); sv.textContent = fmtN(q * P[S.cur].floor); const btn = sv.closest(".b2-sellbtn"); btn.classList.toggle("empty", q < 1); btn.classList.toggle("ready", q >= 1 && S.stats.earned === 0); }
     const ba = wrapEl.querySelector(".b2-barn"); if (ba){ const n = Math.round(fill * 10); if (+ba.dataset.n !== n){ ba.dataset.n = n; ba.innerHTML = barnArt(fill); } }
@@ -262,7 +269,15 @@ function farmHTML(){
       </div></div></div>`;
   }).join("");
   const nc = BX.nextParcelCost(f), ni = f.parcels.length;
-  plots += `<div class="b2-locked ${nc.palier ? "palier" : ""}"><span class="lock">${LOCK}</span>
+  const gs = BX.gateState(f, t);
+  if (gs.st === "todo" || gs.st === "work"){
+    const g = gs.g, k = Math.min(1, S.coins / g.coins);
+    plots += `<div class="b2-gate" data-gate>${FENCE}<div class="in"><span class="b2-gn">Palier ${g.n}</span>
+      ${gs.st === "todo" ? `<div class="b2-gbar big"><i data-live="gatebar" style="width:${k * 100}%"></i><span data-live="gatetxt">${COIN}${fmtN(S.coins)} / ${fmtN(g.coins)}</span></div>
+        <button class="b2-btn gold" data-a="gate" data-cc="${g.coins}">${COIN}${fmtN(g.coins)} <span class="dur">${CLOCK}${fmtT(g.ms)}</span></button>`
+      : `<div class="b2-gbar big work"><i data-live="gatework" style="width:${(1 - gs.left / g.ms) * 100}%"></i><span>${CLOCK}<b data-live="gateleft">${fmtT(gs.left)}</b></span></div><div class="b2-workers">${MGR.parcel}${MGR.elev}${MGR.cart}</div>`}
+    </div></div>`;
+  } else plots += `<div class="b2-locked"><span class="lock">${LOCK}</span>
     <button class="b2-btn gold" data-a="unlock" data-cc="${nc.coins}" data-cw="${nc.wood}">${price(nc)}</button></div>`;
   return `<div class="b2-farm"><div class="b2-col">
     <div class="b2-sky">
@@ -790,12 +805,19 @@ function onClick(e){
       markSeen("tip_mgr"); sound("done"); draw(); toast(`${MGR[kind]} Contremaître engagé : il travaille même quand tu n'es pas là`); save(true); return;
     }
     case "unlock": {
+      const gs0 = BX.gateState(f, t); if (gs0.st === "todo" || gs0.st === "work") return;
       const c = BX.nextParcelCost(f); if (!paid(c, b)) return;
       f.parcels.push(BX.newParcel()); sound("done"); buzz(25); draw(); save(true);
       const el = wrapEl.querySelector(`[data-plot="${f.parcels.length - 1}"]`); if (el){ el.classList.add("lvlup"); el.scrollIntoView({ behavior:"smooth", block:"center" }); }
       const np = S.farms[S.spec].parcels.length;
       if (S.cur === S.spec && (np === 2 || np === 3 || np === BAL.farmNeeds)) setTimeout(() => toast(np === 2 ? "📈 Le marché est ouvert !" : np === 3 ? "🏘️ Le village et le four sont ouverts !" : "⚔️ Tu peux ouvrir une 2e exploitation"), 700);
       return;
+    }
+    case "gate": {
+      const gs = BX.gateState(f, t); if (gs.st !== "todo") return;
+      if (!paid({ coins: gs.g.coins }, b)) return;
+      f.gate = { i: f.parcels.length, until: t + gs.g.ms }; sound("done"); buzz(25); draw(); save(true);
+      toast(`Travaux lancés : ${fmtT(gs.g.ms)}`); return;
     }
     case "up-barn": { const c = BX.costs.barn(S); if (!paid(c, b)) return; S.barn++; sound("done"); draw(); toast(`Grange agrandie : ${fmtN(BX.barnCap(S))} places`); return; }
     case "up-oven": { const c = BX.costs.oven(S); if (!paid(c, b)) return; S.oven.lvl++; sound("done"); draw(); toast(S.oven.lvl === 1 ? "🔥 Le four est construit" : `Four niveau ${S.oven.lvl}`); return; }

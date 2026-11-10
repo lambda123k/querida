@@ -22,14 +22,17 @@ const P = {
 /* ---------- Réglages (tout l'équilibrage est ici) ---------- */
 const MILES = [10, 25, 50, 100, 150, 200, 300, 400, 500, 750, 1000];
 const miles = L => { let n = 0; for (const m of MILES) if (L >= m) n++; return n; };
-const PALIERS = [3, 6, 9, 12];                 // parcelles 4, 7, 10, 13 : gros paliers (argent ×6, bois ×4)
-const isPalier = i => PALIERS.includes(i);
+// paliers façon Idle Miner : avant les champs 4, 7, 10, 13… il faut réunir une grosse somme, payer, puis attendre la fin des travaux
+const GATES = [{ coins:5e6, h:.5 }, { coins:5e9, h:2 }, { coins:5e12, h:6 }, { coins:5e15, h:12 }];
+const isPalier = i => i >= 3 && i % 3 === 0;
+const gateOf = i => { if (!isPalier(i)) return null; const k = i / 3 - 1; const g = GATES[Math.min(k, GATES.length - 1)]; const extra = Math.max(0, k - GATES.length + 1);
+  return { n: k + 1, coins: g.coins * Math.pow(1000, extra), ms: (extra ? 24 : g.h) * 3600000 }; };
 const BAL = {
   boostDur: 60, boostCd: 240,                   // corvée : ×2 pendant 1 min, toutes les 4 min
   parcelRate: (i, L) => 0.3 * Math.pow(5, i) * L * Math.pow(2, miles(L)),          // unités / s
   parcelCost: (i, L) => 4 * Math.pow(8, i) * Math.pow(1.13, L - 1),                // niveau L → L+1
-  parcelUnlock: i => i === 0 ? 0 : 60 * Math.pow(10, i - 1) * (isPalier(i) ? 6 : 1),
-  parcelWood: i => i < 2 ? 0 : Math.round(12 * Math.pow(8, i - 2) * (isPalier(i) ? 4 : 1)),
+  parcelUnlock: i => i === 0 ? 0 : 60 * Math.pow(10, i - 1),
+  parcelWood: i => i < 2 ? 0 : Math.round(12 * Math.pow(8, i - 2)),
   parcelMgr: i => 25 * Math.pow(12, i),
   // monte-charge : il descend étage par étage, remplit sa cabine, remonte et vide en haut
   elevCap: L => Math.round(8 * Math.pow(1.2, L - 1) * Math.pow(2, miles(L))),   // unités par trajet
@@ -195,6 +198,13 @@ function catchUp(s, now){
 /* ---------- Actions ---------- */
 const nice = n => { if (n < 100) return Math.ceil(n); const p = Math.pow(10, Math.floor(Math.log10(n)) - 1); return Math.ceil(n / p) * p; };
 const nextParcelCost = f => { const i = f.parcels.length; return { coins: nice(BAL.parcelUnlock(i)), wood: BAL.parcelWood(i), palier: isPalier(i) }; };
+// où en est le palier avant le prochain champ : "none" (pas de palier), "todo" (somme à réunir), "work" (travaux), "done"
+function gateState(f, now){
+  const i = f.parcels.length, g = gateOf(i); if (!g) return { st:"none" };
+  if ((f.gates || []).includes(i)) return { st:"done", g };
+  if (f.gate && f.gate.i === i){ if (now >= f.gate.until){ f.gates = (f.gates || []).concat(i); f.gate = null; return { st:"done", g, fresh:true }; } return { st:"work", g, left: f.gate.until - now }; }
+  return { st:"todo", g };
+}
 function canPay(s, c){ return s.coins >= (c.coins || 0) && s.stock.bois >= (c.wood || 0); }
 function pay(s, c, key){
   if (!canPay(s, c)) return false;
@@ -252,7 +262,7 @@ const charFor = (k, r) => { const c = Object.keys(CHARS).filter(id => CHARS[id].
 function genOrders(s, slot, playerId, groupProd){
   const r = rng(hash(playerId + ":" + slot));
   const eff = Math.max(effRate(s, 0), 0.5);
-  const own = eff * 10, prime = Math.max(groupProd || 0, own);
+  const own = eff * 10, prime = Math.min(Math.max(groupProd || 0, own), own * 5);
   const others = RAW.filter(k => k !== s.spec);
   const recipes = s.oven.lvl ? CRAFT : [];
   const pick = a => a[Math.floor(r() * a.length)];
@@ -325,7 +335,7 @@ function bottleneck(s, key, now){
   return null;
 }
 
-return { RAW, CRAFT, ALL, P, BAL, newParcel, fixFarm, quaiCap, pendTotal, elevRate, cartRate, startParcel, startElev, startCart, CHARS, MILES, isPalier, newState, newFarm, step, catchUp, farmRates, effRate, prodValue,
+return { RAW, CRAFT, ALL, P, BAL, gateOf, gateState, newParcel, fixFarm, quaiCap, pendTotal, elevRate, cartRate, startParcel, startElev, startCart, CHARS, MILES, isPalier, newState, newFarm, step, catchUp, farmRates, effRate, prodValue,
   stockUnits, barnCap, barnFree, costs, canPay, pay, bulk, nextParcelCost, nice, ovenTick, ovenBatch, ovenDur, canBake,
   ensureOrders, genOrders, deliver, reserveLeft, reservePrice, fortune, unlocked, bottleneck };
 })();
