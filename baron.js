@@ -494,7 +494,7 @@ let mkt = { k: null, period: "24h" };
 
 function publicStats(){
   return { fortune: BX.fortune(S), prod: Math.round(BX.prodValue(S) * 100) / 100, baked: Math.floor(S.stats.baked), orders: S.stats.orders,
-    traded: Math.floor(S.stats.sold + S.stats.bought), farms: Object.keys(S.farms), parcels: S.farms[S.spec].parcels.length };
+    traded: Math.floor(S.stats.sold + S.stats.bought), farms: Object.keys(S.farms), parcels: S.farms[S.spec].parcels.length, pio: S.reform ? 1 : 0 };
 }
 function applyCredits(list){
   const msgs = [];
@@ -511,7 +511,23 @@ function applyCredits(list){
     sound("coin");
   }
 }
+/* La Grande Réforme (nov. 2026) : les fermes repartent de zéro, chacun garde sa spécialité
+   et reçoit en pièces une part de son ancienne fortune (calculée par le serveur), + une médaille de Pionnier. */
+let reformMsg = null;
+function applyReform(s){
+  const r = s.reform || {}, n = BX.newState(s.spec, now());
+  n.coins = Math.max(0, Math.floor(+r.coins || 0));
+  n.stock.bois = Math.max(BAL.startWood, Math.floor(+r.wood || 0));
+  while (BAL.barnCap(n.barn) < n.stock.bois * 2) n.barn++;   // une grange assez grande pour la récompense
+  n.reform = { v: 1, from: +r.from || 0, coins: n.coins, wood: n.stock.bois, rank: r.rank || 0, at: r.at || now() };
+  n.credit_seen = s.credit_seen || 0;
+  n.seen = Object.assign({}, s.seen || {});
+  ["sold", "bought", "orders", "baked"].forEach(k => n.stats[k] = (s.stats && +s.stats[k]) || 0);
+  reformMsg = n.reform;
+  return n;
+}
 function fixState(s){
+  if (s.reform_todo) s = applyReform(s);
   BX.ALL.forEach(k => { if (typeof s.stock[k] !== "number") s.stock[k] = 0; });
   s.stats = Object.assign({ produced:0, invested:0, baked:0, orders:0, sold:0, bought:0, earned:0, villageSold:0 }, s.stats || {});
   s.seen = s.seen || {}; s.oven = s.oven || { lvl:0, slots:[] }; s.orders = s.orders || { slot:0, list:[], prog:{} };
@@ -1246,7 +1262,8 @@ async function start(){
     const gained = await load();
     if (!wrapEl) return;
     view = "farm"; draw(); lastSig = unlockSig();
-    if (gained >= 1) setTimeout(() => toast(`Pendant ton absence, tes contremaîtres ont rentré ${fmtN(gained)} ${P[S.spec].e} dans la grange`, "gold"), 500);
+    if (reformMsg){ const m = reformMsg; reformMsg = null; dirty = true; setTimeout(() => reformSheet(m), 400); }
+    else if (gained >= 1) setTimeout(() => toast(`Pendant ton absence, tes contremaîtres ont rentré ${fmtN(gained)} ${P[S.spec].e} dans la grange`, "gold"), 500);
     loop(); loadWorld(true); save(true);
   }catch(e){
     const m = String(e && e.message || "");
@@ -1730,7 +1747,7 @@ function villageHTML(){
     <div class="b2-notes">${notes}</div>
     ${top ? `<div class="b2-baron"><span class="crown">${CROWN}</span><div class="sp"><small>Le Baron du moment</small><b>${esc(top.id === ME.id ? "C'est toi !" : top.name)}</b><span class="f">${COIN}${fmtN(top.stats?.fortune || 0)} · ${P[top.specialty]?.e || ""} ${esc(P[top.specialty]?.label || "")}</span></div></div>` : ""}
     <div class="b2-paper b2-rank"><h2 class="b2-h2">Classement<small>Fortune : argent, stock et la moitié de ce que tu as construit.</small></h2>
-      ${players.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}<small>${esc(P[p.specialty]?.label || "")}${p.stats?.farms && p.stats.farms.length > 1 ? " + " + p.stats.farms.filter(x => x !== p.specialty).map(x => P[x]?.e).join("") : ""} · ${fmtN(p.stats?.prod || 0, 1)} pièces/s</small></span><span class="f">${COIN}${fmtN(p.stats?.fortune || 0)}</span></div>`).join("")}
+      ${players.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}${p.stats?.pio ? " 🎖️" : ""}<small>${esc(P[p.specialty]?.label || "")}${p.stats?.farms && p.stats.farms.length > 1 ? " + " + p.stats.farms.filter(x => x !== p.specialty).map(x => P[x]?.e).join("") : ""} · ${fmtN(p.stats?.prod || 0, 1)} pièces/s</small></span><span class="f">${COIN}${fmtN(p.stats?.fortune || 0)}</span></div>`).join("")}
     </div>
     <div class="b2-titles">${best("prod", "Gros producteur", "🏭")}${best("traded", "Meilleur trader", "📈")}${best("baked", "Pâtissier", "🧁")}${best("orders", "Ami du village", "📦")}</div>
   </div></div>`;
@@ -1764,7 +1781,7 @@ function rankSheet(){
   sheet(`<div class="b2-throne"><span class="c">${CROWN}</span><small>Le Baron du moment</small><b>${esc(top.id === ME.id ? "Toi !" : top.name)}</b>
       <span class="f">${COIN}${fmtN(f(top))} ${P[top.specialty]?.e || ""}</span></div>
     ${above ? `<div class="b2-chase">Encore ${COIN}<b>${fmtN(gap)}</b> pour dépasser ${esc(above.name)}</div>` : `<div class="b2-chase win">Garde ta couronne !</div>`}
-    <div class="b2-rank">${pl.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}</span><span class="f">${COIN}${fmtN(f(p))}</span></div>`).join("")}</div>
+    <div class="b2-rank">${pl.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}${p.stats?.pio ? " 🎖️" : ""}</span><span class="f">${COIN}${fmtN(f(p))}</span></div>`).join("")}</div>
     <p class="b2-note" style="text-align:center">Fortune = pièces + stock + la moitié de ce que tu as construit</p>`);
 }
 
@@ -1804,6 +1821,16 @@ function sheet(html){
   closeSheet();
   wrapEl.insertAdjacentHTML("beforeend", `<div class="b2-sheetbg" data-a="sheetbg"><div class="b2-sheet" role="dialog"><div class="grab"></div>${html}</div></div>`);
   sheetOpen = true;
+}
+function reformSheet(m){
+  sheetCtx = null;
+  sheet(`<div style="text-align:center;font-size:54px;line-height:1">🎖️</div><h3 style="text-align:center">La Grande Réforme</h3>
+    <p>Le village a changé ses règles : les prix montent et descendent toute la journée, et vendre trop d'un coup fait chuter le cours. Le marché devient l'endroit où l'on fait fortune.</p>
+    <p>Ta ferme repart de zéro, mais tu gardes ta spécialité et une part de ton ancienne fortune.</p>
+    <div class="b2-sum"><span>Ancienne fortune</span><span>${COIN}${fmtN(m.from)}</span></div>
+    <div class="b2-sum"><span>Ta récompense</span><span>${COIN}${fmtN(m.coins)} ${WOOD}${fmtN(m.wood)}</span></div>
+    <p class="b2-note">Et la médaille de Pionnier 🎖️ à côté de ton nom, pour toujours.</p>
+    <button class="b2-btn gold big" data-a="close-sheet">C'est parti</button>`);
 }
 function closeSheet(){ wrapEl && wrapEl.querySelector(".b2-sheetbg")?.remove(); sheetOpen = false; }
 function qtyBlock(max, start, id){
@@ -2079,6 +2106,7 @@ function onClick(e){
     case "bake": bakeSheet(b.dataset.k); return;
     case "qset": { const r = wrapEl.querySelector(`[data-q="${b.dataset.id}"]`); if (r){ r.value = Math.max(+r.min, Math.floor(+r.max * +b.dataset.f)); sheetSum(); } return; }
     case "confirm": confirm(); return;
+    case "close-sheet": closeSheet(); return;
   }
 }
 
