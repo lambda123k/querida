@@ -1440,7 +1440,6 @@ function dockHTML(){
   const f = S.farms[S.cur], all = f.parcels.every(p => p.mgr) && f.elev.mgr && f.cart.mgr;
   const a = P[S.cur].act;
   return `<div class="b2-dock"><div class="b2-col">
-    ${all ? "" : `<button class="b2-act main" data-a="harvest">🧺 Tout récolter</button>`}
     ${BX.unlocked(S, "boost") ? `<button class="b2-act" data-a="boost" aria-label="${esc(a.label)} : production ×2 pendant 1 minute">${a.e} ${esc(a.label)} <span class="t">×2</span></button>` : ""}
   </div></div>`;
 }
