@@ -1082,6 +1082,44 @@ const STYLE = `
 .b2-tip{display:flex;gap:10px;align-items:flex-start;background:#FFF9EA;border-radius:14px;padding:10px 12px;margin:10px 10px 0;box-shadow:0 3px 0 rgba(124,74,36,.3);font:700 13.5px/1.4 var(--round);color:var(--ink)}
 .b2-tip .i{font-size:22px;line-height:1}
 .b2-tip button{margin-left:auto;font-size:18px!important;color:var(--ink2)!important;padding:0 2px}
+/* ---------- Petits écrans (iPhone SE, zoom d'affichage : 320 px) ---------- */
+.b2-hud .b2-col{min-width:0}
+.b2-pill{flex:none;white-space:nowrap}
+.b2-stn{width:calc(50% - 12px)!important;max-width:210px;min-width:0}
+.b2-stn > .b2-btn{min-width:0;overflow:hidden;white-space:nowrap}
+.b2-sign .row > .b2-btn{flex:none;white-space:nowrap}
+.b2-rate{white-space:nowrap}
+.b2-scroll.dockpad{padding-bottom:76px}
+.b2-quote{flex-wrap:wrap}
+.b2-quote .ch{white-space:nowrap}
+@media (max-width:420px){
+  .b2-hud{padding-left:8px;padding-right:8px}
+  .b2-hud .b2-col{gap:5px}
+  .b2-hbtn{width:32px;height:32px;font-size:17px!important}
+  .b2-pill{font-size:14px;padding:4px 9px 4px 4px;gap:4px}
+  .b2-pill .b2-coin{width:18px;height:18px}.b2-pill .b2-e{font-size:15px}
+  .b2-crown{height:32px;padding:0 8px 0 6px!important;font-size:13px!important}
+  .b2-crown .c .b2-cr{width:20px;height:15px}
+  .b2-stn{gap:5px!important;padding:9px 6px 7px 10px!important;width:calc(50% - 10px)!important}
+  .b2-stn.elev{left:6px}.b2-stn.cart{right:6px}
+  .b2-stn > .b2-btn{font-size:12.5px!important;padding:7px 4px}
+  .b2-stn .b2-mgr{width:34px;height:34px}
+  .b2-sign .row{gap:6px}
+  .b2-sign .b2-mgr{width:34px;height:34px}
+  .b2-rate{font-size:15px}.b2-rate .b2-ic{font-size:17px}
+  .b2-sign .row > .b2-btn{font-size:13px!important;padding:8px 9px}
+  .b2-act{padding:9px 13px;font-size:14px!important}
+  .b2-quote .big{font-size:32px}
+  .b2-quote .lim{text-align:left}
+}
+@media (max-width:345px){
+  .b2-hud .b2-col{gap:4px}
+  .b2-hbtn{width:30px;height:30px}
+  .b2-pill{font-size:13px;padding:3px 7px 3px 3px;gap:3px}
+  .b2-pill .b2-coin{width:16px;height:16px}.b2-pill .b2-e{font-size:13px}
+  .b2-crown{padding:0 6px 0 5px!important;font-size:12px!important;gap:3px}
+  .b2-crown .c .b2-cr{width:17px;height:13px}
+}
 `;
 
 /* =================== Dessins =================== */
@@ -1393,6 +1431,7 @@ function draw(){
   const html = view === "farm" ? farmHTML() : view === "barn" ? barnHTML() : view === "market" ? marketHTML() : villageHTML();
   main.innerHTML = html; main.dataset.v = view; main.scrollTop = keep;
   wrapEl.querySelector("#b2-dock").innerHTML = view === "farm" ? dockHTML() : "";
+  wrapEl.querySelector("#b2-main").classList.toggle("dockpad", view === "farm");
   wrapEl.querySelector("#b2-tabs").innerHTML = `<div class="b2-col">${TABS.map(t => {
     const lock = t.need && !BX.unlocked(S, t.need);
     const dot = !lock && t.need && !seen("tab_" + t.id);
