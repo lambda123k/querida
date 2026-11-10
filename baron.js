@@ -582,6 +582,15 @@ const STYLE = `
 .b2-road{position:absolute;left:0;right:0;bottom:8px;height:18px;background:repeating-linear-gradient(90deg,#B98552 0 18px,#B07D4A 18px 30px);border-top:2px solid #9C6A3B}
 .b2-barn{position:absolute;right:10px;bottom:30px;width:150px}
 .b2-barn svg{display:block;width:100%}
+.b2-sellbtn{position:absolute!important;right:40px;bottom:92px;z-index:3;display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 14px 7px!important;border-radius:14px!important;
+  background:linear-gradient(#FFD45E,#F2B33D)!important;color:#4A2C00!important;box-shadow:0 4px 0 var(--gold2),0 8px 16px rgba(0,0,0,.25);transition:transform .08s}
+.b2-sellbtn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--gold2)}
+.b2-sellbtn .l{font:900 16px/1.1 var(--round)}
+.b2-sellbtn .v{display:flex;align-items:center;font:900 13px var(--round);font-variant-numeric:tabular-nums}
+.b2-sellbtn .v .b2-coin{width:13px;height:13px}
+.b2-sellbtn.empty{filter:saturate(.3) brightness(.95);opacity:.8}
+.b2-sellbtn.ready{animation:b2-call 1.2s ease-in-out infinite}
+.b2-sellbtn.ready::after{content:"👆";position:absolute;right:-22px;top:6px;font-size:26px;animation:b2-tap 1.1s ease-in-out infinite}
 .b2-gauge{position:absolute;right:14px;top:112px;width:140px;z-index:1}
 .b2-gbar{height:12px;border-radius:999px;background:rgba(59,31,23,.25);overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,.25)}
 .b2-gbar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#F6C543,#F2873B);transition:width .5s}
@@ -1165,6 +1174,8 @@ function live(force){
     const cap = BX.barnCap(S), used = BX.stockUnits(S), fill = Math.min(1, used / cap);
     const gb = wrapEl.querySelector(".b2-sky .b2-gbar"); if (gb){ gb.querySelector("i").style.width = (fill * 100) + "%"; gb.classList.toggle("full", fill >= .999); }
     const gl = wrapEl.querySelector("[data-live=barn]"); if (gl) gl.textContent = `${fmtN(used)} / ${fmtN(cap)}`;
+    const sv = wrapEl.querySelector("[data-live=sellv]");
+    if (sv){ const q = Math.floor(S.stock[S.cur] || 0); sv.textContent = fmtN(q * P[S.cur].floor); const btn = sv.closest(".b2-sellbtn"); btn.classList.toggle("empty", q < 1); btn.classList.toggle("ready", q >= 1 && S.stats.earned === 0); }
     const ba = wrapEl.querySelector(".b2-barn"); if (ba){ const n = Math.round(fill * 10); if (+ba.dataset.n !== n){ ba.dataset.n = n; ba.innerHTML = barnArt(fill); } }
     const bn = BX.bottleneck(S, key, t);
     q("[data-slow]").forEach(e => e.style.display = e.dataset.slow === bn ? "" : "none");
@@ -1245,6 +1256,7 @@ function farmHTML(){
       <div class="b2-gauge" data-a="tab" data-v="barn"><div class="b2-glab"><span>Grange</span><span data-live="barn">${fmtN(used)} / ${fmtN(cap)}</span></div><div class="b2-gbar"><i style="width:${Math.min(100, used / cap * 100)}%"></i></div>
         <div data-slow="barn" style="display:none;margin-top:4px;text-align:right"><span class="b2-tag warn">Pleine : la récolte s'arrête</span></div></div>
       <div class="b2-barn" data-a="tab" data-v="barn" data-n="-1"></div>
+      <button class="b2-sellbtn" data-a="quick-sell" aria-label="Vendre ta récolte au village"><span class="l">Vendre</span><span class="v">${COIN}<b data-live="sellv">0</b></span></button>
       <div class="b2-ground"></div><div class="b2-road"></div>
       <button class="b2-tower" data-a="tap-elev" aria-label="Faire monter le monte-charge">${TOWER}<span class="b2-hand" data-hint="elev">👆</span></button>
       <div class="b2-quai"><div class="sacks" data-n="-1"></div><span class="b2-tag" data-live="quai">${fmtN(f.quai)}</span></div>
@@ -1302,7 +1314,7 @@ function dockHTML(){
 }
 const TIPS = [
   { id:"start",  when: () => S.stats.produced === 0 && S.coins === 0, i:"👆", txt:"Touche ton champ pour récolter. Puis touche le monte-charge (à gauche) pour remonter le panier, et la charrette pour le porter à la grange. « Tout récolter » fait tout d'un coup." },
-  { id:"sell",   when: () => S.stats.earned === 0 && S.stock[S.spec] >= 5, i:"🏚️", txt:"Ta récolte est dans la grange. Ouvre l'onglet Grange pour la vendre au village." },
+  { id:"sell",   when: () => S.stats.earned === 0 && S.stock[S.spec] >= 1, i:"💰", txt:"Ta récolte est dans la grange ! Touche le bouton doré « Vendre » sur la grange pour la transformer en pièces." },
   { id:"mgr",    when: () => S.coins >= 25 && !S.farms[S.spec].parcels[0].mgr, i:"🧑‍🌾", txt:"Fatigué de toucher ? Engage un contremaître (les ronds « Engager ») : il fait le travail tout seul, même quand l'appli est fermée." },
   { id:"slow",   when: () => !!BX.bottleneck(S, S.cur, now()) && S.farms[S.cur].parcels[0].mgr, i:"🐢", txt:"Le badge « Lent » montre le maillon qui freine ta ferme. Paniers pleins en bas : améliore le monte-charge. Tas en haut : la charrette." },
   { id:"boost",  when: () => BX.unlocked(S, "boost"), i: () => P[S.spec].act.e, txt: () => `${P[S.spec].act.txt}, pendant 1 minute. Tu peux recommencer toutes les 4 minutes.` },
@@ -1735,6 +1747,14 @@ function onClick(e){
     }
     case "prod": prodSheet(b.dataset.k); return;
     case "sell": sellSheet(b.dataset.k); return;
+    case "quick-sell": {
+      const k = S.cur, q = Math.floor(S.stock[k] || 0);
+      if (q < 1){ toast("La grange est vide : attends que la charrette livre ta récolte."); bounce(b); return; }
+      const g = q * P[k].floor; S.stock[k] -= q; S.coins += g; S.stats.earned += g; S.stats.villageSold += g; dirty = true;
+      markSeen("tip_sell"); sound("coin"); buzz(15); bounce(b); coinsFly(b, 8); floatText(b, "+" + fmtN(g), "gold");
+      if (!seen("hint_market") && BX.unlocked(S, "marche")){ markSeen("hint_market"); setTimeout(() => toast("Astuce : au Marché, tes amis peuvent t'acheter plus cher que le village."), 1200); }
+      live(); setTimeout(draw, 900); return;
+    }
     case "list": listSheet(b.dataset.k); return;
     case "goto-mkt": {
       if (!BX.unlocked(S, "marche")){ toast(TABS[2].why); return; }

@@ -1,0 +1,3 @@
+
+}catch(e){ try{ console.error("Le Baron", e); }catch(_){} }
+})();

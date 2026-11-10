@@ -1,0 +1,10 @@
+/* Querida · Le Baron (version 2) — jeu de ferme idle et de marché entre amis (côté amis uniquement).
+   Se lance depuis l'Arcade. Mécanique façon Idle Miner : parcelles empilées, monte-charge, charrette, contremaîtres,
+   goulots d'étranglement ; et l'âme du Baron : un marché entre amis, les commandes du village, devenir le plus riche.
+   · La ferme est simulée sur le téléphone (production hors ligne calculée au retour) et sauvegardée sur Supabase.
+   · Le marché, le classement et les ventes entre joueurs passent par les fonctions baron2_* (supabase/baron2.sql).
+   · Tout l'équilibrage (prix, temps, primes) est dans BAL, en haut du moteur.
+   Préfixe « b2- » partout ; une erreur ici ne casse jamais l'appli. */
+(function(){
+"use strict";
+try{

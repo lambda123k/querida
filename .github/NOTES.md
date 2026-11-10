@@ -65,6 +65,12 @@ ne sont volontairement pas écrits ici : les demander à Naim.
 - `supabase/baron2_00_suppression_ancien.sql` efface l'ancien Baron (tables/fonctions `baron_*`) : à lancer
   seulement au moment de la mise en ligne de la version 2.
 - Confiance entre amis : l'argent et le stock sont calculés sur le téléphone (pas de contrôle anti-triche).
+- Sources découpées dans `.github/baron-src/` (moteur, données, styles et dessins, écrans) : `baron.js` = head + engine + part-b + part-c + part-d + tail.
+  `fake.js` + `build-demo.py` fabriquent une démo autonome avec un faux serveur et 4 amis fictifs.
+- Mis en ligne le 10 nov. 2026 (notification envoyée aux amis). Ensuite : bouton doré « Vendre » sur la grange de l'écran Ferme
+  (Naim trouvait la vente pas évidente sur l'onglet Grange).
+- À faire : Naim trouve que l'interface « ne donne pas envie de jouer ». Piste : moins de marron et de texte, décor plus vif,
+  retours plus satisfaisants, objectif visible.
 
 ## Tests
 - Serveur local `python3 -m http.server 8770` dans le dépôt, puis Playwright (Chromium préinstallé)
