@@ -754,6 +754,22 @@ const STYLE = `
 .b2-locked .lock{display:block;width:40px;height:44px;margin:0 auto 8px}
 .b2-locked .lock svg{display:block;width:100%;height:100%}
 .b2-locked.palier{border-color:var(--gold)}
+.b2-cr{display:inline-block;width:1.3em;height:1em;vertical-align:-.12em}
+.b2-crown{display:flex;align-items:center;gap:5px;height:38px;padding:0 11px 0 8px!important;border-radius:999px!important;background:#2E1A0C!important;color:#FFE6B8!important;font:900 15px var(--round)!important;box-shadow:inset 0 2px 3px rgba(0,0,0,.4),0 0 0 2px #C98A12;flex:none}
+.b2-crown .c{display:block;line-height:0}
+.b2-crown .c .b2-cr{width:24px;height:18px}
+.b2-crown.top{background:linear-gradient(#F6C543,#E0A020)!important;color:#4A2C00!important;box-shadow:0 0 0 2px #FFE08A,0 0 14px rgba(246,197,67,.7)}
+.b2-throne{text-align:center;background:radial-gradient(circle at 50% 30%,#7A3A22,#3B1F17);color:#FFE6B8;border-radius:18px;padding:18px 14px 16px;margin:4px 0 10px;box-shadow:0 4px 0 #22100A}
+.b2-throne .c{display:block;width:72px;margin:0 auto 4px;animation:b2-hint 2.4s ease-in-out infinite}
+.b2-throne .c .b2-cr{width:72px;height:54px}
+.b2-throne small{display:block;font:800 13px var(--round);opacity:.8}
+.b2-throne b{display:block;font:400 italic 38px/1.05 var(--disp);color:#fff;margin:2px 0 4px}
+.b2-throne .f{font:900 18px var(--round);font-variant-numeric:tabular-nums}
+.b2-chase{text-align:center;background:#FFF0C8;border-radius:12px;padding:9px;font:800 14px var(--round);margin-bottom:6px}
+.b2-chase b{font-weight:900}
+.b2-chase.win{background:#DDF3E2;color:var(--up2)}
+.b2-rk .n .b2-cr{width:22px;height:17px}
+.b2-baron .crown .b2-cr{width:46px;height:35px}
 .b2-plvl{position:absolute;left:8px;top:8px;background:rgba(59,31,23,.82);color:#FFE6B8;border-radius:9px;padding:3px 8px;font:800 11.5px var(--round);pointer-events:none}
 .b2-plvl b{font-size:15px;font-weight:900}
 .b2-plot .runbar{position:absolute;left:0;top:0;height:4px;border-radius:14px 0 0 0;background:#FFE08A;transition:width .25s linear}
@@ -1043,6 +1059,7 @@ const TOWER = `<svg viewBox="0 0 60 110" aria-hidden="true"><path d="M8 20 L8 11
   <path d="M8 40 L52 66 M52 40 L8 66 M8 72 L52 98 M52 72 L8 98" stroke="#9A6334" stroke-width="3"/><path d="M4 20 H56" stroke="#5B3519" stroke-width="6" stroke-linecap="round"/>
   <path d="M2 18 L30 2 L58 18Z" fill="#CC3F27"/><path d="M30 28 V110" stroke="#3E220F" stroke-width="2"/>
   <g class="pulley"><circle cx="30" cy="22" r="9" fill="#C98F55" stroke="#5B3519" stroke-width="2.5"/><path d="M30 14 V30 M22 22 H38" stroke="#5B3519" stroke-width="2"/></g></svg>`;
+const CROWN = `<svg class="b2-cr" viewBox="0 0 40 30" aria-hidden="true"><path d="M4 26 L2 8 L12 15 L20 3 L28 15 L38 8 L36 26Z" fill="#F6C543" stroke="#B97A0C" stroke-width="2" stroke-linejoin="round"/><rect x="4" y="24" width="32" height="5" rx="2" fill="#E0A020" stroke="#B97A0C" stroke-width="1.5"/><circle cx="20" cy="17" r="2.6" fill="#E0392B"/><circle cx="11" cy="20" r="2" fill="#3F6FB0"/><circle cx="29" cy="20" r="2" fill="#3F6FB0"/><circle cx="2" cy="8" r="2" fill="#F6C543"/><circle cx="20" cy="3" r="2" fill="#F6C543"/><circle cx="38" cy="8" r="2" fill="#F6C543"/></svg>`;
 const HAND = `<svg viewBox="0 0 40 46" aria-hidden="true"><path d="M15 4 a4 4 0 0 1 8 0 v15 l9 2 a5 5 0 0 1 4 6 l-2 12 a6 6 0 0 1 -6 5 h-11 a6 6 0 0 1 -5 -3 l-8 -12 a3.5 3.5 0 0 1 5 -4.5 l6 5z" fill="#fff" stroke="#3B1F17" stroke-width="2.6" stroke-linejoin="round"/><path d="M23 20 v8 M28 21 v7" stroke="#3B1F17" stroke-width="2" stroke-linecap="round"/></svg>`;
 const UP = `<svg class="b2-up" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 L14 9 H10.5 V14 H5.5 V9 H2Z" fill="#fff"/></svg>`;
 const LOCK = `<svg viewBox="0 0 40 44" aria-hidden="true"><path d="M11 19 v-6 a9 9 0 0 1 18 0 v6" fill="none" stroke="#D9C3A0" stroke-width="5"/><rect x="6" y="18" width="28" height="23" rx="5" fill="#F2B33D" stroke="#9E6A0A" stroke-width="2"/><circle cx="20" cy="28" r="3.5" fill="#6B4400"/><rect x="18.5" y="29" width="3" height="7" rx="1.5" fill="#6B4400"/></svg>`;
@@ -1131,7 +1148,7 @@ function openBaron(){
   const w = document.createElement("div"); w.className = "b2-wrap"; w.setAttribute("role", "dialog"); w.setAttribute("aria-label", "Le Baron");
   w.innerHTML = `<div class="b2-hud"><div class="b2-col"><button class="b2-hbtn" data-a="arcade" aria-label="Retour à l'Arcade">‹</button>
     <div class="b2-pill"><i class="b2-coin"></i><span data-live="coins">…</span></div><div class="b2-pill"><span class="b2-e">🪵</span><span data-live="wood">…</span></div>
-    <div class="b2-sp"></div><button class="b2-hbtn" data-a="close" aria-label="Fermer">×</button></div></div>
+    <div class="b2-sp"></div><button class="b2-crown" data-a="rank" aria-label="Classement"><span class="c">${CROWN}</span><b data-live="rank">–</b></button><button class="b2-hbtn" data-a="close" aria-label="Fermer">×</button></div></div>
     <div class="b2-scroll" id="b2-main"><div class="b2-load">Le Baron se prépare…</div></div><div id="b2-dock"></div><nav class="b2-tabs" id="b2-tabs"></nav>`;
   document.body.appendChild(w); document.body.style.overflow = "hidden"; wrapEl = w;
   w.addEventListener("click", onClick);
@@ -1186,6 +1203,7 @@ function loop(){
     if (BX.ensureOrders(S, now(), ME.id, groupProd())){ dirty = true; if (view === "village") draw(); }
     live();
     n++;
+    if (n % 4 === 0) rankTick();
     if (n % 4 === 0 && !sheetOpen){ const sig = unlockSig(); if (sig !== lastSig){ lastSig = sig; draw(); } }
     if (n % 80 === 0) save();                       // toutes les 20 s si quelque chose a changé
     if (n % 120 === 0) loadWorld((view === "market" || view === "village"));
@@ -1606,20 +1624,50 @@ function villageHTML(){
       <div class="pb"><i style="width:${Math.min(100, got / o.qty * 100)}%"></i></div>
       <div class="ft"><span>${fmtN(got)} / ${fmtN(o.qty)} livrés</span><span class="sp"></span><span>Tu en as ${fmtN(have)}</span>${action}</div>${done ? `<span class="stamp">Livré !</span>` : ""}</div>`;
   }).join("");
-  const players = W.players.map(p => p.id === ME.id ? Object.assign({}, p, { stats: publicStats() }) : p);
-  if (!players.some(p => p.id === ME.id)) players.push({ id: ME.id, name: ME.name, specialty: S.spec, stats: publicStats() });
-  players.sort((a, b) => (+b.stats?.fortune || 0) - (+a.stats?.fortune || 0));
+  const players = ranking();
   const top = players[0];
   const best = (key, label, i, unit) => { const p = players.slice().sort((a, b) => (+b.stats?.[key] || 0) - (+a.stats?.[key] || 0))[0]; return p && +p.stats?.[key] > 0 ? `<div class="b2-ttl"><span class="i">${i}</span><b>${label}</b><span>${esc(p.id === ME.id ? "Toi" : p.name)}</span></div>` : `<div class="b2-ttl"><span class="i" style="filter:grayscale(1)">${i}</span><b>${label}</b><span style="color:var(--ink3)">Personne encore</span></div>`; };
   return `<div class="b2-vil"><div class="b2-col b2-pad">
     <div class="b2-paper" style="background:#FFF4E0"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><h2 class="b2-h2" style="margin:0">Commandes du village<small>Livre en plusieurs fois. La prime tombe à la fin.</small></h2><span class="b2-clock">⏳ <span data-live="clock">${fmtT((S.orders.slot + 1) * BAL.slotMs - now())}</span></span></div></div>
     <div class="b2-notes">${notes}</div>
-    ${top ? `<div class="b2-baron"><span class="crown">👑</span><div class="sp"><small>Le Baron du moment</small><b>${esc(top.id === ME.id ? "C'est toi !" : top.name)}</b><span class="f">${COIN}${fmtN(top.stats?.fortune || 0)} · ${P[top.specialty]?.e || ""} ${esc(P[top.specialty]?.label || "")}</span></div></div>` : ""}
+    ${top ? `<div class="b2-baron"><span class="crown">${CROWN}</span><div class="sp"><small>Le Baron du moment</small><b>${esc(top.id === ME.id ? "C'est toi !" : top.name)}</b><span class="f">${COIN}${fmtN(top.stats?.fortune || 0)} · ${P[top.specialty]?.e || ""} ${esc(P[top.specialty]?.label || "")}</span></div></div>` : ""}
     <div class="b2-paper b2-rank"><h2 class="b2-h2">Classement<small>Fortune : argent, stock et la moitié de ce que tu as construit.</small></h2>
-      ${players.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? "👑" : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}<small>${esc(P[p.specialty]?.label || "")}${p.stats?.farms && p.stats.farms.length > 1 ? " + " + p.stats.farms.filter(x => x !== p.specialty).map(x => P[x]?.e).join("") : ""} · ${fmtN(p.stats?.prod || 0, 1)} pièces/s</small></span><span class="f">${COIN}${fmtN(p.stats?.fortune || 0)}</span></div>`).join("")}
+      ${players.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}<small>${esc(P[p.specialty]?.label || "")}${p.stats?.farms && p.stats.farms.length > 1 ? " + " + p.stats.farms.filter(x => x !== p.specialty).map(x => P[x]?.e).join("") : ""} · ${fmtN(p.stats?.prod || 0, 1)} pièces/s</small></span><span class="f">${COIN}${fmtN(p.stats?.fortune || 0)}</span></div>`).join("")}
     </div>
     <div class="b2-titles">${best("prod", "Gros producteur", "🏭")}${best("traded", "Meilleur trader", "📈")}${best("baked", "Pâtissier", "🧁")}${best("orders", "Ami du village", "📦")}</div>
   </div></div>`;
+}
+
+/* ---------- Classement (la couronne en haut) ---------- */
+function ranking(){
+  const me = publicStats();
+  const players = W.players.map(p => p.id === ME.id ? Object.assign({}, p, { stats: me }) : p);
+  if (!players.some(p => p.id === ME.id)) players.push({ id: ME.id, name: ME.name, specialty: S.spec, stats: me });
+  return players.sort((a, b) => (+b.stats?.fortune || 0) - (+a.stats?.fortune || 0));
+}
+let lastRank = null;
+function rankTick(){
+  if (!W.at) return;
+  const pl = ranking(), r = pl.findIndex(p => p.id === ME.id) + 1;
+  const el = wrapEl.querySelector("[data-live=rank]"); if (el) el.textContent = r === 1 ? "Baron" : r + "e";
+  const cr = wrapEl.querySelector(".b2-crown"); if (cr) cr.classList.toggle("top", r === 1);
+  if (lastRank !== null && r < lastRank){
+    const passed = pl[r]; sound("done"); buzz([20, 40, 20]);
+    toast(r === 1 ? `${CROWN} Tu es le nouveau Baron !` : `Tu passes ${r}e, devant ${esc(passed ? passed.name : "un voisin")} !`, "gold");
+    if (cr){ cr.classList.remove("b2-pop"); void cr.offsetWidth; cr.classList.add("b2-pop"); }
+  }
+  lastRank = r;
+}
+function rankSheet(){
+  sheetCtx = null;
+  const pl = ranking(), top = pl[0], r = pl.findIndex(p => p.id === ME.id), above = r > 0 ? pl[r - 1] : null;
+  const f = p => +p.stats?.fortune || 0;
+  const gap = above ? f(above) - f(pl[r]) : 0;
+  sheet(`<div class="b2-throne"><span class="c">${CROWN}</span><small>Le Baron du moment</small><b>${esc(top.id === ME.id ? "Toi !" : top.name)}</b>
+      <span class="f">${COIN}${fmtN(f(top))} ${P[top.specialty]?.e || ""}</span></div>
+    ${above ? `<div class="b2-chase">Encore ${COIN}<b>${fmtN(gap)}</b> pour dépasser ${esc(above.name)}</div>` : `<div class="b2-chase win">Garde ta couronne !</div>`}
+    <div class="b2-rank">${pl.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}</span><span class="f">${COIN}${fmtN(f(p))}</span></div>`).join("")}</div>
+    <p class="b2-note" style="text-align:center">Fortune = pièces + stock + la moitié de ce que tu as construit</p>`);
 }
 
 /* ---------- Choix de la spécialité ---------- */
@@ -1802,6 +1850,7 @@ function onClick(e){
       if (view === "market" || view === "village") loadWorld(true);
       return;
     }
+    case "rank": if (!W.at){ loadWorld(true).then(() => S && rankSheet()); return; } rankSheet(); loadWorld(); return;
     case "tipx": markSeen("tip_" + b.dataset.id); draw(); return;
     case "mult": mult = b.dataset.m === "max" ? "max" : +b.dataset.m; draw(); return;
     case "farm": S.cur = b.dataset.k; draw(); return;

@@ -252,6 +252,22 @@ const STYLE = `
 .b2-locked .lock{display:block;width:40px;height:44px;margin:0 auto 8px}
 .b2-locked .lock svg{display:block;width:100%;height:100%}
 .b2-locked.palier{border-color:var(--gold)}
+.b2-cr{display:inline-block;width:1.3em;height:1em;vertical-align:-.12em}
+.b2-crown{display:flex;align-items:center;gap:5px;height:38px;padding:0 11px 0 8px!important;border-radius:999px!important;background:#2E1A0C!important;color:#FFE6B8!important;font:900 15px var(--round)!important;box-shadow:inset 0 2px 3px rgba(0,0,0,.4),0 0 0 2px #C98A12;flex:none}
+.b2-crown .c{display:block;line-height:0}
+.b2-crown .c .b2-cr{width:24px;height:18px}
+.b2-crown.top{background:linear-gradient(#F6C543,#E0A020)!important;color:#4A2C00!important;box-shadow:0 0 0 2px #FFE08A,0 0 14px rgba(246,197,67,.7)}
+.b2-throne{text-align:center;background:radial-gradient(circle at 50% 30%,#7A3A22,#3B1F17);color:#FFE6B8;border-radius:18px;padding:18px 14px 16px;margin:4px 0 10px;box-shadow:0 4px 0 #22100A}
+.b2-throne .c{display:block;width:72px;margin:0 auto 4px;animation:b2-hint 2.4s ease-in-out infinite}
+.b2-throne .c .b2-cr{width:72px;height:54px}
+.b2-throne small{display:block;font:800 13px var(--round);opacity:.8}
+.b2-throne b{display:block;font:400 italic 38px/1.05 var(--disp);color:#fff;margin:2px 0 4px}
+.b2-throne .f{font:900 18px var(--round);font-variant-numeric:tabular-nums}
+.b2-chase{text-align:center;background:#FFF0C8;border-radius:12px;padding:9px;font:800 14px var(--round);margin-bottom:6px}
+.b2-chase b{font-weight:900}
+.b2-chase.win{background:#DDF3E2;color:var(--up2)}
+.b2-rk .n .b2-cr{width:22px;height:17px}
+.b2-baron .crown .b2-cr{width:46px;height:35px}
 .b2-plvl{position:absolute;left:8px;top:8px;background:rgba(59,31,23,.82);color:#FFE6B8;border-radius:9px;padding:3px 8px;font:800 11.5px var(--round);pointer-events:none}
 .b2-plvl b{font-size:15px;font-weight:900}
 .b2-plot .runbar{position:absolute;left:0;top:0;height:4px;border-radius:14px 0 0 0;background:#FFE08A;transition:width .25s linear}
@@ -541,6 +557,7 @@ const TOWER = `<svg viewBox="0 0 60 110" aria-hidden="true"><path d="M8 20 L8 11
   <path d="M8 40 L52 66 M52 40 L8 66 M8 72 L52 98 M52 72 L8 98" stroke="#9A6334" stroke-width="3"/><path d="M4 20 H56" stroke="#5B3519" stroke-width="6" stroke-linecap="round"/>
   <path d="M2 18 L30 2 L58 18Z" fill="#CC3F27"/><path d="M30 28 V110" stroke="#3E220F" stroke-width="2"/>
   <g class="pulley"><circle cx="30" cy="22" r="9" fill="#C98F55" stroke="#5B3519" stroke-width="2.5"/><path d="M30 14 V30 M22 22 H38" stroke="#5B3519" stroke-width="2"/></g></svg>`;
+const CROWN = `<svg class="b2-cr" viewBox="0 0 40 30" aria-hidden="true"><path d="M4 26 L2 8 L12 15 L20 3 L28 15 L38 8 L36 26Z" fill="#F6C543" stroke="#B97A0C" stroke-width="2" stroke-linejoin="round"/><rect x="4" y="24" width="32" height="5" rx="2" fill="#E0A020" stroke="#B97A0C" stroke-width="1.5"/><circle cx="20" cy="17" r="2.6" fill="#E0392B"/><circle cx="11" cy="20" r="2" fill="#3F6FB0"/><circle cx="29" cy="20" r="2" fill="#3F6FB0"/><circle cx="2" cy="8" r="2" fill="#F6C543"/><circle cx="20" cy="3" r="2" fill="#F6C543"/><circle cx="38" cy="8" r="2" fill="#F6C543"/></svg>`;
 const HAND = `<svg viewBox="0 0 40 46" aria-hidden="true"><path d="M15 4 a4 4 0 0 1 8 0 v15 l9 2 a5 5 0 0 1 4 6 l-2 12 a6 6 0 0 1 -6 5 h-11 a6 6 0 0 1 -5 -3 l-8 -12 a3.5 3.5 0 0 1 5 -4.5 l6 5z" fill="#fff" stroke="#3B1F17" stroke-width="2.6" stroke-linejoin="round"/><path d="M23 20 v8 M28 21 v7" stroke="#3B1F17" stroke-width="2" stroke-linecap="round"/></svg>`;
 const UP = `<svg class="b2-up" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 L14 9 H10.5 V14 H5.5 V9 H2Z" fill="#fff"/></svg>`;
 const LOCK = `<svg viewBox="0 0 40 44" aria-hidden="true"><path d="M11 19 v-6 a9 9 0 0 1 18 0 v6" fill="none" stroke="#D9C3A0" stroke-width="5"/><rect x="6" y="18" width="28" height="23" rx="5" fill="#F2B33D" stroke="#9E6A0A" stroke-width="2"/><circle cx="20" cy="28" r="3.5" fill="#6B4400"/><rect x="18.5" y="29" width="3" height="7" rx="1.5" fill="#6B4400"/></svg>`;

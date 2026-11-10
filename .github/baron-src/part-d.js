@@ -15,7 +15,7 @@ function openBaron(){
   const w = document.createElement("div"); w.className = "b2-wrap"; w.setAttribute("role", "dialog"); w.setAttribute("aria-label", "Le Baron");
   w.innerHTML = `<div class="b2-hud"><div class="b2-col"><button class="b2-hbtn" data-a="arcade" aria-label="Retour à l'Arcade">‹</button>
     <div class="b2-pill"><i class="b2-coin"></i><span data-live="coins">…</span></div><div class="b2-pill"><span class="b2-e">🪵</span><span data-live="wood">…</span></div>
-    <div class="b2-sp"></div><button class="b2-hbtn" data-a="close" aria-label="Fermer">×</button></div></div>
+    <div class="b2-sp"></div><button class="b2-crown" data-a="rank" aria-label="Classement"><span class="c">${CROWN}</span><b data-live="rank">–</b></button><button class="b2-hbtn" data-a="close" aria-label="Fermer">×</button></div></div>
     <div class="b2-scroll" id="b2-main"><div class="b2-load">Le Baron se prépare…</div></div><div id="b2-dock"></div><nav class="b2-tabs" id="b2-tabs"></nav>`;
   document.body.appendChild(w); document.body.style.overflow = "hidden"; wrapEl = w;
   w.addEventListener("click", onClick);
@@ -70,6 +70,7 @@ function loop(){
     if (BX.ensureOrders(S, now(), ME.id, groupProd())){ dirty = true; if (view === "village") draw(); }
     live();
     n++;
+    if (n % 4 === 0) rankTick();
     if (n % 4 === 0 && !sheetOpen){ const sig = unlockSig(); if (sig !== lastSig){ lastSig = sig; draw(); } }
     if (n % 80 === 0) save();                       // toutes les 20 s si quelque chose a changé
     if (n % 120 === 0) loadWorld((view === "market" || view === "village"));
@@ -490,20 +491,50 @@ function villageHTML(){
       <div class="pb"><i style="width:${Math.min(100, got / o.qty * 100)}%"></i></div>
       <div class="ft"><span>${fmtN(got)} / ${fmtN(o.qty)} livrés</span><span class="sp"></span><span>Tu en as ${fmtN(have)}</span>${action}</div>${done ? `<span class="stamp">Livré !</span>` : ""}</div>`;
   }).join("");
-  const players = W.players.map(p => p.id === ME.id ? Object.assign({}, p, { stats: publicStats() }) : p);
-  if (!players.some(p => p.id === ME.id)) players.push({ id: ME.id, name: ME.name, specialty: S.spec, stats: publicStats() });
-  players.sort((a, b) => (+b.stats?.fortune || 0) - (+a.stats?.fortune || 0));
+  const players = ranking();
   const top = players[0];
   const best = (key, label, i, unit) => { const p = players.slice().sort((a, b) => (+b.stats?.[key] || 0) - (+a.stats?.[key] || 0))[0]; return p && +p.stats?.[key] > 0 ? `<div class="b2-ttl"><span class="i">${i}</span><b>${label}</b><span>${esc(p.id === ME.id ? "Toi" : p.name)}</span></div>` : `<div class="b2-ttl"><span class="i" style="filter:grayscale(1)">${i}</span><b>${label}</b><span style="color:var(--ink3)">Personne encore</span></div>`; };
   return `<div class="b2-vil"><div class="b2-col b2-pad">
     <div class="b2-paper" style="background:#FFF4E0"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><h2 class="b2-h2" style="margin:0">Commandes du village<small>Livre en plusieurs fois. La prime tombe à la fin.</small></h2><span class="b2-clock">⏳ <span data-live="clock">${fmtT((S.orders.slot + 1) * BAL.slotMs - now())}</span></span></div></div>
     <div class="b2-notes">${notes}</div>
-    ${top ? `<div class="b2-baron"><span class="crown">👑</span><div class="sp"><small>Le Baron du moment</small><b>${esc(top.id === ME.id ? "C'est toi !" : top.name)}</b><span class="f">${COIN}${fmtN(top.stats?.fortune || 0)} · ${P[top.specialty]?.e || ""} ${esc(P[top.specialty]?.label || "")}</span></div></div>` : ""}
+    ${top ? `<div class="b2-baron"><span class="crown">${CROWN}</span><div class="sp"><small>Le Baron du moment</small><b>${esc(top.id === ME.id ? "C'est toi !" : top.name)}</b><span class="f">${COIN}${fmtN(top.stats?.fortune || 0)} · ${P[top.specialty]?.e || ""} ${esc(P[top.specialty]?.label || "")}</span></div></div>` : ""}
     <div class="b2-paper b2-rank"><h2 class="b2-h2">Classement<small>Fortune : argent, stock et la moitié de ce que tu as construit.</small></h2>
-      ${players.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? "👑" : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}<small>${esc(P[p.specialty]?.label || "")}${p.stats?.farms && p.stats.farms.length > 1 ? " + " + p.stats.farms.filter(x => x !== p.specialty).map(x => P[x]?.e).join("") : ""} · ${fmtN(p.stats?.prod || 0, 1)} pièces/s</small></span><span class="f">${COIN}${fmtN(p.stats?.fortune || 0)}</span></div>`).join("")}
+      ${players.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}<small>${esc(P[p.specialty]?.label || "")}${p.stats?.farms && p.stats.farms.length > 1 ? " + " + p.stats.farms.filter(x => x !== p.specialty).map(x => P[x]?.e).join("") : ""} · ${fmtN(p.stats?.prod || 0, 1)} pièces/s</small></span><span class="f">${COIN}${fmtN(p.stats?.fortune || 0)}</span></div>`).join("")}
     </div>
     <div class="b2-titles">${best("prod", "Gros producteur", "🏭")}${best("traded", "Meilleur trader", "📈")}${best("baked", "Pâtissier", "🧁")}${best("orders", "Ami du village", "📦")}</div>
   </div></div>`;
+}
+
+/* ---------- Classement (la couronne en haut) ---------- */
+function ranking(){
+  const me = publicStats();
+  const players = W.players.map(p => p.id === ME.id ? Object.assign({}, p, { stats: me }) : p);
+  if (!players.some(p => p.id === ME.id)) players.push({ id: ME.id, name: ME.name, specialty: S.spec, stats: me });
+  return players.sort((a, b) => (+b.stats?.fortune || 0) - (+a.stats?.fortune || 0));
+}
+let lastRank = null;
+function rankTick(){
+  if (!W.at) return;
+  const pl = ranking(), r = pl.findIndex(p => p.id === ME.id) + 1;
+  const el = wrapEl.querySelector("[data-live=rank]"); if (el) el.textContent = r === 1 ? "Baron" : r + "e";
+  const cr = wrapEl.querySelector(".b2-crown"); if (cr) cr.classList.toggle("top", r === 1);
+  if (lastRank !== null && r < lastRank){
+    const passed = pl[r]; sound("done"); buzz([20, 40, 20]);
+    toast(r === 1 ? `${CROWN} Tu es le nouveau Baron !` : `Tu passes ${r}e, devant ${esc(passed ? passed.name : "un voisin")} !`, "gold");
+    if (cr){ cr.classList.remove("b2-pop"); void cr.offsetWidth; cr.classList.add("b2-pop"); }
+  }
+  lastRank = r;
+}
+function rankSheet(){
+  sheetCtx = null;
+  const pl = ranking(), top = pl[0], r = pl.findIndex(p => p.id === ME.id), above = r > 0 ? pl[r - 1] : null;
+  const f = p => +p.stats?.fortune || 0;
+  const gap = above ? f(above) - f(pl[r]) : 0;
+  sheet(`<div class="b2-throne"><span class="c">${CROWN}</span><small>Le Baron du moment</small><b>${esc(top.id === ME.id ? "Toi !" : top.name)}</b>
+      <span class="f">${COIN}${fmtN(f(top))} ${P[top.specialty]?.e || ""}</span></div>
+    ${above ? `<div class="b2-chase">Encore ${COIN}<b>${fmtN(gap)}</b> pour dépasser ${esc(above.name)}</div>` : `<div class="b2-chase win">Garde ta couronne !</div>`}
+    <div class="b2-rank">${pl.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}</span><span class="f">${COIN}${fmtN(f(p))}</span></div>`).join("")}</div>
+    <p class="b2-note" style="text-align:center">Fortune = pièces + stock + la moitié de ce que tu as construit</p>`);
 }
 
 /* ---------- Choix de la spécialité ---------- */
@@ -686,6 +717,7 @@ function onClick(e){
       if (view === "market" || view === "village") loadWorld(true);
       return;
     }
+    case "rank": if (!W.at){ loadWorld(true).then(() => S && rankSheet()); return; } rankSheet(); loadWorld(); return;
     case "tipx": markSeen("tip_" + b.dataset.id); draw(); return;
     case "mult": mult = b.dataset.m === "max" ? "max" : +b.dataset.m; draw(); return;
     case "farm": S.cur = b.dataset.k; draw(); return;
