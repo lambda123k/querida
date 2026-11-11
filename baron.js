@@ -40,7 +40,7 @@ const gateOf = i => { if (!isPalier(i)) return null; const k = i / 3 - 1; const 
 const BAL = {
   boostDur: 60, boostCd: 240,                   // corvée : ×2 pendant 1 min, toutes les 4 min
   parcelRate: (i, L) => 0.3 * Math.pow(5, i) * L * Math.pow(2, miles(L)),          // unités / s
-  parcelCost: (i, L) => 4 * Math.pow(8, i) * Math.pow(1.25, L - 1),                // niveau L → L+1 (ralenti : 1,25 au lieu de 1,13)
+  parcelCost: (i, L) => 4 * Math.pow(8, i) * Math.pow(1.2, L - 1),                 // niveau L → L+1 (1,13 au départ, 1,25 trop lent, 1,2)
   parcelUnlock: i => i === 0 ? 0 : 500 * Math.pow(30, i - 1),
   parcelWood: i => i < 2 ? 0 : Math.round(12 * Math.pow(8, i - 2)),
   parcelMgr: i => 25 * Math.pow(12, i),
@@ -48,12 +48,12 @@ const BAL = {
   elevCap: L => Math.round(8 * Math.pow(1.2, L - 1) * Math.pow(2, miles(L))),   // unités par trajet
   elevSpeed: L => Math.min(5, 1.2 + 0.05 * (L - 1)),                           // étages par seconde
   elevStop: 0.5, elevUnload: 0.7,
-  elevCost: L => 10 * Math.pow(1.3, L - 1),
+  elevCost: L => 10 * Math.pow(1.25, L - 1),
   // charrette : elle charge le tas du haut, roule jusqu'à la grange, décharge et revient
   cartCap: L => Math.round(9 * Math.pow(1.2, L - 1) * Math.pow(2, miles(L))),
   cartTime: L => Math.max(1.2, 3.2 - 0.05 * (L - 1)),                          // aller simple, en secondes
   cartUnload: 0.7,
-  cartCost: L => 12 * Math.pow(1.3, L - 1),
+  cartCost: L => 12 * Math.pow(1.25, L - 1),
   elevMgr: 40, cartMgr: 60,
   work: 2.4, walk: 1.3,                         // parcelle : récolte, porte au panier, revient (5 s)
   pendCap: r => Math.max(40, r * 120),          // dépôt d'une parcelle : 2 min de production
@@ -83,7 +83,7 @@ const BAL = {
   vSwing: [0.45, 0.3, 0.15],                    // amplitude des 3 vagues (lente, moyenne, rapide)
   vPeriods: [9 * 3600, 2.3 * 3600, 37 * 60],    // durée de chaque vague, en secondes (variée selon le produit)
   // et ton propre cours s'effondre si tu lui vends trop d'un coup
-  vAbsorb: 900,                                 // le village encaisse ~15 min de ta production avant que son prix soit divisé par 2
+  vAbsorb: 1800,                                // le village encaisse ~30 min de ta production avant que son prix soit divisé par 2
   vHalfLife: 20 * 60,                           // il « oublie » tes ventes de moitié toutes les 20 min
 };
 
@@ -1421,7 +1421,9 @@ function showEvents(ev){
     if (x.k === "barn"){ const el = wrapEl.querySelector(".b2-barn"); flyGoods(wrapEl.querySelector(".b2-cart"), el, e, 4); if (el){ pop(el, "+" + fmtN(x.amt, 1) + " " + e, "b"); bounce(el); } }
   });
 }
-document.addEventListener("visibilitychange", () => { if (document.hidden && S && wrapEl) save(true); else if (!document.hidden && S && wrapEl){ lastTick = now(); } });
+// au retour sur l'appli (téléphone verrouillé, autre appli…) : on rattrape la production faite pendant l'absence
+document.addEventListener("visibilitychange", () => { if (document.hidden && S && wrapEl) save(true); else if (!document.hidden && S && wrapEl){ const t = now(), gained = BX.catchUp(S, t); lastTick = t; dirty = true; if (gained >= 1){ draw(); toast(`Pendant ton absence : +${fmtN(gained)} ${P[S.spec].e}`, "gold"); } } });
+window.addEventListener("pageshow", e => { if (e.persisted && S && wrapEl){ const t = now(); BX.catchUp(S, t); lastTick = t; dirty = true; draw(); } });
 
 /* =================== Affichage =================== */
 function draw(){
