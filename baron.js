@@ -502,7 +502,9 @@ const errText = e => {
 };
 
 /* =================== État =================== */
-let S = null, ME = null, W = { players:[], listings:[], trades:[], at:0 };
+let S = null, ME = null, W = { res:null, players:[], listings:[], trades:[], at:0 };
+// réserve du village commune : ce qu'il reste pour tout le monde sur ce créneau de 20 min
+const resLeft = k => { const r = W.res; if (!r || r.slot !== Math.floor(now() / BAL.slotMs)) return 0; return Math.max(0, Math.floor((+(r.size || {})[k] || 0) - (+(r.used || {})[k] || 0))); };
 let dirty = false, lastSave = 0, lastTick = 0, saving = false, loopT = null, wrapEl = null, view = "farm";
 let mkt = { k: null, period: "24h" };
 
@@ -579,7 +581,7 @@ async function loadWorld(force){
   if (!force && now() - W.at < 25000) return;
   try{
     const r = await rpc("baron2_world", {});
-    W = { players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
+    W = { res: r.reserve || null, players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
     if (S && BX.ensureOrders(S, now(), ME.id, groupProd())) dirty = true;
     if (wrapEl && (view === "market" || view === "village")) draw();
   }catch(e){}
@@ -1764,13 +1766,13 @@ function marketHTML(){
   const prods = BX.ALL.filter(x => !P[x].rec || BX.unlocked(S, "four"));
   const pills = prods.map(x => `<button class="b2-chip ${x === k ? "on" : ""}" data-a="mkt-k" data-k="${x}"><span class="n">${P[x].e} ${esc(P[x].label)}${x === BX.bigOf(Math.floor(now() / BAL.slotMs)) ? " 🎩" : ""}</span><span class="p">${fmtP(BX.vPrice(x, now()))}</span><span class="c">${chg(vChg(x))}</span></button>`).join("");
   const offers = W.listings.filter(l => l.product === k).sort((a, b) => a.price - b.price || a.id - b.id);
-  const resL = BX.reserveLeft(S, k, now());
+  const resL = resLeft(k);
   const rows = offers.map(l => {
     const mine = l.seller_id === ME.id;
     return `<div class="b2-ord ${mine ? "me" : ""}"><span class="who">${mine ? "Toi" : esc(nameOf(l.seller_id))}<small>${fmtAgo(new Date(l.created_at).getTime())}</small></span><span class="q">${fmtN(l.qty)}</span><span class="pr">${fmtP(+l.price)}</span>
       ${mine ? `<button class="b2-btn ghost" style="color:var(--chalk)!important;background:rgba(255,255,255,.1)!important" data-a="unlist" data-id="${l.id}">Retirer</button>` : `<button class="b2-btn" data-a="buy" data-id="${l.id}">Acheter</button>`}</div>`;
   }).join("");
-  const res = `<div class="b2-ord res"><span class="who">🏘️ Le village<small>Dépannage, cher et limité</small></span><span class="q">${fmtN(resL)}</span><span class="pr">${fmtP(BX.reservePrice(k))}</span>
+  const res = `<div class="b2-ord res"><span class="who">🏘️ Le village<small>Réserve commune</small></span><span class="q">${fmtN(resL)}</span><span class="pr">${fmtP(BX.reservePrice(k))}</span>
     <button class="b2-btn gold" data-a="buy-res" ${resL < 1 ? "disabled" : ""}>Acheter</button></div>`;
   const hist = W.trades.filter(t => t.product === k).slice(-12).reverse().map(t => `<div class="b2-ord"><span class="who">${esc(t.buyer_id === ME.id ? "Toi" : nameOf(t.buyer_id))} ← ${esc(t.seller_id === ME.id ? "toi" : nameOf(t.seller_id))}<small>${fmtAgo(t.ts)}</small></span><span class="q">${fmtN(t.qty)}</span><span class="pr">${fmtP(+t.price)}</span></div>`).join("");
   return `<div class="b2-board"><div class="b2-pills">${pills}</div><div class="b2-col" style="padding:4px 16px 24px">
@@ -1946,9 +1948,9 @@ function buySheet(l){
   sheetSum();
 }
 function resSheet(k){
-  const pr = BX.reservePrice(k), left = BX.reserveLeft(S, k, now()), max = Math.min(left, Math.floor(S.coins / pr));
+  const pr = BX.reservePrice(k), left = resLeft(k), max = Math.min(left, Math.floor(S.coins / pr));
   sheetCtx = { type:"res", k, price: pr };
-  sheet(`<h3>🏘️ Réserve du village</h3><p>Le village dépanne quand personne ne vend, mais à ${fmtP(pr)} l'unité, et seulement ${fmtN(left)} ${P[k].e} d'ici les prochaines commandes.</p>
+  sheet(`<h3>🏘️ Réserve du village</h3><p>Une seule réserve pour tout le village, à ${fmtP(pr)} l'unité. Il en reste ${fmtN(left)} ${P[k].e} jusqu'au prochain réassort (toutes les 20 min). Si tu la vides, plus personne ne peut en acheter ici.</p>
     ${qtyBlock(max, max, "q")}<div class="b2-sum" data-sum></div><button class="b2-btn gold big" data-a="confirm" ${max < 1 ? "disabled" : ""}>Acheter</button>`);
   sheetSum();
 }
@@ -1986,9 +1988,20 @@ async function confirm(){
     return;
   }
   if (c.type === "res"){
-    const cost = q * c.price; if (cost > S.coins) return;
-    S.coins -= cost; S.stock[c.k] += q; S.reserve.used[c.k] = (S.reserve.used[c.k] || 0) + q; S.stats.bought += cost; dirty = true;
-    closeSheet(); draw(); sound("up"); toast(`${fmtN(q)} ${P[c.k].e} achetés au village`); return;
+    if (q * c.price > S.coins) return;
+    queue(async () => {
+      let g = 0;
+      try{ g = +(await rpc("baron2_reserve_buy", { p_token: getToken(), p_product: c.k, p_qty: q })) || 0; }
+      catch(e){ toast(errText(e), "err"); if (btn) btn.disabled = false; return; }
+      if (g >= 1){
+        const cost = g * c.price; S.coins -= cost; S.stock[c.k] += g; S.stats.bought += cost; dirty = true;
+        if (W.res){ W.res.used = W.res.used || {}; W.res.used[c.k] = (+W.res.used[c.k] || 0) + g; }
+      }
+      closeSheet(); loadWorld(true); draw();
+      if (g < 1) toast(`Trop tard : quelqu'un a vidé la réserve de ${P[c.k].label.toLowerCase()}`, "err");
+      else { sound("up"); toast(g < q ? `Il n'en restait que ${fmtN(g)} ${P[c.k].e} : tu as tout pris` : `${fmtN(g)} ${P[c.k].e} achetés au village`); }
+    });
+    return;
   }
   if (c.type === "bake"){
     const nS = BAL.ovenSlots(S.oven.lvl); let idx = -1; for (let i = 0; i < nS; i++) if (!S.oven.slots[i]){ idx = i; break; }
