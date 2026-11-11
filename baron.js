@@ -14,7 +14,13 @@ try{
 const BX = (function(){
 const RAW = ["ble","oeufs","lait","fruits","miel","bois"];
 const CRAFT = ["pain","crepes","tarte","confiture","gateau"];
-const ALL = RAW.concat(CRAFT);
+// sous-produits : chaque ferme en sort un peu en plus de sa ressource (inutile pour elle, utile aux autres pour leurs outils)
+const SUB = ["paille","plumes","cuir","noyaux","cire","sciure"];
+const SUBOF = { ble:"paille", oeufs:"plumes", lait:"cuir", fruits:"noyaux", miel:"cire", bois:"sciure" };
+const ALL = RAW.concat(CRAFT, SUB);
+// produits du cellier (on y met une ressource brute, elle prend de la valeur en vieillissant)
+const AGED = ["biere","fromage","cidre","hydromel"];
+const AGEDOF = { ble:"biere", lait:"fromage", fruits:"cidre", miel:"hydromel" };
 const P = {
   ble:    { label:"Blé",    e:"🌾", floor:10, place:"Champ de blé", short:"Champ", who:"Céréalier·ère",  act:{ id:"arroser",  label:"Arroser",         e:"💧", txt:"Le blé arrosé pousse 2× plus vite" } },
   oeufs:  { label:"Œufs",   e:"🥚", floor:10, place:"Poulailler", short:"Poulailler",   who:"Éleveur·se",     act:{ id:"grain",    label:"Donner du grain", e:"🌽", txt:"Les poules bien nourries pondent 2× plus" } },
@@ -27,6 +33,31 @@ const P = {
   tarte:     { label:"Tarte aux fruits", e:"🥧", floor:45, rec:{ ble:1, fruits:1, oeufs:1 },        t:120 },
   confiture: { label:"Confiture",        e:"🫙", floor:30, rec:{ fruits:1, miel:1 },                t:90 },
   gateau:    { label:"Gâteau",           e:"🍰", floor:65, rec:{ ble:1, oeufs:1, lait:1, miel:1 },  t:180 },
+  paille: { label:"Paille", e:"🌿", floor:20, sub:true, of:"ble" },
+  plumes: { label:"Plumes", e:"🪶", floor:20, sub:true, of:"oeufs" },
+  cuir:   { label:"Cuir",   e:"🥾", floor:20, sub:true, of:"lait" },
+  noyaux: { label:"Noyaux", e:"🌰", floor:20, sub:true, of:"fruits" },
+  cire:   { label:"Cire",   e:"🕯️", floor:20, sub:true, of:"miel" },
+  sciure: { label:"Sciure", e:"🍂", floor:20, sub:true, of:"bois" },
+  biere:    { label:"Bière",    e:"🍺", floor:10, aged:true, src:"ble" },
+  fromage:  { label:"Fromage",  e:"🧀", floor:10, aged:true, src:"lait" },
+  cidre:    { label:"Cidre",    e:"🍾", floor:10, aged:true, src:"fruits" },
+  hydromel: { label:"Hydromel", e:"🍷", floor:10, aged:true, src:"miel" },
+};
+
+/* ---------- Outils de l'atelier ----------
+   3 emplacements (parcelles, monte-charge, charrette), 3 qualités. Un outil s'use : il dure un temps, puis il faut le refaire.
+   Ils se fabriquent avec du bois et les sous-produits des AUTRES fermes. Ils ne marchent que sur ta ferme principale. */
+const TQ = [
+  { id:"simple", label:"Simple", mul:1.3, h:1, qty:1,  need:1 },
+  { id:"solide", label:"Solide", mul:1.6, h:3, qty:4,  need:2 },
+  { id:"dore",   label:"Doré",   mul:2,   h:8, qty:12, need:3 },
+];
+const TOOLP = { ble:["Faux","🌙"], oeufs:["Mangeoire","🥣"], lait:["Trayeuse","🪣"], fruits:["Sécateur","✂️"], miel:["Enfumoir","💨"], bois:["Scie","🪚"] };
+const TOOLK = {
+  parcel: { where:"Parcelles",    txt:"Tes fermiers récoltent plus" },
+  elev:   { where:"Monte-charge", txt:"Le monte-charge porte plus", name:"Poulie", e:"⚙️", subs:["cuir","sciure"] },
+  cart:   { where:"Charrette",    txt:"La charrette porte plus",   name:"Roues cerclées", e:"🛞", subs:["paille","cire"] },
 };
 
 /* ---------- Réglages (tout l'équilibrage est ici) ---------- */
@@ -79,6 +110,15 @@ const BAL = {
   bonusMins: [5, 10], recipeBonus: 1.4,        // prime = X min de production (moyenne du groupe ou la tienne)
   reserveMult: 3, reserveSecs: 60,              // réserve du village : 3× le prix plancher, limitée
   startWood: 40, startCoins: 0,
+  subRatio: 0.1,                                // 1 sous-produit pour 10 unités récoltées
+  colpMult: 4,                                  // le colporteur vend les sous-produits 4× le prix de base (dépannage)
+  toolSecs: 600,                                // outil simple : ~10 min de production de sous-produit par ingrédient
+  atelierSecs: [900, 3600, 14400],              // construire / améliorer l'atelier : 15 min, 1 h, 4 h de tes revenus
+  atelierMax: 3,
+  cellarMax: 6,
+  cellarSecs: L => 1200 * Math.pow(2.2, L),     // construire (L=0) puis améliorer : 20 min de revenus, ×2,2 par niveau
+  cellarBatch: (L, eff) => Math.max(50, eff * 600 * (1 + 0.5 * (L - 1))),   // ~10 min de production par place
+  ageMul: h => 1 + 1.5 * (1 - Math.exp(-h / 8)),  // ×1,2 en 1 h · ×1,95 en 8 h · ×2,4 en 24 h
   // cours du village : chaque produit a son cours (le même pour tous), qui monte et descend tout seul
   vSwing: [0.45, 0.3, 0.15],                    // amplitude des 3 vagues (lente, moyenne, rapide)
   vPeriods: [9 * 3600, 2.3 * 3600, 37 * 60],    // durée de chaque vague, en secondes (variée selon le produit)
@@ -103,10 +143,17 @@ function fixFarm(f){
   for (const k of ["elev", "cart"]){ const x = f[k]; if (!x.ph){ x.ph = "idle"; x.t = 0; x.pos = 0; x.load = 0; x.fl = 0; } delete x.run; }
   return f;
 }
+// bonus des outils en ce moment (uniquement sur la ferme principale)
+function tmOf(s, key, now){
+  if (!s || key !== s.spec || !s.tools) return { p:1, e:1, c:1 };
+  const m = k => { const t = s.tools[k]; return t && t.until > now && TQ[t.q] ? TQ[t.q].mul : 1; };
+  return { p: m("parcel"), e: m("elev"), c: m("cart") };
+}
+const TM1 = { p:1, e:1, c:1 };
 const stockUnits = s => ALL.reduce((a, k) => a + (s.stock[k] || 0), 0);
 const barnCap = s => BAL.barnCap(s.barn);
 const barnFree = s => Math.max(0, barnCap(s) - stockUnits(s));
-const quaiCap = f => Math.max(BAL.elevCap(f.elev.lvl), BAL.cartCap(f.cart.lvl)) * 3;
+const quaiCap = (f, tm) => Math.max(BAL.elevCap(f.elev.lvl) * (tm ? tm.e : 1), BAL.cartCap(f.cart.lvl) * (tm ? tm.c : 1)) * 3;
 const pendTotal = f => f.parcels.reduce((a, p) => a + p.pend, 0);
 
 /* ---------- Rythmes moyens (affichage, goulot, hors ligne) ---------- */
@@ -115,14 +162,14 @@ const elevRate = (L, n) => BAL.elevCap(L) / elevTrip(L, n || 1);
 const cartRate = L => BAL.cartCap(L) / (2 * BAL.cartTime(L) + BAL.cartUnload);
 const farmMul = (s, key) => key === s.spec ? 1 : BAL.farm2Mul;
 const pRate = (s, key, i, L) => BAL.parcelRate(i, L) * farmMul(s, key);
-function farmRates(f, now, mul){
-  const boost = f.boost > now ? 2 : 1;
-  let P = 0; f.parcels.forEach((p, i) => P += BAL.parcelRate(i, p.lvl) * boost * (mul == null ? 1 : mul));
-  return { P, E: elevRate(f.elev.lvl, f.parcels.length), C: cartRate(f.cart.lvl), boost };
+function farmRates(f, now, mul, tm){
+  const boost = f.boost > now ? 2 : 1; tm = tm || TM1;
+  let P = 0; f.parcels.forEach((p, i) => P += BAL.parcelRate(i, p.lvl) * boost * (mul == null ? 1 : mul) * tm.p);
+  return { P, E: elevRate(f.elev.lvl, f.parcels.length) * tm.e, C: cartRate(f.cart.lvl) * tm.c, boost };
 }
 // production réelle possible (en unités / s), le maillon le plus faible de chaque ferme
 function effRate(s, now){
-  let t = 0; for (const k in s.farms){ const r = farmRates(s.farms[k], now || 0, farmMul(s, k)); t += Math.min(r.P / r.boost, r.E, r.C); }
+  let t = 0; for (const k in s.farms){ const r = farmRates(s.farms[k], now || 0, farmMul(s, k), tmOf(s, k, now || 0)); t += Math.min(r.P / r.boost, r.E, r.C); }
   return t;
 }
 const prodValue = s => effRate(s, 0) * 10;      // pièces / s au prix plancher
@@ -130,23 +177,23 @@ const prodValue = s => effRate(s, 0) * 10;      // pièces / s au prix plancher
 /* ---------- Simulation trajet par trajet (appli ouverte) ---------- */
 function startParcel(p){ if (p.ph !== "idle") return false; p.ph = "work"; p.t = 0; return true; }
 function startElev(f){ const e = f.elev; if (e.ph !== "idle") return false; e.ph = "down"; e.fl = 1; e.load = 0; e.t = 0; return true; }
-function startCart(f){ const c = f.cart; if (c.ph !== "idle") return false; c.load = Math.min(BAL.cartCap(c.lvl), f.quai); f.quai -= c.load; c.ph = "go"; c.pos = 0; c.t = 0; return true; }
+function startCart(f, m){ const c = f.cart; if (c.ph !== "idle") return false; c.load = Math.min(BAL.cartCap(c.lvl) * (m || 1), f.quai); f.quai -= c.load; c.ph = "go"; c.pos = 0; c.t = 0; return true; }
 function tickFarm(s, key, f, dt, now, ev){
-  const boost = f.boost > now ? 2 : 1, n = f.parcels.length, cyc = BAL.work + 2 * BAL.walk;
+  const boost = f.boost > now ? 2 : 1, n = f.parcels.length, cyc = BAL.work + 2 * BAL.walk, tm = tmOf(s, key, now);
   // les fermiers : récoltent, portent au panier, reviennent
   f.parcels.forEach((p, i) => {
     if (p.ph === "idle"){ if (!p.mgr) return; p.ph = "work"; p.t = 0; }
     p.t += dt;
     if (p.ph === "work" && p.t >= BAL.work){ p.ph = "go"; p.t = 0; }
     else if (p.ph === "go" && p.t >= BAL.walk){
-      const r = pRate(s, key, i, p.lvl) * boost, amt = r * cyc, cap = BAL.pendCap(r), nv = p.pend + amt;
+      const r = pRate(s, key, i, p.lvl) * boost * tm.p, amt = r * cyc, cap = BAL.pendCap(r), nv = p.pend + amt;
       if (nv > cap){ f.lost += nv - cap; p.pend = cap; } else p.pend = nv;
       ev && ev.push({ k:"drop", key, i, amt }); p.ph = "back"; p.t = 0;
     } else if (p.ph === "back" && p.t >= BAL.walk){ p.ph = "idle"; p.t = 0; if (p.mgr){ p.ph = "work"; } }
   });
   // le monte-charge
-  const e = f.elev, ecap = BAL.elevCap(e.lvl), v = BAL.elevSpeed(e.lvl);
-  if (e.ph === "idle" && e.mgr && pendTotal(f) >= 1 && f.quai < quaiCap(f) - 1) startElev(f);
+  const e = f.elev, ecap = BAL.elevCap(e.lvl) * tm.e, v = BAL.elevSpeed(e.lvl), qc = quaiCap(f, tm);
+  if (e.ph === "idle" && e.mgr && pendTotal(f) >= 1 && f.quai < qc - 1) startElev(f);
   if (e.ph === "down"){ e.pos += v * dt; if (e.pos >= e.fl){ e.pos = e.fl; e.ph = "load"; e.t = 0; } }
   else if (e.ph === "load"){
     e.t += dt;
@@ -159,24 +206,26 @@ function tickFarm(s, key, f, dt, now, ev){
   else if (e.ph === "unload"){
     e.t += dt;
     if (e.t >= BAL.elevUnload){
-      const put = Math.min(e.load, Math.max(0, quaiCap(f) - f.quai));
+      const put = Math.min(e.load, Math.max(0, qc - f.quai));
       if (put > 0){ f.quai += put; e.load -= put; ev && ev.push({ k:"top", key, amt: put }); }
       if (e.load < 1e-6){ e.load = 0; e.ph = "idle"; e.fl = 0; }
     }
   }
   // la charrette
   const c = f.cart, T = BAL.cartTime(c.lvl);
-  if (c.ph === "idle" && c.mgr && f.quai >= 1) startCart(f);
+  if (c.ph === "idle" && c.mgr && f.quai >= 1) startCart(f, tm.c);
   if (c.ph === "go"){ c.pos += dt / T; if (c.pos >= 1){ c.pos = 1; c.ph = "unload"; c.t = 0; } }
   else if (c.ph === "unload"){
     c.t += dt;
     if (c.t >= BAL.cartUnload){
       const put = Math.min(c.load, barnFree(s));
-      if (put > 0){ s.stock[key] += put; s.stats.produced += put; c.load -= put; ev && ev.push({ k:"barn", key, amt: put }); }
+      if (put > 0){ s.stock[key] += put; s.stats.produced += put; addSub(s, key, put); c.load -= put; ev && ev.push({ k:"barn", key, amt: put }); }
       if (c.load < 1e-6){ c.load = 0; c.ph = "back"; }
     }
   } else if (c.ph === "back"){ c.pos -= dt / T; if (c.pos <= 0){ c.pos = 0; c.ph = "idle"; } }
 }
+// le sous-produit arrive dans la grange avec la récolte
+function addSub(s, key, put){ const k = SUBOF[key]; if (k) s.stock[k] = (s.stock[k] || 0) + put * BAL.subRatio; }
 function step(s, dt, now, ev){
   let left = dt;
   while (left > 1e-9){ const d = Math.min(left, 0.05); for (const k in s.farms) tickFarm(s, k, s.farms[k], d, now, ev); left -= d; }
@@ -187,20 +236,20 @@ function step(s, dt, now, ev){
 function flush(s, key, f){
   const e = f.elev, c = f.cart;
   if (e.load > 0){ f.quai += e.load; e.load = 0; }
-  if (c.load > 0){ const put = Math.min(c.load, barnFree(s)); s.stock[key] += put; s.stats.produced += put; f.quai += c.load - put; c.load = 0; }
+  if (c.load > 0){ const put = Math.min(c.load, barnFree(s)); s.stock[key] += put; s.stats.produced += put; addSub(s, key, put); f.quai += c.load - put; c.load = 0; }
   e.ph = "idle"; e.pos = 0; e.fl = 0; c.ph = "idle"; c.pos = 0;
   f.parcels.forEach(p => { p.ph = "idle"; p.t = 0; });
 }
 function stepAvg(s, key, f, dt, now){
-  const boost = f.boost > now ? 2 : 1;
-  if (f.cart.mgr){ const mv = Math.min(cartRate(f.cart.lvl) * dt, f.quai, barnFree(s)); if (mv > 0){ f.quai -= mv; s.stock[key] += mv; s.stats.produced += mv; } }
+  const boost = f.boost > now ? 2 : 1, tm = tmOf(s, key, now);
+  if (f.cart.mgr){ const mv = Math.min(cartRate(f.cart.lvl) * tm.c * dt, f.quai, barnFree(s)); if (mv > 0){ f.quai -= mv; s.stock[key] += mv; s.stats.produced += mv; addSub(s, key, mv); } }
   if (f.elev.mgr){
-    const tot = pendTotal(f), take = Math.min(elevRate(f.elev.lvl, f.parcels.length) * dt, tot, Math.max(0, quaiCap(f) - f.quai));
+    const tot = pendTotal(f), take = Math.min(elevRate(f.elev.lvl, f.parcels.length) * tm.e * dt, tot, Math.max(0, quaiCap(f, tm) - f.quai));
     if (take > 0 && tot > 0){ const k = take / tot; f.parcels.forEach(p => p.pend -= p.pend * k); f.quai += take; }
   }
   f.parcels.forEach((p, i) => {
     if (!p.mgr) return;
-    const r = pRate(s, key, i, p.lvl) * boost, cap = BAL.pendCap(r), nv = p.pend + r * dt;
+    const r = pRate(s, key, i, p.lvl) * boost * tm.p, cap = BAL.pendCap(r), nv = p.pend + r * dt;
     if (nv > cap){ f.lost += nv - cap; p.pend = cap; } else p.pend = nv;
   });
 }
@@ -244,7 +293,55 @@ const costs = {
   barn: s => ({ coins: nice(BAL.barnCost(s.barn)), wood: BAL.barnWood(s.barn) }),
   oven: s => s.oven.lvl === 0 ? { coins: BAL.ovenBuild.coins, wood: BAL.ovenBuild.wood } : { coins: nice(BAL.ovenCost(s.oven.lvl)), wood: BAL.ovenWood(s.oven.lvl) },
   farm: s => { const c = BAL.farmCost(Object.keys(s.farms).length); return { coins: nice(c.coins), wood: c.wood }; },
+  // atelier et cellier : le prix suit tes revenus (sinon trop facile pour les riches, impossible pour les autres)
+  atelier: s => { const sec = BAL.atelierSecs[s.atelier || 0] || 0; return { coins: nice(Math.max(500, prodValue(s) * sec)), wood: nice(Math.max(30, effRate(s, 0) * sec * 0.05)) }; },
+  cellar: s => { const sec = BAL.cellarSecs(s.cellar.lvl); return { coins: nice(Math.max(800, prodValue(s) * sec)), wood: nice(Math.max(40, effRate(s, 0) * sec * 0.05)) }; },
 };
+
+/* ---------- Atelier ---------- */
+const toolName = (s, kind) => kind === "parcel" ? TOOLP[s.spec][0] : TOOLK[kind].name;
+const toolIcon = (s, kind) => kind === "parcel" ? TOOLP[s.spec][1] : TOOLK[kind].e;
+// ingrédients : les sous-produits des autres fermes (pour les parcelles : 2 fermes voisines dans le cercle)
+function toolSubs(s, kind){
+  if (kind !== "parcel") return TOOLK[kind].subs;
+  const i = RAW.indexOf(s.spec); return [SUB[(i + 1) % 6], SUB[(i + 3) % 6]];
+}
+function toolRecipe(s, kind, qi){
+  const q = Math.max(5, nice(effRate(s, 0) * BAL.subRatio * BAL.toolSecs * TQ[qi].qty));
+  const rec = {}; toolSubs(s, kind).forEach(k => rec[k] = q); rec.bois = (rec.bois || 0) + q * 2;
+  return rec;
+}
+const canCraft = (s, kind, qi) => { const r = toolRecipe(s, kind, qi); return (s.atelier || 0) >= TQ[qi].need && Object.keys(r).every(k => s.stock[k] >= r[k]); };
+function craftTool(s, kind, qi, now){
+  if (!canCraft(s, kind, qi)) return false;
+  const r = toolRecipe(s, kind, qi); for (const k in r) s.stock[k] -= r[k];
+  s.tools = s.tools || {}; s.tools[kind] = { q: qi, until: now + TQ[qi].h * 3600000, t0: now };
+  s.stats.tools = (s.stats.tools || 0) + 1;
+  return true;
+}
+
+/* ---------- Cellier ---------- */
+const cellarSlots = s => Math.min(BAL.cellarMax, s.cellar.lvl);
+const cellarBatch = s => nice(BAL.cellarBatch(s.cellar.lvl, effRate(s, 0)));
+const ageMul = (sl, t) => BAL.ageMul(Math.max(0, t - sl.t0) / 3600000);
+function cellarPut(s, src, q, t){
+  const k = AGEDOF[src]; if (!k) return false;
+  q = Math.min(Math.floor(q), Math.floor(s.stock[src] || 0), cellarBatch(s)); if (q < 1) return false;
+  let i = -1; for (let j = 0; j < cellarSlots(s); j++) if (!s.cellar.slots[j]){ i = j; break; }
+  if (i < 0) return false;
+  s.stock[src] -= q; s.cellar.slots[i] = { k, qty: q, t0: t };
+  return true;
+}
+// vendre un tonneau au village : cours du jour × vieillissement
+// le cours compte, mais moins que pour les produits frais (√ du cours) : le vieillissement reste ce qui fait la valeur
+const agedPrice = (k, t) => P[k].floor * Math.sqrt(vMul(k, t));
+const cellarValue = (sl, t) => Math.floor(sl.qty * agedPrice(sl.k, t) * ageMul(sl, t));
+function cellarSell(s, i, t){
+  const sl = s.cellar.slots[i]; if (!sl) return 0;
+  const g = cellarValue(sl, t); s.cellar.slots[i] = null;
+  s.coins += g; s.stats.earned += g; s.stats.villageSold += g; s.stats.aged = (s.stats.aged || 0) + g;
+  return g;
+}
 // combien de niveaux d'un coup (×1, ×10, max) et pour quel prix
 function bulk(costAt, startLvl, n, coins){
   let tot = 0, k = 0;
@@ -302,7 +399,7 @@ function genOrders(s, slot, playerId, groupProd){
   const prods = [pick(others), recipes.length ? pick(recipes) : pick(others), pick(others), pick(recipes.length && r() < .5 ? recipes : others)];
   const used = new Set([bigOf(slot)]);
   const list = prods.slice(0, BAL.orders).map((k, i) => {
-    if (used.has(k)) k = pick(ALL.filter(x => !used.has(x) && x !== s.spec && (recipes.length || !P[x].rec)));
+    if (used.has(k)) k = pick(ALL.filter(x => !used.has(x) && x !== s.spec && !P[x].sub && (recipes.length || !P[x].rec)));
     used.add(k);
     const rec = !!P[k].rec, n = rec ? Object.keys(P[k].rec).length : 1;
     const qty = Math.max(10, nice(eff * (rec ? between(...BAL.recipeSecs) / n : between(...BAL.orderSecs))));
@@ -348,7 +445,7 @@ const reservePrice = k => P[k].floor * BAL.reserveMult;
 /* ---------- Cours du village ----------
    Le même pour tout le monde (calculé à partir de l'heure, sans serveur) : 3 vagues de durées différentes
    par produit, donc jamais deux produits au même moment. Entre ~0,4× et ~2,5× le prix de base. */
-const VPH = {}; ALL.forEach(k => { const r = rng(hash("cours:" + k)); VPH[k] = BAL.vPeriods.map(T => ({ T: T * (0.75 + r() * 0.5), ph: r() * Math.PI * 2 })); });
+const VPH = {}; ALL.concat(AGED).forEach(k => { const r = rng(hash("cours:" + k)); VPH[k] = BAL.vPeriods.map(T => ({ T: T * (0.75 + r() * 0.5), ph: r() * Math.PI * 2 })); });
 function vMul(k, t){
   const sec = t / 1000; let x = 0;
   VPH[k].forEach((w, j) => x += BAL.vSwing[j] * Math.sin(2 * Math.PI * sec / w.T + w.ph));
@@ -380,6 +477,7 @@ function vSell(s, k, q, t){
 /* ---------- Fortune ---------- */
 function fortune(s){
   let st = 0; ALL.forEach(k => st += (s.stock[k] || 0) * P[k].floor);
+  if (s.cellar) s.cellar.slots.forEach(sl => { if (sl) st += sl.qty * P[sl.k].floor * ageMul(sl, Date.now()); });
   return Math.floor(s.coins + st + s.stats.invested * 0.5);
 }
 // ce qui se découvre petit à petit
@@ -392,22 +490,24 @@ function unlocked(s, what){
     case "marche": return np >= 2;
     case "village": return np >= 3;
     case "four": return np >= 3;
+    case "atelier": return np >= 3;
     case "farm2": return np >= BAL.farmNeeds && Object.keys(s.farms).length < BAL.farmMax;
   }
   return true;
 }
 // le maillon lent de la ferme
 function bottleneck(s, key, now){
-  const f = s.farms[key], r = farmRates(f, now, farmMul(s, key));
+  const f = s.farms[key], r = farmRates(f, now, farmMul(s, key), tmOf(s, key, now));
   if (barnFree(s) < 1) return "barn";
   const anyMgr = f.parcels.some(p => p.mgr) || f.elev.mgr || f.cart.mgr;
   if (!anyMgr) return null;
-  if (f.quai >= quaiCap(f) * 0.9 || r.C < Math.min(r.P, r.E) * 0.95) return "cart";
+  if (f.quai >= quaiCap(f, tmOf(s, key, now)) * 0.9 || r.C < Math.min(r.P, r.E) * 0.95) return "cart";
   if (r.E < r.P * 0.95) return "elev";
   return null;
 }
 
-return { RAW, CRAFT, ALL, P, BAL, gateOf, gateState, newParcel, fixFarm, quaiCap, pendTotal, elevRate, cartRate, startParcel, startElev, startCart, CHARS, MILES, isPalier, newState, newFarm, step, catchUp, farmRates, effRate, prodValue,
+return { SUB, SUBOF, AGED, AGEDOF, TQ, TOOLK, tmOf, toolName, toolIcon, toolRecipe, canCraft, craftTool, cellarSlots, cellarBatch, ageMul, cellarPut, cellarValue, cellarSell, agedPrice,
+  RAW, CRAFT, ALL, P, BAL, gateOf, gateState, newParcel, fixFarm, quaiCap, pendTotal, elevRate, cartRate, startParcel, startElev, startCart, CHARS, MILES, isPalier, newState, newFarm, step, catchUp, farmRates, effRate, prodValue,
   stockUnits, barnCap, barnFree, costs, canPay, pay, bulk, nextParcelCost, nice, ovenTick, ovenBatch, ovenDur, canBake,
   ensureOrders, genOrders, deliver, bigOf, fullBonus, reserveLeft, reservePrice, fortune, unlocked, bottleneck, farmMul, pRate, vMul, vPrice, vMyPrice, vValue, vSell };
 })();
@@ -555,7 +655,8 @@ function fixState(s){
   s.seen = s.seen || {}; s.oven = s.oven || { lvl:0, slots:[] }; s.orders = s.orders || { slot:0, list:[], prog:{} };
   s.reserve = s.reserve || { slot:0, used:{} }; s.vsold = s.vsold || {};
   if (!s.ord2){ s.ord2 = 1; s.orders = { slot:0, list:[], prog:{} }; }
-  s.ord3 = 1;                                                            // demandes surprises (11 nov. 2026)   // commandes du village en course (11 nov. 2026)
+  s.ord3 = 1; s.v4 = 1;                                                  // atelier, sous-produits, cellier
+  s.tools = s.tools || {}; s.atelier = s.atelier || 0; s.cellar = s.cellar || { lvl:0, slots:[] };                                                            // demandes surprises (11 nov. 2026)   // commandes du village en course (11 nov. 2026)
   s.claims = (s.claims || []).map(c => ({ id: c.id, slot: c.slot })); s.wonIds = s.wonIds || [];
   // une seule exploitation en plus : on garde la plus développée
   const extra = Object.keys(s.farms).filter(k => k !== s.spec);
@@ -954,6 +1055,14 @@ const STYLE = `
 .b2-slot .pb{height:8px;border-radius:999px;background:rgba(59,31,23,.12);margin-top:5px;overflow:hidden}
 .b2-slot .pb i{display:block;height:100%;background:linear-gradient(90deg,#F6C543,#F2873B);border-radius:999px}
 .b2-slot .t{font:800 12px var(--round);color:var(--ink2);font-variant-numeric:tabular-nums}
+.b2-slot small{display:block;font:700 12px var(--round);color:var(--ink2)}
+.b2-tool.off{opacity:.92}.b2-tool.off .ic{filter:grayscale(1);opacity:.6}
+.b2-tool.gold{background:linear-gradient(#FFF6D8,#FFE9A8)}
+.b2-q{display:inline-block;border-radius:999px;padding:1px 7px;font:800 10.5px var(--round);vertical-align:2px;background:#E8DCC8;color:var(--ink)}
+.b2-q.q1{background:#D9E6F5;color:#2C4E7C}.b2-q.q2{background:#F6C543;color:#5A3A00}
+.b2-mul{font:900 13px var(--round);color:var(--up2)}
+.b2-rec.lock{opacity:.55}
+.b2-cask .b2-btn{white-space:nowrap}
 .b2-slot.free{background:transparent;border:2px dashed rgba(124,74,36,.35);box-shadow:none;color:var(--ink2);font:700 13px var(--round)}
 .b2-rec{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid rgba(124,74,36,.15)}
 .b2-rec:first-of-type{border-top:0}
@@ -1315,6 +1424,7 @@ let sheetOpen = false;
 const TABS = [
   { id:"farm",    label:"Ferme",  i:"🌾" },
   { id:"barn",    label:"Grange", i:"🏚️", need:"grange",  why:"La grange s'ouvre dès ta première récolte livrée." },
+  { id:"atelier", label:"Atelier",i:"🛠️", need:"atelier", why:"L'atelier ouvre quand tu débloques ta 3e parcelle." },
   { id:"market",  label:"Marché", i:"📈", need:"marche",  why:"Le marché ouvre quand tu débloques ta 2e parcelle." },
   { id:"village", label:"Village",i:"🏘️", need:"village", why:"Le village ouvre quand tu débloques ta 3e parcelle." },
 ];
@@ -1459,7 +1569,7 @@ function draw(){
   const main = wrapEl.querySelector("#b2-main");
   const keep = main.dataset.v === view ? main.scrollTop : 0;
   if (view === "village") surpDot = false;
-  const html = view === "farm" ? farmHTML() : view === "barn" ? barnHTML() : view === "market" ? marketHTML() : villageHTML();
+  const html = view === "farm" ? farmHTML() : view === "barn" ? barnHTML() : view === "atelier" ? atelierHTML() : view === "market" ? marketHTML() : villageHTML();
   main.innerHTML = html; main.dataset.v = view; main.scrollTop = keep;
   wrapEl.querySelector("#b2-dock").innerHTML = view === "farm" ? dockHTML() : "";
   wrapEl.querySelector("#b2-main").classList.toggle("dockpad", view === "farm");
@@ -1535,6 +1645,16 @@ function live(force){
     const cg = wrapEl.querySelector("[data-live=cap]"); if (cg){ const cap = BX.barnCap(S), used = BX.stockUnits(S); cg.textContent = `${fmtN(used)} / ${fmtN(cap)}`; const gb = cg.closest(".b2-cap").querySelector(".b2-gbar"); gb.querySelector("i").style.width = Math.min(100, used / cap * 100) + "%"; gb.classList.toggle("full", used >= cap); }
     q("[data-stock]").forEach(e => e.textContent = fmtN(S.stock[e.dataset.stock]));
   }
+  if (view === "atelier"){
+    let expired = false;
+    q("[data-tool]").forEach(el => {
+      const kind = el.dataset.tool, left = toolLeft(kind, t), x = S.tools[kind];
+      if (!left){ expired = true; return; }
+      el.querySelector(".t").textContent = fmtT(left); el.querySelector(".pb i").style.width = (left / (BX.TQ[x.q].h * 3600000) * 100) + "%";
+    });
+    q("[data-cask]").forEach(el => { const sl = S.cellar.slots[+el.dataset.cask]; if (!sl) return; const v = el.querySelector("[data-val]"); if (v) v.textContent = fmtN(BX.cellarValue(sl, t)); });
+    if (expired && !sheetOpen) draw();
+  }
   if (view === "village"){
     const c = wrapEl.querySelector("[data-live=clock]"); if (c) c.textContent = fmtT((S.orders.slot + 1) * BAL.slotMs - t);
   }
@@ -1565,7 +1685,7 @@ function stationChip(kind, f){
 }
 function farmHTML(){
   const key = S.cur, f = S.farms[key], t = now(), pr = P[key];
-  const r = BX.farmRates(f, t, BX.farmMul(S, key)), cap = BX.barnCap(S), used = BX.stockUnits(S);
+  const r = BX.farmRates(f, t, BX.farmMul(S, key), BX.tmOf(S, key, t)), cap = BX.barnCap(S), used = BX.stockUnits(S);
   const farmsK = Object.keys(S.farms);
   const depth = i => `hsl(${26 - i * 1.2} ${42 - i * 2}% ${34 - i * 2.6}%)`;
   const tip = farmTip();
@@ -1730,6 +1850,75 @@ function ovenHTML(){
     <div class="b2-paper"><h2 class="b2-h2">Recettes<small>En vert : tu as l'ingrédient. En rouge : il te manque.</small></h2>${recs}</div>`;
 }
 
+/* ---------- Atelier : outils + cellier ---------- */
+const toolLeft = (kind, t) => { const x = S.tools && S.tools[kind]; return x && x.until > t ? x.until - t : 0; };
+function toolRow(kind, t){
+  const x = S.tools && S.tools[kind], left = toolLeft(kind, t), q = x && BX.TQ[x.q];
+  const nm = BX.toolName(S, kind), ic = BX.toolIcon(S, kind), K = BX.TOOLK[kind];
+  if (!left) return `<div class="b2-slot b2-tool off"><span class="ic">${ic}</span><div class="sp"><b>${esc(K.where)}</b><small>${x ? `${esc(nm)} · à refaire` : "Aucun outil"}</small></div><button class="b2-btn" data-a="tool" data-kind="${kind}">Fabriquer</button></div>`;
+  const tot = q.h * 3600000;
+  return `<div class="b2-slot b2-tool ${x.q === 2 ? "gold" : ""}" data-tool="${kind}"><span class="ic">${ic}</span><div class="sp"><b>${esc(nm)} <span class="b2-q q${x.q}">${q.label}</span> <span class="b2-mul">×${String(q.mul).replace(".", ",")}</span></b><small>${esc(K.txt)}</small><div class="pb"><i style="width:${left / tot * 100}%"></i></div></div><span class="t">${fmtT(left)}</span></div>`;
+}
+function cellarRow(i, t){
+  const sl = S.cellar.slots[i];
+  if (!sl) return `<button class="b2-slot free" data-a="cellar">＋ Place libre · mettre à vieillir</button>`;
+  const m = BX.ageMul(sl, t), h = (t - sl.t0) / 3600000;
+  return `<div class="b2-slot b2-cask" data-cask="${i}"><span class="ic">${P[sl.k].e}</span><div class="sp"><b>${fmtN(sl.qty)} ${esc(P[sl.k].label)}</b><small><span data-age>${h < 1 ? Math.floor(h * 60) + " min" : (Math.floor(h * 10) / 10).toLocaleString("fr-FR") + " h"} · ×${m.toFixed(2).replace(".", ",")}</span> ${vTrend(sl.k)}</small></div>
+    <button class="b2-btn gold" data-a="cel-sell" data-i="${i}">${COIN}<span data-val>${fmtN(BX.cellarValue(sl, t))}</span></button></div>`;
+}
+function atelierHTML(){
+  const t = now(), ac = BX.costs.atelier(S);
+  const tools = !S.atelier
+    ? `<div class="b2-paper"><div class="b2-oven cold"><div class="art" style="font-size:54px;display:grid;place-items:center">🛠️</div><div><h2 class="b2-h2">L'atelier<small>Fabrique des outils qui font tourner ta ferme plus vite. Ils s'usent et se fabriquent avec les sous-produits des autres fermes.</small></h2>
+      <button class="b2-btn gold" data-a="up-atelier" data-cc="${ac.coins}" data-cw="${ac.wood}">Construire ${price(ac)}</button></div></div></div>`
+    : `<div class="b2-paper"><div style="display:flex;align-items:center;gap:8px"><h2 class="b2-h2" style="flex:1;margin:0">L'atelier<small>Niveau ${S.atelier} · outils ${BX.TQ.filter(q => q.need <= S.atelier).map(q => q.label.toLowerCase()).join(", ")}</small></h2>
+      ${S.atelier < BAL.atelierMax ? `<button class="b2-btn" data-a="up-atelier" data-cc="${ac.coins}" data-cw="${ac.wood}">Niv. ${S.atelier + 1} ${price(ac)}</button>` : ""}</div>
+      <div class="b2-slots">${["parcel", "elev", "cart"].map(k => toolRow(k, t)).join("")}</div></div>`;
+  const cc = BX.costs.cellar(S), L = S.cellar.lvl;
+  const cellar = !L
+    ? `<div class="b2-paper"><div class="b2-oven cold"><div class="art" style="display:grid;place-items:center"><svg viewBox="0 0 60 64" width="58" height="62" aria-hidden="true"><path d="M12 6 Q6 32 12 58 H48 Q54 32 48 6Z" fill="#B87A45" stroke="#6B3E1E" stroke-width="2.5"/><path d="M10 18 H50 M9 46 H51" stroke="#5A5A5A" stroke-width="4"/><path d="M22 6 Q19 32 22 58 M38 6 Q41 32 38 58" stroke="#8C5A30" stroke-width="1.6" fill="none"/><ellipse cx="30" cy="6" rx="18" ry="3.5" fill="#D9A066" stroke="#6B3E1E" stroke-width="2"/><circle cx="30" cy="34" r="3" fill="#6B3E1E"/></svg></div><div><h2 class="b2-h2">Le cellier<small>Fais vieillir ton blé, ton lait, tes fruits ou ton miel : bière, fromage, cidre, hydromel. Plus tu attends, plus ça vaut cher. Vends au bon moment.</small></h2>
+      <button class="b2-btn gold" data-a="up-cellar" data-cc="${cc.coins}" data-cw="${cc.wood}">Construire ${price(cc)}</button></div></div></div>`
+    : `<div class="b2-paper"><div style="display:flex;align-items:center;gap:8px"><h2 class="b2-h2" style="flex:1;margin:0">Le cellier<small>Niveau ${L} · ${BX.cellarSlots(S)} place${BX.cellarSlots(S) > 1 ? "s" : ""} · ${fmtN(BX.cellarBatch(S))} max par tonneau</small></h2>
+      ${L < BAL.cellarMax ? `<button class="b2-btn" data-a="up-cellar" data-cc="${cc.coins}" data-cw="${cc.wood}">Niv. ${L + 1} ${price(cc)}</button>` : ""}</div>
+      <div class="b2-slots">${Array.from({ length: BX.cellarSlots(S) }, (_, i) => cellarRow(i, t)).join("")}</div>
+      <p class="b2-note">Le prix d'un tonneau = cours du village × vieillissement (×1,2 en 1 h, ×2 en 8 h, ×2,4 en 24 h).</p></div>`;
+  return `<div class="b2-barnin"><div class="b2-col b2-pad">${tools}${cellar}</div></div>`;
+}
+function toolSheet(kind){
+  const cur = S.tools && S.tools[kind] && toolLeft(kind, now()) > 0;
+  sheetCtx = null;
+  sheet(`<h3>${BX.toolIcon(S, kind)} ${esc(BX.toolName(S, kind))}</h3><p>${esc(BX.TOOLK[kind].txt)}, seulement sur ta ferme principale (${P[S.spec].e} ${esc(P[S.spec].label)}).${cur ? " <b>Il remplacera ton outil actuel.</b>" : ""}</p>
+    ${BX.TQ.map((q, qi) => {
+      const r = BX.toolRecipe(S, kind, qi), lock = S.atelier < q.need;
+      const ing = Object.keys(r).map(x => `<span class="${S.stock[x] >= r[x] ? "ok" : "ko"}">${P[x].e} ${fmtN(Math.floor(S.stock[x]))} / ${fmtN(r[x])}</span>`).join("");
+      const miss = Object.keys(r).find(x => S.stock[x] < r[x]);
+      const btn = lock ? `<span class="b2-note" style="margin:0">Atelier niv. ${q.need}</span>`
+        : BX.canCraft(S, kind, qi) ? `<button class="b2-btn" data-a="craft" data-kind="${kind}" data-q="${qi}">Fabriquer</button>`
+        : miss && BX.unlocked(S, "marche") ? `<button class="b2-btn red" data-a="goto-mkt" data-k="${miss}">Acheter ${P[miss].e}</button>` : "";
+      return `<div class="b2-rec ${lock ? "lock" : ""}"><span class="ic">${q.id === "dore" ? "🌟" : q.id === "solide" ? "💪" : "🔧"}</span><div class="sp"><b>${q.label} · ×${String(q.mul).replace(".", ",")} pendant ${q.h} h</b><div class="b2-ing">${ing}</div></div>${btn}</div>`;
+    }).join("")}`);
+}
+function cellarSheet(src){
+  if (!src){
+    sheetCtx = null;
+    sheet(`<h3>🛢️ Que mettre à vieillir ?</h3>${Object.keys(BX.AGEDOF).map(k => { const a = BX.AGEDOF[k]; return `<div class="b2-rec"><span class="ic">${P[a].e}</span><div class="sp"><b>${esc(P[a].label)}</b><div class="b2-ing"><span class="${S.stock[k] >= 1 ? "ok" : "ko"}">${P[k].e} ${fmtN(S.stock[k])}</span></div></div>
+      ${S.stock[k] >= 1 ? `<button class="b2-btn" data-a="cellar" data-k="${k}">Choisir</button>` : BX.unlocked(S, "marche") ? `<button class="b2-btn red" data-a="goto-mkt" data-k="${k}">Acheter ${P[k].e}</button>` : ""}</div>`; }).join("")}`);
+    return;
+  }
+  const a = BX.AGEDOF[src], max = Math.min(Math.floor(S.stock[src]), BX.cellarBatch(S));
+  sheetCtx = { type:"cellar", k: src };
+  sheet(`<h3>${P[a].e} ${esc(P[a].label)}</h3><p>${P[src].e} ${esc(P[src].label)} → ${P[a].e} ${esc(P[a].label)}. Le tonneau prend de la valeur avec le temps ; tu le vends quand tu veux, au cours du village.</p>
+    ${qtyBlock(max, max, "q")}<div class="b2-sum" data-sum></div><button class="b2-btn big" data-a="confirm">Mettre en tonneau</button>`);
+  sheetSum();
+}
+function colpSheet(k){
+  const pr = P[k].floor * BAL.colpMult, left = BX.reserveLeft(S, k, now()), max = Math.min(left, Math.floor(S.coins / pr));
+  sheetCtx = { type:"colp", k, price: pr };
+  sheet(`<h3>🧳 Le colporteur</h3><p>Il dépanne en ${esc(P[k].label.toLowerCase())} quand personne n'en vend, mais il est cher : ${fmtP(pr)} l'unité. Il lui en reste ${fmtN(left)} ${P[k].e} pour toi jusqu'au prochain passage (toutes les 20 min).</p>
+    ${qtyBlock(max, max, "q")}<div class="b2-sum" data-sum></div><button class="b2-btn gold big" data-a="confirm" ${max < 1 ? "disabled" : ""}>Acheter</button>`);
+  sheetSum();
+}
+
 /* ---------- Marché ---------- */
 function tradesOf(k, since){ return W.trades.filter(t => t.product === k && (!since || t.ts >= since)); }
 function quote(k){
@@ -1799,17 +1988,20 @@ function marketHTML(){
     return `<div class="b2-ord ${mine ? "me" : ""}"><span class="who">${mine ? "Toi" : esc(nameOf(l.seller_id))}<small>${fmtAgo(new Date(l.created_at).getTime())}</small></span><span class="q">${fmtN(l.qty)}</span><span class="pr">${fmtP(+l.price)}</span>
       ${mine ? `<button class="b2-btn ghost" style="color:var(--chalk)!important;background:rgba(255,255,255,.1)!important" data-a="unlist" data-id="${l.id}">Retirer</button>` : `<button class="b2-btn" data-a="buy" data-id="${l.id}">Acheter</button>`}</div>`;
   }).join("");
-  const res = `<div class="b2-ord res"><span class="who">🏘️ Le village<small>Réserve commune</small></span><span class="q">${fmtN(resL)}</span><span class="pr">${fmtP(BX.reservePrice(k))}</span>
+  const colpL = P[k].sub ? BX.reserveLeft(S, k, now()) : 0;
+  const res = P[k].sub ? `<div class="b2-ord res"><span class="who">🧳 Le colporteur<small>Dépannage, cher</small></span><span class="q">${fmtN(colpL)}</span><span class="pr">${fmtP(P[k].floor * BAL.colpMult)}</span>
+    <button class="b2-btn gold" data-a="buy-colp" ${colpL < 1 ? "disabled" : ""}>Acheter</button></div>`
+    : `<div class="b2-ord res"><span class="who">🏘️ Le village<small>Réserve commune</small></span><span class="q">${fmtN(resL)}</span><span class="pr">${fmtP(BX.reservePrice(k))}</span>
     <button class="b2-btn gold" data-a="buy-res" ${resL < 1 ? "disabled" : ""}>Acheter</button></div>`;
   const hist = W.trades.filter(t => t.product === k).slice(-12).reverse().map(t => `<div class="b2-ord"><span class="who">${esc(t.buyer_id === ME.id ? "Toi" : nameOf(t.buyer_id))} ← ${esc(t.seller_id === ME.id ? "toi" : nameOf(t.seller_id))}<small>${fmtAgo(t.ts)}</small></span><span class="q">${fmtN(t.qty)}</span><span class="pr">${fmtP(+t.price)}</span></div>`).join("");
   return `<div class="b2-board"><div class="b2-pills">${pills}</div><div class="b2-col" style="padding:4px 16px 24px">
     <div class="b2-quote"><div><div style="font:800 13px var(--round);color:var(--chalk2)">${P[k].e} ${esc(P[k].label)} · cours du village</div><span class="big">${COIN}${fmtP(BX.vPrice(k, now()))}</span><span class="ch">${chg(vChg(k))} <small style="opacity:.6">1 h</small></span></div>
-      <div class="lim">${qv.p != null ? `Entre joueurs (24 h) <b>${fmtP(qv.p)}</b><br>` : ""}${BX.vMyPrice(S, k, now()) < BX.vPrice(k, now()) * 0.95 ? `Pour toi <b>${fmtP(BX.vMyPrice(S, k, now()))}</b> (tu as trop vendu)<br>` : ""}Réserve du village <b>${fmtP(BX.reservePrice(k))}</b><br>Tu en as <b>${fmtN(S.stock[k])}</b></div></div>
+      <div class="lim">${qv.p != null ? `Entre joueurs (24 h) <b>${fmtP(qv.p)}</b><br>` : ""}${BX.vMyPrice(S, k, now()) < BX.vPrice(k, now()) * 0.95 ? `Pour toi <b>${fmtP(BX.vMyPrice(S, k, now()))}</b> (tu as trop vendu)<br>` : ""}${P[k].sub ? `Colporteur <b>${fmtP(P[k].floor * BAL.colpMult)}</b>` : `Réserve du village <b>${fmtP(BX.reservePrice(k))}</b>`}<br>Tu en as <b>${fmtN(S.stock[k])}</b></div></div>
     <div class="b2-seg">${["1h", "24h", "7j"].map(p => `<button class="${mkt.period === p ? "on" : ""}" data-a="mkt-p" data-p="${p}">${p === "1h" ? "1 h" : p === "24h" ? "24 h" : "7 j"}</button>`).join("")}</div>
     <div class="b2-chart">${chartSVG(k, mkt.period)}</div>
     <div class="b2-two"><button class="b2-btn" data-a="list" data-k="${k}" ${S.stock[k] < 1 ? "disabled" : ""}>Mettre en vente</button><button class="b2-btn gold" data-a="sell" data-k="${k}" ${S.stock[k] < 1 ? "disabled" : ""}>Vendre au village</button></div>
     <h3 class="b2-h3">Offres des joueurs</h3>
-    <div class="b2-book">${rows || `<div class="b2-empty">Personne n'en vend pour l'instant.${k === S.spec ? " Tu es le seul à en produire : à toi de fixer ton prix." : ""}</div>`}${res}</div>
+    <div class="b2-book">${rows || `<div class="b2-empty">Personne n'en vend pour l'instant.${k === S.spec || k === BX.SUBOF[S.spec] ? " Tu es le seul à en produire : à toi de fixer ton prix." : ""}</div>`}${res}</div>
     <h3 class="b2-h3">Dernières transactions</h3>
     <div class="b2-book b2-hist">${hist || `<div class="b2-empty">Aucune transaction encore.</div>`}</div>
   </div></div>`;
@@ -2009,7 +2201,8 @@ function sheetSum(){
   const s = wrapEl.querySelector("[data-sum]");
   if (c.type === "sell"){ const g = BX.vValue(S, c.k, q, now()); s.innerHTML = `<span>Le village te paie${q > 0 ? ` <small>(${fmtP(g / q)} l'unité)</small>` : ""}</span><span>${COIN}${fmtN(g)}</span>`; }
   if (c.type === "list"){ const p = Math.max(0, +String(wrapEl.querySelector("[data-price]").value).replace(",", ".") || 0); s.innerHTML = `<span>Si tout part</span><span>${COIN}${fmtN(q * p)}</span>`; }
-  if (c.type === "buy" || c.type === "res"){ s.innerHTML = `<span>Tu paies</span><span>${COIN}${fmtN(q * c.price)}</span>`; const b = wrapEl.querySelector("[data-a=confirm]"); if (b) b.disabled = q < 1 || q * c.price > S.coins; }
+  if (c.type === "cellar"){ const a = BX.AGEDOF[c.k]; s.innerHTML = `<span>Vaut aujourd'hui ${COIN}${fmtN(q * BX.agedPrice(a, now()))}, dans 8 h environ</span><span>${COIN}${fmtN(q * BX.agedPrice(a, now()) * BAL.ageMul(8))}</span>`; }
+  if (c.type === "buy" || c.type === "res" || c.type === "colp"){ s.innerHTML = `<span>Tu paies</span><span>${COIN}${fmtN(q * c.price)}</span>`; const b = wrapEl.querySelector("[data-a=confirm]"); if (b) b.disabled = q < 1 || q * c.price > S.coins; }
   if (c.type === "bake"){ s.innerHTML = `<span>Cuisson</span><span>${fmtT(BX.ovenDur(S, c.k))}</span>`; }
 }
 function sellSheet(k){
@@ -2032,7 +2225,7 @@ function listSheet(k){
   sheet(`<h3>${P[k].e} Mettre en vente</h3><p>Tu fixes ton prix. Tes produits sortent de la grange et attendent un acheteur ; tu peux les retirer quand tu veux.${cheapest ? ` L'offre la moins chère est à ${fmtP(+cheapest.price)}.` : ""}</p>
     ${qtyBlock(S.stock[k], S.stock[k] / 2, "q")}
     <div class="b2-field"><i class="b2-coin"></i><input data-price inputmode="decimal" value="${String(Math.round(sug * 10) / 10).replace(".", ",")}" aria-label="Prix à l'unité"><span style="font:700 13px var(--round);color:var(--ink2)">l'unité</span></div>
-    <p class="b2-note">Cours du village : ${fmtP(BX.vPrice(k, now()))} · Réserve du village : ${fmtP(BX.reservePrice(k))}</p>
+    <p class="b2-note">Cours du village : ${fmtP(BX.vPrice(k, now()))} · ${P[k].sub ? `Colporteur : ${fmtP(P[k].floor * BAL.colpMult)}` : `Réserve du village : ${fmtP(BX.reservePrice(k))}`}</p>
     <div class="b2-sum" data-sum></div><button class="b2-btn big" data-a="confirm">Mettre en vente</button>`);
   sheetSum();
 }
@@ -2099,6 +2292,16 @@ async function confirm(){
     });
     return;
   }
+  if (c.type === "colp"){
+    const left = BX.reserveLeft(S, c.k, now()), n = Math.min(q, left), cost = n * c.price;
+    if (n < 1 || cost > S.coins) return;
+    S.coins -= cost; S.stock[c.k] += n; S.stats.bought += cost; S.reserve.used[c.k] = (S.reserve.used[c.k] || 0) + n; dirty = true;
+    closeSheet(); draw(); sound("up"); toast(`${fmtN(n)} ${P[c.k].e} achetés au colporteur`); return;
+  }
+  if (c.type === "cellar"){
+    if (!BX.cellarPut(S, c.k, q, now())){ toast("Plus de place dans le cellier.", "err"); closeSheet(); return; }
+    dirty = true; closeSheet(); view = "atelier"; draw(); sound("up"); toast(`🛢️ ${fmtN(q)} ${P[BX.AGEDOF[c.k]].label.toLowerCase()} en tonneau`); return;
+  }
   if (c.type === "bake"){
     const nS = BAL.ovenSlots(S.oven.lvl); let idx = -1; for (let i = 0; i < nS; i++) if (!S.oven.slots[i]){ idx = i; break; }
     if (idx < 0 || BX.canBake(S, c.k) < q) return;
@@ -2160,7 +2363,7 @@ function onClick(e){
     }
     case "harvest": {
       f.parcels.forEach(p => BX.startParcel(p));
-      if (BX.pendTotal(f) >= 1) BX.startElev(f); if (f.quai >= 1) BX.startCart(f);
+      if (BX.pendTotal(f) >= 1) BX.startElev(f); if (f.quai >= 1) BX.startCart(f, BX.tmOf(S, S.cur, now()).c);
       sound("tap"); bounce(b); buzz(10); markSeen("tip_start"); live(); return;
     }
     case "tap-elev": case "tap-cart": {
@@ -2169,7 +2372,7 @@ function onClick(e){
       if (st.ph !== "idle"){ floatText(b, st.mgr ? "Ton contremaître s'en occupe" : "Déjà en route"); return; }
       if (el && BX.pendTotal(f) < 1){ toast("Les paniers sont vides : touche d'abord un champ pour récolter."); return; }
       if (!el && f.quai < 1){ toast("Rien à transporter : le monte-charge doit d'abord remonter un panier."); return; }
-      if (el ? BX.startElev(f) : BX.startCart(f)){ sound("tap"); }
+      if (el ? BX.startElev(f) : BX.startCart(f, BX.tmOf(S, S.cur, now()).c)){ sound("tap"); }
       live(); return;
     }
     case "hire": {
@@ -2236,6 +2439,22 @@ function onClick(e){
       toast(`Travaux lancés : ${fmtT(gs.g.ms)}`); return;
     }
     case "up-barn": { const c = BX.costs.barn(S); if (!paid(c, b)) return; S.barn++; sound("done"); draw(); toast(`Grange agrandie : ${fmtN(BX.barnCap(S))} places`); return; }
+    case "up-atelier": { if ((S.atelier || 0) >= BAL.atelierMax) return; const c = BX.costs.atelier(S); if (!paid(c, b)) return; S.atelier = (S.atelier || 0) + 1; sound("done"); draw(); toast(S.atelier === 1 ? "🛠️ L'atelier est construit" : `Atelier niveau ${S.atelier} : outils ${BX.TQ[S.atelier - 1].label.toLowerCase()}s débloqués`, "gold"); return; }
+    case "up-cellar": { if (S.cellar.lvl >= BAL.cellarMax) return; const c = BX.costs.cellar(S); if (!paid(c, b)) return; S.cellar.lvl++; sound("done"); draw(); toast(S.cellar.lvl === 1 ? "🛢️ Le cellier est construit" : `Cellier niveau ${S.cellar.lvl}`, "gold"); return; }
+    case "tool": toolSheet(b.dataset.kind); return;
+    case "craft": {
+      const kind = b.dataset.kind, qi = +b.dataset.q;
+      if (!BX.craftTool(S, kind, qi, now())){ sound("err"); toast("Il te manque des ingrédients.", "err"); return; }
+      dirty = true; closeSheet(); draw(); sound("done"); buzz(30);
+      toast(`${BX.toolIcon(S, kind)} Nouvel outil : ${esc(BX.toolName(S, kind))} ${BX.TQ[qi].label.toLowerCase()} · ×${String(BX.TQ[qi].mul).replace(".", ",")} pendant ${BX.TQ[qi].h} h`, "gold");
+      return;
+    }
+    case "cellar": cellarSheet(b.dataset.k); return;
+    case "cel-sell": {
+      const g = BX.cellarSell(S, +b.dataset.i, now()); if (!g) return; dirty = true;
+      sound("coin"); coinsFly(b, 6); toast(`+${COIN}${fmtN(g)}`, "gold"); draw(); return;
+    }
+    case "buy-colp": colpSheet(mkt.k); return;
     case "up-oven": { const c = BX.costs.oven(S); if (!paid(c, b)) return; S.oven.lvl++; sound("done"); draw(); toast(S.oven.lvl === 1 ? "🔥 Le four est construit" : `Four niveau ${S.oven.lvl}`); return; }
     case "farm2": farm2Sheet(); return;
     case "farm2-go": {
