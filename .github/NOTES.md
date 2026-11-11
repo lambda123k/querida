@@ -74,6 +74,12 @@ ne sont volontairement pas écrits ici : les demander à Naim.
 - À faire : Naim trouve que l'interface « ne donne pas envie de jouer ». Piste : moins de marron et de texte, décor plus vif,
   retours plus satisfaisants, objectif visible.
 
+- Malice (11 nov., branche `baron-malice`, PAS encore en ligne) : Cartes Chance (une par créneau de 20 min, la même pour tous,
+  calculée sur le téléphone : `CARDS`/`cardOf` dans le moteur, bandeau sous la barre du haut), Almanach (15 min de prod, dévoile
+  2 cartes, `S.alma`), prête-nom (+15 %, `baron2_buy2`, `S.hid` = mes achats cachés), contrats d'exclusivité 1 h
+  (`baron2_contracts`, `baron2_ctr_*`, récolte détournée par `addProd` vers `S.ctr.out`, envoyée par `baron2_ctr_deliver`).
+  Mise en ligne : appliquer `supabase/baron2_03_malice.sql` AVANT de fusionner dans main.
+
 ## Tests
 - Serveur local `python3 -m http.server 8770` dans le dépôt, puis Playwright (Chromium préinstallé)
   avec un faux client Supabase injecté à la place de `supabase.min.js`. Toujours tester côté amis ET côté
