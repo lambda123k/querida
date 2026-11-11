@@ -1094,6 +1094,11 @@ const STYLE = `
 .b2-scroll.dockpad{padding-bottom:76px}
 .b2-quote{flex-wrap:wrap}
 .b2-quote .ch{white-space:nowrap}
+.b2-scroll{overflow-x:hidden}
+.b2-oven > div{min-width:0}
+.b2-oven .b2-btn{max-width:100%;white-space:normal;display:inline-flex;flex-wrap:wrap;justify-content:center;align-items:center;column-gap:6px;row-gap:2px}
+.b2-paper{min-width:0;max-width:100%;box-sizing:border-box}
+.b2-barnrow{flex-wrap:wrap}
 @media (max-width:420px){
   .b2-hud{padding-left:8px;padding-right:8px}
   .b2-hud .b2-col{gap:5px}
@@ -1113,6 +1118,9 @@ const STYLE = `
   .b2-act{padding:9px 13px;font-size:14px!important}
   .b2-quote .big{font-size:32px}
   .b2-quote .lim{text-align:left}
+  .b2-rate{font-size:14px;gap:2px}.b2-rate .b2-ic{font-size:15px}.b2-rate small{display:none}
+  .b2-oven{flex-wrap:wrap;align-items:center}.b2-oven .art{width:84px}
+  .b2-oven .b2-btn{font-size:14px!important}
 }
 @media (max-width:345px){
   .b2-hud .b2-col{gap:4px}
@@ -1670,7 +1678,7 @@ function barnHTML(){
     <div class="b2-paper">
       <h2 class="b2-h2">Ta grange<small>Niveau ${S.barn}. Quand elle est pleine, ta ferme s'arrête.</small></h2>
       <div class="b2-cap"><div class="b2-gbar"><i style="width:${Math.min(100, used / cap * 100)}%"></i></div><b data-live="cap">${fmtN(used)} / ${fmtN(cap)}</b></div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:10px"><span class="b2-note" style="margin:0;flex:1">Agrandir : ${fmtN(BAL.barnCap(S.barn + 1))} places</span>
+      <div class="b2-barnrow" style="display:flex;align-items:center;gap:8px;margin-top:10px"><span class="b2-note" style="margin:0;flex:1 1 120px">Agrandir : ${fmtN(BAL.barnCap(S.barn + 1))} places</span>
       <button class="b2-btn" data-a="up-barn" data-cc="${bc.coins}" data-cw="${bc.wood}">Agrandir ${price(bc)}</button></div>
     </div>
     <div class="b2-paper"><h2 class="b2-h2">Le stock<small>Touche un produit pour le vendre.</small></h2><div class="b2-stock">${tiles}</div></div>
