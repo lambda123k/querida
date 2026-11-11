@@ -1079,6 +1079,7 @@ const STYLE = `
 
 /* ======== MARCHÉ (le tableau à la craie) ======== */
 .b2-board{background:var(--board);color:var(--chalk);min-height:100%;background-image:radial-gradient(rgba(255,255,255,.035) 1px,transparent 1px);background-size:6px 6px}
+.b2-luxe{display:grid;gap:8px}.b2-luxe .b2-slot{color:var(--ink)}
 .b2-mhead{padding:10px 2px 2px}.b2-mhead h2{margin:0;font:400 italic 30px var(--disp);color:var(--chalk)}.b2-mhead small{font:700 12.5px var(--round);color:var(--chalk2)}
 .b2-msec{margin:18px 2px 8px;font:800 12px var(--round);letter-spacing:.08em;text-transform:uppercase;color:var(--chalk2)}
 .b2-mlist{background:var(--board2);border-radius:16px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(239,234,219,.08)}
@@ -1677,6 +1678,7 @@ function live(force){
     const cg = wrapEl.querySelector("[data-live=cap]"); if (cg){ const cap = BX.barnCap(S), used = BX.stockUnits(S); cg.textContent = `${fmtN(used)} / ${fmtN(cap)}`; const gb = cg.closest(".b2-cap").querySelector(".b2-gbar"); gb.querySelector("i").style.width = Math.min(100, used / cap * 100) + "%"; gb.classList.toggle("full", used >= cap); }
     q("[data-stock]").forEach(e => e.textContent = fmtN(S.stock[e.dataset.stock]));
   }
+  if (view === "market") q("[data-cask]").forEach(el => { const sl = S.cellar.slots[+el.dataset.cask]; if (!sl) return; const v = el.querySelector("[data-val]"); if (v) v.textContent = fmtN(BX.cellarValue(sl, t)); });
   if (view === "atelier"){
     let expired = false;
     q("[data-tool]").forEach(el => {
@@ -1965,7 +1967,7 @@ function quote(k){
   return { p, ch, n: all.length };
 }
 // variation du cours du village sur la dernière heure
-const vChg = k => { const t = now(), a = BX.vPrice(k, t - 3600000); return (BX.vPrice(k, t) - a) / a * 100; };
+const vChg = k => { const t = now(), a = priceOf(k, t - 3600000); return (priceOf(k, t) - a) / a * 100; };
 const vTrend = k => { const c = vChg(k); return c > 3 ? `<span class="b2-tr up">▲</span>` : c < -3 ? `<span class="b2-tr down">▼</span>` : ""; };
 const chg = ch => ch == null ? `<span class="flat">—</span>` : `<span class="${ch > 0.05 ? "up" : ch < -0.05 ? "down" : "flat"}">${ch > 0 ? "+" : ""}${ch.toFixed(1).replace(".", ",")} %</span>`;
 function candles(k, period){
@@ -1981,10 +1983,11 @@ function candles(k, period){
   }
   return out;
 }
+const priceOf = (k, t) => P[k].aged ? BX.agedPrice(k, t) : BX.vPrice(k, t);
 function chartSVG(k, period){
   const cs = candles(k, period), W_ = 340, H = 170, padL = 4, padR = 34, top = 10, bot = 22;
   const span = { "1h": 3600000, "24h": 86400000, "7j": 7 * 86400000 }[period], tN = now(), NP = 90;
-  const curve = Array.from({ length: NP + 1 }, (_, j) => BX.vPrice(k, tN - span + span * j / NP));
+  const curve = Array.from({ length: NP + 1 }, (_, j) => priceOf(k, tN - span + span * j / NP));
   const vals = cs.filter(Boolean).flatMap(c => [c.h, c.l]).concat(curve);
   let mx = Math.max(...vals) * 1.12, mn = Math.min(...vals) * 0.9; if (mx - mn < 1) mx = mn + 1;
   const y = v => top + (mx - v) / (mx - mn) * (H - top - bot);
@@ -2010,13 +2013,20 @@ function chartSVG(k, period){
 }
 // petite courbe du cours du village sur 3 h (couleur : variation sur 1 h, comme le %)
 function spark(k){
-  const t = now(), n = 36, span = 3 * 3600000, v = Array.from({ length: n + 1 }, (_, j) => BX.vPrice(k, t - span + span * j / n));
+  const t = now(), n = 36, span = 3 * 3600000, v = Array.from({ length: n + 1 }, (_, j) => priceOf(k, t - span + span * j / n));
   const mx = Math.max(...v), mn = Math.min(...v), y = x => 3 + (mx - x) / Math.max(1e-9, mx - mn) * 22;
   const up = vChg(k) >= 0;
   return `<svg class="b2-spark" viewBox="0 0 72 28" aria-hidden="true"><path d="${v.map((x, j) => (j ? "L" : "M") + (j * 72 / n).toFixed(1) + " " + y(x).toFixed(1)).join(" ")}" fill="none" stroke="${up ? "#6EE09A" : "#FF8A70"}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
 }
 function marketListHTML(){
+  const casks = x => S.cellar.slots.filter(sl => sl && sl.k === x);
   const row = x => {
+    if (P[x].aged){
+      const c = casks(x), q = c.reduce((a, sl) => a + sl.qty, 0);
+      return `<button class="b2-mrow" data-a="mkt-k" data-k="${x}"><span class="ic">${P[x].e}</span>
+      <span class="nm"><b>${esc(P[x].label)}</b><small>${c.length ? `${c.length} tonneau${c.length > 1 ? "x" : ""} · ${fmtN(q)}` : `Avec ${P[P[x].src].e} ${esc(P[P[x].src].label.toLowerCase())}, au cellier`}</small></span>
+      ${spark(x)}<span class="pr"><b>${fmtP(priceOf(x, now()))}</b>${chg(vChg(x))}</span></button>`;
+    }
     const n = W.listings.filter(l => l.product === x && l.seller_id !== ME.id).length, mine = x === S.spec || x === BX.SUBOF[S.spec];
     return `<button class="b2-mrow" data-a="mkt-k" data-k="${x}"><span class="ic">${P[x].e}</span>
       <span class="nm"><b>${esc(P[x].label)}${x === bigNow() ? ` <span class="b2-tag gold">🎩 Grande commande</span>` : ""}${mine ? ` <span class="b2-tag">Toi</span>` : ""}</b><small>${S.stock[x] >= 1 ? `Tu en as ${fmtN(S.stock[x])}` : "Tu n'en as pas"}${n ? ` · ${n} offre${n > 1 ? "s" : ""}` : ""}</small></span>
@@ -2025,11 +2035,27 @@ function marketListHTML(){
   const sec = (title, list) => list.length ? `<h3 class="b2-msec">${title}</h3><div class="b2-mlist">${list.map(row).join("")}</div>` : "";
   return `<div class="b2-board"><div class="b2-col" style="padding:6px 16px 28px">
     <div class="b2-mhead"><h2>Le marché</h2><small>Cours du village · courbe sur 3 h · variation sur 1 h</small></div>
-    ${sec("Récoltes", BX.RAW)}${BX.unlocked(S, "four") ? sec("Recettes", BX.CRAFT) : ""}${sec("Sous-produits", BX.SUB)}
+    ${sec("Récoltes", BX.RAW)}${BX.unlocked(S, "four") ? sec("Recettes", BX.CRAFT) : ""}${sec("Sous-produits", BX.SUB)}${sec("Produits de luxe", BX.AGED)}
+  </div></div>`;
+}
+function luxeHTML(k){
+  const t = now(), src = P[k].src, my = S.cellar.slots.map((sl, i) => sl && sl.k === k ? cellarRow(i, t) : "").join("");
+  const free = S.cellar.lvl && S.cellar.slots.slice(0, BX.cellarSlots(S)).filter(Boolean).length < BX.cellarSlots(S);
+  return `<div class="b2-board"><div class="b2-col" style="padding:4px 16px 24px">
+    <div class="b2-mtop"><button class="b2-back" data-a="mkt-back" aria-label="Retour au marché">‹</button><span class="ic">${P[k].e}</span><b>${esc(P[k].label)}</b></div>
+    <div class="b2-quote"><div><div style="font:800 13px var(--round);color:var(--chalk2)">Cours du village (avant vieillissement)</div><span class="big">${COIN}${fmtP(priceOf(k, t))}</span><span class="ch">${chg(vChg(k))} <small style="opacity:.6">1 h</small></span></div>
+      <div class="lim">Se fait avec ${P[src].e} ${esc(P[src].label.toLowerCase())}<br>Tu en as <b>${fmtN(S.stock[src])}</b></div></div>
+    <div class="b2-seg">${["1h", "24h", "7j"].map(p => `<button class="${mkt.period === p ? "on" : ""}" data-a="mkt-p" data-p="${p}">${p === "1h" ? "1 h" : p === "24h" ? "24 h" : "7 j"}</button>`).join("")}</div>
+    <div class="b2-chart">${chartSVG(k, mkt.period)}</div>
+    <h3 class="b2-h3">Tes tonneaux</h3>
+    <div class="b2-luxe">${my || `<div class="b2-empty">Aucun tonneau de ${esc(P[k].label.toLowerCase())} au cellier.</div>`}</div>
+    ${!S.cellar.lvl ? `<p class="b2-note" style="color:var(--chalk2)">Construis le cellier dans l'atelier pour en fabriquer.</p>`
+      : free ? `<button class="b2-btn big" style="margin-top:12px" data-a="cellar" data-k="${src}" ${S.stock[src] < 1 ? "disabled" : ""}>Mettre à vieillir</button>` : `<p class="b2-note" style="color:var(--chalk2)">Ton cellier est plein.</p>`}
   </div></div>`;
 }
 function marketHTML(){
   if (!mkt.open || !mkt.k) return marketListHTML();
+  if (P[mkt.k].aged) return luxeHTML(mkt.k);
   const k = mkt.k, qv = quote(k);
   const offers = W.listings.filter(l => l.product === k).sort((a, b) => a.price - b.price || a.id - b.id);
   const resL = resLeft(k);
@@ -2351,7 +2377,7 @@ async function confirm(){
   }
   if (c.type === "cellar"){
     if (!BX.cellarPut(S, c.k, q, now())){ toast("Plus de place dans le cellier.", "err"); closeSheet(); return; }
-    dirty = true; closeSheet(); view = "atelier"; draw(); sound("up"); toast(`${fmtN(q)} ${P[BX.AGEDOF[c.k]].label.toLowerCase()} en tonneau`); return;
+    dirty = true; closeSheet(); if (view !== "market") view = "atelier"; draw(); sound("up"); toast(`${fmtN(q)} ${P[BX.AGEDOF[c.k]].label.toLowerCase()} en tonneau`); return;
   }
   if (c.type === "bake"){
     const nS = BAL.ovenSlots(S.oven.lvl); let idx = -1; for (let i = 0; i < nS; i++) if (!S.oven.slots[i]){ idx = i; break; }
