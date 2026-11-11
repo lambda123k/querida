@@ -41,17 +41,17 @@ begin
   l := l || jsonb_build_array(jsonb_build_object('id', p_slot || '-G', 'k', big, 'big', true, 'who', 'maire',
          'qty', greatest(15, _baron2_nice(eff * (150 + random() * 210) * 1.5)),
          'bonus', _baron2_nice(m * 60 * (8 + random() * 7) * 1.5)));
-  -- deux produits de ferme et deux recettes
-  for i in 0..3 loop
+  -- trois produits de ferme et trois recettes (7 commandes en tout, depuis le 11 nov. 15 h)
+  for i in 0..5 loop
     loop
-      k := case when i < 2 then raw[1 + floor(random() * 6)::int] else rec[1 + floor(random() * 5)::int] end;
+      k := case when i < 3 then raw[1 + floor(random() * 6)::int] else rec[1 + floor(random() * 5)::int] end;
       exit when not (k = any(used));
     end loop;
     used := used || k;
     n := coalesce((nrec->>k)::int, 1);
-    q := case when i < 2 then greatest(10, _baron2_nice(eff * (150 + random() * 210)))
+    q := case when i < 3 then greatest(10, _baron2_nice(eff * (150 + random() * 210)))
               else greatest(10, _baron2_nice(eff * (60 + random() * 90) / n)) end;
-    b := _baron2_nice(m * 60 * (8 + random() * 7) * case when i < 2 then 1 else 1.4 end);
+    b := _baron2_nice(m * 60 * (8 + random() * 7) * case when i < 3 then 1 else 1.4 end);
     l := l || jsonb_build_array(jsonb_build_object('id', p_slot || '-' || i, 'k', k, 'qty', q, 'bonus', b, 'who', who->>k));
   end loop;
   return l;
