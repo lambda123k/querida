@@ -111,7 +111,7 @@ const BAL = {
   reserveMult: 3, reserveSecs: 60,              // réserve du village : 3× le prix plancher, limitée
   startWood: 40, startCoins: 0,
   subRatio: 0.1,                                // 1 sous-produit pour 10 unités récoltées
-  colpMult: 4,                                  // le colporteur vend les sous-produits 4× le prix de base (dépannage)
+  colpMult: 4,                                  // le marchand vend les sous-produits 4× le prix de base (dépannage)
   toolSecs: 600,                                // outil simple : ~10 min de production de sous-produit par ingrédient
   atelierSecs: [900, 3600, 14400],              // construire / améliorer l'atelier : 15 min, 1 h, 4 h de tes revenus
   atelierMax: 3,
@@ -378,7 +378,7 @@ const CHARS = {
   charpentier:{ name:"Le charpentier", e:"👷", wants:["bois"] },
   maire:      { name:"Le maire",       e:"🎩", wants:[] },
   // visiteurs des demandes surprises (ils débarquent entre deux créneaux)
-  colporteur: { name:"Le colporteur",  e:"🧳", wants:[], lines:["Il passe en coup de vent et repart ce soir", "Il a une charrette vide et des poches pleines", "Il revend tout en ville, il lui en faut vite"] },
+  colporteur: { name:"Le marchand",  e:"🧳", wants:[], lines:["Il passe en coup de vent et repart ce soir", "Il a une charrette vide et des poches pleines", "Il revend tout en ville, il lui en faut vite"] },
   chatelaine: { name:"La châtelaine",  e:"👑", wants:[], lines:["Elle donne un bal ce soir au château", "Ses invités de marque arrivent, rien n'est prêt", "Elle ne mange que ce qu'il y a de meilleur"] },
   noce:       { name:"La noce",        e:"💒", wants:[], lines:["Un mariage au village : il manque de tout !", "Cent invités et un buffet presque vide", "La mariée a tout prévu… sauf ça"] },
   cirque:     { name:"Le cirque",      e:"🎪", wants:[], lines:["Le cirque s'installe sur la place", "Les éléphants ont faim, le chapiteau aussi", "Grande représentation ce soir"] },
@@ -1412,6 +1412,18 @@ const PIC = {
   tarte: `<ellipse cx="16" cy="19" rx="13" ry="9" fill="#D9903F" stroke="#9E5E1E" stroke-width="1.2"/><ellipse cx="16" cy="18" rx="10" ry="6.5" fill="#C0392B"/><path d="M8 15.5 l16 5 M8 20.5 l16 -5 M12 12.5 l1 11 M20 12.5 l-1 11" stroke="#F0B562" stroke-width="2.2" stroke-linecap="round"/>`,
   confiture: `<rect x="8" y="11" width="16" height="17" rx="4" fill="#C2263A" stroke="#8E1828" stroke-width="1.2"/><path d="M6 10 q10 -6 20 0 l-2 4 q-8 -3 -16 0z" fill="#fff" stroke="#E2DCCF"/><path d="M8.5 9 l3 1.5 M13 7.5 l3 1.5 M18 7.5 l3 1.5 M22 9 l2.5 1.5" stroke="#E0392B" stroke-width="1.6"/><path d="M8 13.5 h16" stroke="#7C4A24" stroke-width="1.2"/><rect x="11" y="17" width="10" height="6" rx="1.5" fill="#FFF0C7"/><ellipse cx="11" cy="20" rx="1" ry="3" fill="#E85A6B" opacity=".7"/>`,
   gateau: `<rect x="5" y="17" width="22" height="10" rx="2.5" fill="#F4A9B8" stroke="#C26A7E" stroke-width="1.2"/><rect x="5" y="20.5" width="22" height="2.5" fill="#FFF3E0"/><path d="M5 17 q2.75 3 5.5 0 q2.75 3 5.5 0 q2.75 3 5.5 0 q2.75 3 5.5 0 v-3 q-11 -4 -22 0z" fill="#FFFFFF" stroke="#E2DCCF"/><circle cx="16" cy="10.5" r="3" fill="#E0392B"/><path d="M16 7.5 q1 -3 3.5 -3.5" stroke="#5FAE4A" stroke-width="1.3" fill="none"/><rect x="4" y="27" width="24" height="2.5" rx="1.2" fill="#C7D3DC"/>`,
+  // sous-produits
+  paille: `<path d="M7 9 l-1 -4 M11 9 l0 -5 M16 9 l1 -5 M21 9 l1 -4 M25 9 l2 -3" stroke="#D9B04A" stroke-width="1.4" stroke-linecap="round"/><rect x="4" y="9" width="24" height="17" rx="3.5" fill="#EBC761" stroke="#B88A2B" stroke-width="1.3"/><path d="M6 13.5 h20 M6 17.5 h20 M6 21.5 h20" stroke="#C9A04A" stroke-width="1"/><path d="M11 9 v17 M21 9 v17" stroke="#A0522D" stroke-width="2"/>`,
+  plumes: `<path d="M25 3 C 13 5, 6 15, 8 26 C 19 23, 27 14, 25 3z" fill="#FBF7EE" stroke="#B9AE98" stroke-width="1.3"/><path d="M5 29 L 21 9" stroke="#8C7F68" stroke-width="1.5" stroke-linecap="round"/><path d="M12 19 l-3 -2 M15 15 l-3 -3 M18 12 l-2 -4 M14 21 l4 1 M17 17 l5 0 M20 13 l4 -1" stroke="#CFC4AE" stroke-width="1" stroke-linecap="round"/>`,
+  cuir: `<path d="M8 5 l3 4 h10 l3 -4 l2.5 5.5 l-2 4 l2 6 l-2.5 6 l-3.5 -2.5 h-9 l-3.5 2.5 l-2.5 -6 l2 -6 l-2 -4z" fill="#A9693B" stroke="#6B3E1E" stroke-width="1.3" stroke-linejoin="round"/><path d="M11.5 12 h9 v10 h-9z" fill="none" stroke="#E2B27A" stroke-width="1.1" stroke-dasharray="2 1.6"/>`,
+  noyaux: `<ellipse cx="11.5" cy="17" rx="6" ry="9" transform="rotate(-18 11.5 17)" fill="#B9773E" stroke="#7A4A20" stroke-width="1.2"/><path d="M9 10 q2 7 4.5 14" stroke="#7A4A20" stroke-width="1" fill="none"/><ellipse cx="21.5" cy="18" rx="5.5" ry="8.5" transform="rotate(20 21.5 18)" fill="#C98A50" stroke="#7A4A20" stroke-width="1.2"/><path d="M23.5 11 q-2 7 -4 13.5" stroke="#7A4A20" stroke-width="1" fill="none"/>`,
+  cire: `${[[11,11],[21,11],[16,19.5],[6,19.5],[26,19.5]].map(([x,y]) => `<path d="M${x} ${y-5.5} l4.8 2.75 v5.5 l-4.8 2.75 l-4.8 -2.75 v-5.5z" fill="#F7DC86" stroke="#C99A2E" stroke-width="1.2"/>`).join("")}<path d="M16 15 l4.8 2.75 v5.5 l-4.8 2.75 l-4.8 -2.75 v-5.5z" fill="#F2C24B"/>`,
+  sciure: `<path d="M3 27 q4 -13 13 -14 q9 1 13 14z" fill="#E2BC86" stroke="#A8794A" stroke-width="1.3"/>${[[10,22],[14,18],[18,21],[21,24],[13,25],[17,16],[23,20],[8,25]].map(([x,y]) => `<circle cx="${x}" cy="${y}" r="0.9" fill="#A8794A"/>`).join("")}<path d="M6 10 l2 -2 M24 8 l2 1 M14 7 l1 -2" stroke="#C99A62" stroke-width="1.3" stroke-linecap="round"/>`,
+  // cellier
+  biere: `<rect x="6" y="10" width="15" height="18" rx="2.5" fill="#F2A93B" stroke="#B5701A" stroke-width="1.3"/><path d="M21 13 h3 a3 3 0 0 1 3 3 v4 a3 3 0 0 1 -3 3 h-3" fill="none" stroke="#B5701A" stroke-width="2"/><path d="M5 11 q0 -5 5 -4 q2 -3 5 -1 q4 -2 6 2 q2 1 1 3z" fill="#FFFDF5" stroke="#D9CDB4" stroke-width="1.1"/><path d="M10 15 v9 M15 15 v9" stroke="#F8C870" stroke-width="1.4" stroke-linecap="round"/>`,
+  fromage: `<path d="M3 21 L26 9 L29 15 V25 H3z" fill="#F6D04D" stroke="#C9971C" stroke-width="1.3" stroke-linejoin="round"/><path d="M3 21 H29" stroke="#C9971C" stroke-width="1.1"/><circle cx="10" cy="23.5" r="1.4" fill="#D9A52A"/><circle cx="20" cy="23" r="1.8" fill="#D9A52A"/><circle cx="25.5" cy="17.5" r="1.3" fill="#D9A52A"/><circle cx="17" cy="16.5" r="1.1" fill="#D9A52A"/>`,
+  cidre: `<path d="M13 3 h6 v6 q5 3 5 9 v9 a2 2 0 0 1 -2 2 h-12 a2 2 0 0 1 -2 -2 v-9 q0 -6 5 -9z" fill="#4F9A4A" stroke="#2E6A2A" stroke-width="1.3"/><rect x="12.5" y="2" width="7" height="3.5" rx="1" fill="#C98A50" stroke="#7A4A20" stroke-width="1"/><rect x="10" y="16" width="12" height="7" rx="1.5" fill="#FFF4D8" stroke="#D9C39A" stroke-width=".8"/><circle cx="16" cy="19.5" r="2" fill="#E0392B"/>`,
+  hydromel: `<path d="M9 5 h14 q0 10 -7 12 q-7 -2 -7 -12z" fill="#E8A33A" stroke="#A86A12" stroke-width="1.3"/><path d="M9.6 8 h12.8" stroke="#F8D690" stroke-width="1.3"/><path d="M16 17 v8 M11 27 h10" stroke="#A86A12" stroke-width="2" stroke-linecap="round"/>`,
 };
 for (const k in PIC) P[k].e = `<i class="b2-ic"><svg viewBox="0 0 32 32" aria-hidden="true">${PIC[k]}</svg></i>`;
 
@@ -1901,7 +1913,7 @@ function toolSheet(kind){
 function cellarSheet(src){
   if (!src){
     sheetCtx = null;
-    sheet(`<h3>🛢️ Que mettre à vieillir ?</h3>${Object.keys(BX.AGEDOF).map(k => { const a = BX.AGEDOF[k]; return `<div class="b2-rec"><span class="ic">${P[a].e}</span><div class="sp"><b>${esc(P[a].label)}</b><div class="b2-ing"><span class="${S.stock[k] >= 1 ? "ok" : "ko"}">${P[k].e} ${fmtN(S.stock[k])}</span></div></div>
+    sheet(`<h3>Que mettre à vieillir ?</h3>${Object.keys(BX.AGEDOF).map(k => { const a = BX.AGEDOF[k]; return `<div class="b2-rec"><span class="ic">${P[a].e}</span><div class="sp"><b>${esc(P[a].label)}</b><div class="b2-ing"><span class="${S.stock[k] >= 1 ? "ok" : "ko"}">${P[k].e} ${fmtN(S.stock[k])}</span></div></div>
       ${S.stock[k] >= 1 ? `<button class="b2-btn" data-a="cellar" data-k="${k}">Choisir</button>` : BX.unlocked(S, "marche") ? `<button class="b2-btn red" data-a="goto-mkt" data-k="${k}">Acheter ${P[k].e}</button>` : ""}</div>`; }).join("")}`);
     return;
   }
@@ -1914,7 +1926,7 @@ function cellarSheet(src){
 function colpSheet(k){
   const pr = P[k].floor * BAL.colpMult, left = BX.reserveLeft(S, k, now()), max = Math.min(left, Math.floor(S.coins / pr));
   sheetCtx = { type:"colp", k, price: pr };
-  sheet(`<h3>🧳 Le colporteur</h3><p>Il dépanne en ${esc(P[k].label.toLowerCase())} quand personne n'en vend, mais il est cher : ${fmtP(pr)} l'unité. Il lui en reste ${fmtN(left)} ${P[k].e} pour toi jusqu'au prochain passage (toutes les 20 min).</p>
+  sheet(`<h3>🧳 Le marchand</h3><p>Il dépanne en ${esc(P[k].label.toLowerCase())} quand personne n'en vend, mais il est cher : ${fmtP(pr)} l'unité. Il lui en reste ${fmtN(left)} ${P[k].e} pour toi jusqu'au prochain passage (toutes les 20 min).</p>
     ${qtyBlock(max, max, "q")}<div class="b2-sum" data-sum></div><button class="b2-btn gold big" data-a="confirm" ${max < 1 ? "disabled" : ""}>Acheter</button>`);
   sheetSum();
 }
@@ -1989,14 +2001,14 @@ function marketHTML(){
       ${mine ? `<button class="b2-btn ghost" style="color:var(--chalk)!important;background:rgba(255,255,255,.1)!important" data-a="unlist" data-id="${l.id}">Retirer</button>` : `<button class="b2-btn" data-a="buy" data-id="${l.id}">Acheter</button>`}</div>`;
   }).join("");
   const colpL = P[k].sub ? BX.reserveLeft(S, k, now()) : 0;
-  const res = P[k].sub ? `<div class="b2-ord res"><span class="who">🧳 Le colporteur<small>Dépannage, cher</small></span><span class="q">${fmtN(colpL)}</span><span class="pr">${fmtP(P[k].floor * BAL.colpMult)}</span>
+  const res = P[k].sub ? `<div class="b2-ord res"><span class="who">🧳 Le marchand<small>Dépannage, cher</small></span><span class="q">${fmtN(colpL)}</span><span class="pr">${fmtP(P[k].floor * BAL.colpMult)}</span>
     <button class="b2-btn gold" data-a="buy-colp" ${colpL < 1 ? "disabled" : ""}>Acheter</button></div>`
     : `<div class="b2-ord res"><span class="who">🏘️ Le village<small>Réserve commune</small></span><span class="q">${fmtN(resL)}</span><span class="pr">${fmtP(BX.reservePrice(k))}</span>
     <button class="b2-btn gold" data-a="buy-res" ${resL < 1 ? "disabled" : ""}>Acheter</button></div>`;
   const hist = W.trades.filter(t => t.product === k).slice(-12).reverse().map(t => `<div class="b2-ord"><span class="who">${esc(t.buyer_id === ME.id ? "Toi" : nameOf(t.buyer_id))} ← ${esc(t.seller_id === ME.id ? "toi" : nameOf(t.seller_id))}<small>${fmtAgo(t.ts)}</small></span><span class="q">${fmtN(t.qty)}</span><span class="pr">${fmtP(+t.price)}</span></div>`).join("");
   return `<div class="b2-board"><div class="b2-pills">${pills}</div><div class="b2-col" style="padding:4px 16px 24px">
     <div class="b2-quote"><div><div style="font:800 13px var(--round);color:var(--chalk2)">${P[k].e} ${esc(P[k].label)} · cours du village</div><span class="big">${COIN}${fmtP(BX.vPrice(k, now()))}</span><span class="ch">${chg(vChg(k))} <small style="opacity:.6">1 h</small></span></div>
-      <div class="lim">${qv.p != null ? `Entre joueurs (24 h) <b>${fmtP(qv.p)}</b><br>` : ""}${BX.vMyPrice(S, k, now()) < BX.vPrice(k, now()) * 0.95 ? `Pour toi <b>${fmtP(BX.vMyPrice(S, k, now()))}</b> (tu as trop vendu)<br>` : ""}${P[k].sub ? `Colporteur <b>${fmtP(P[k].floor * BAL.colpMult)}</b>` : `Réserve du village <b>${fmtP(BX.reservePrice(k))}</b>`}<br>Tu en as <b>${fmtN(S.stock[k])}</b></div></div>
+      <div class="lim">${qv.p != null ? `Entre joueurs (24 h) <b>${fmtP(qv.p)}</b><br>` : ""}${BX.vMyPrice(S, k, now()) < BX.vPrice(k, now()) * 0.95 ? `Pour toi <b>${fmtP(BX.vMyPrice(S, k, now()))}</b> (tu as trop vendu)<br>` : ""}${P[k].sub ? `Marchand <b>${fmtP(P[k].floor * BAL.colpMult)}</b>` : `Réserve du village <b>${fmtP(BX.reservePrice(k))}</b>`}<br>Tu en as <b>${fmtN(S.stock[k])}</b></div></div>
     <div class="b2-seg">${["1h", "24h", "7j"].map(p => `<button class="${mkt.period === p ? "on" : ""}" data-a="mkt-p" data-p="${p}">${p === "1h" ? "1 h" : p === "24h" ? "24 h" : "7 j"}</button>`).join("")}</div>
     <div class="b2-chart">${chartSVG(k, mkt.period)}</div>
     <div class="b2-two"><button class="b2-btn" data-a="list" data-k="${k}" ${S.stock[k] < 1 ? "disabled" : ""}>Mettre en vente</button><button class="b2-btn gold" data-a="sell" data-k="${k}" ${S.stock[k] < 1 ? "disabled" : ""}>Vendre au village</button></div>
@@ -2225,7 +2237,7 @@ function listSheet(k){
   sheet(`<h3>${P[k].e} Mettre en vente</h3><p>Tu fixes ton prix. Tes produits sortent de la grange et attendent un acheteur ; tu peux les retirer quand tu veux.${cheapest ? ` L'offre la moins chère est à ${fmtP(+cheapest.price)}.` : ""}</p>
     ${qtyBlock(S.stock[k], S.stock[k] / 2, "q")}
     <div class="b2-field"><i class="b2-coin"></i><input data-price inputmode="decimal" value="${String(Math.round(sug * 10) / 10).replace(".", ",")}" aria-label="Prix à l'unité"><span style="font:700 13px var(--round);color:var(--ink2)">l'unité</span></div>
-    <p class="b2-note">Cours du village : ${fmtP(BX.vPrice(k, now()))} · ${P[k].sub ? `Colporteur : ${fmtP(P[k].floor * BAL.colpMult)}` : `Réserve du village : ${fmtP(BX.reservePrice(k))}`}</p>
+    <p class="b2-note">Cours du village : ${fmtP(BX.vPrice(k, now()))} · ${P[k].sub ? `Marchand : ${fmtP(P[k].floor * BAL.colpMult)}` : `Réserve du village : ${fmtP(BX.reservePrice(k))}`}</p>
     <div class="b2-sum" data-sum></div><button class="b2-btn big" data-a="confirm">Mettre en vente</button>`);
   sheetSum();
 }
@@ -2296,11 +2308,11 @@ async function confirm(){
     const left = BX.reserveLeft(S, c.k, now()), n = Math.min(q, left), cost = n * c.price;
     if (n < 1 || cost > S.coins) return;
     S.coins -= cost; S.stock[c.k] += n; S.stats.bought += cost; S.reserve.used[c.k] = (S.reserve.used[c.k] || 0) + n; dirty = true;
-    closeSheet(); draw(); sound("up"); toast(`${fmtN(n)} ${P[c.k].e} achetés au colporteur`); return;
+    closeSheet(); draw(); sound("up"); toast(`${fmtN(n)} ${P[c.k].e} achetés au marchand`); return;
   }
   if (c.type === "cellar"){
     if (!BX.cellarPut(S, c.k, q, now())){ toast("Plus de place dans le cellier.", "err"); closeSheet(); return; }
-    dirty = true; closeSheet(); view = "atelier"; draw(); sound("up"); toast(`🛢️ ${fmtN(q)} ${P[BX.AGEDOF[c.k]].label.toLowerCase()} en tonneau`); return;
+    dirty = true; closeSheet(); view = "atelier"; draw(); sound("up"); toast(`${fmtN(q)} ${P[BX.AGEDOF[c.k]].label.toLowerCase()} en tonneau`); return;
   }
   if (c.type === "bake"){
     const nS = BAL.ovenSlots(S.oven.lvl); let idx = -1; for (let i = 0; i < nS; i++) if (!S.oven.slots[i]){ idx = i; break; }
@@ -2440,7 +2452,7 @@ function onClick(e){
     }
     case "up-barn": { const c = BX.costs.barn(S); if (!paid(c, b)) return; S.barn++; sound("done"); draw(); toast(`Grange agrandie : ${fmtN(BX.barnCap(S))} places`); return; }
     case "up-atelier": { if ((S.atelier || 0) >= BAL.atelierMax) return; const c = BX.costs.atelier(S); if (!paid(c, b)) return; S.atelier = (S.atelier || 0) + 1; sound("done"); draw(); toast(S.atelier === 1 ? "🛠️ L'atelier est construit" : `Atelier niveau ${S.atelier} : outils ${BX.TQ[S.atelier - 1].label.toLowerCase()}s débloqués`, "gold"); return; }
-    case "up-cellar": { if (S.cellar.lvl >= BAL.cellarMax) return; const c = BX.costs.cellar(S); if (!paid(c, b)) return; S.cellar.lvl++; sound("done"); draw(); toast(S.cellar.lvl === 1 ? "🛢️ Le cellier est construit" : `Cellier niveau ${S.cellar.lvl}`, "gold"); return; }
+    case "up-cellar": { if (S.cellar.lvl >= BAL.cellarMax) return; const c = BX.costs.cellar(S); if (!paid(c, b)) return; S.cellar.lvl++; sound("done"); draw(); toast(S.cellar.lvl === 1 ? "Le cellier est construit" : `Cellier niveau ${S.cellar.lvl}`, "gold"); return; }
     case "tool": toolSheet(b.dataset.kind); return;
     case "craft": {
       const kind = b.dataset.kind, qi = +b.dataset.q;
