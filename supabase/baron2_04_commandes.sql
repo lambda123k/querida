@@ -18,6 +18,10 @@ language sql immutable as $$
     else ceil(n / power(10, floor(log(n)) - 1)) * power(10, floor(log(n)) - 1) end;
 $$;
 
+-- random() donne un double : même arrondi
+create or replace function public._baron2_nice(n double precision) returns numeric
+language sql immutable as $$ select public._baron2_nice(n::numeric) $$;
+
 create or replace function public._baron2_gen_orders(p_slot bigint) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
