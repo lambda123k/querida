@@ -444,44 +444,174 @@ function reserveLeft(s, k, now){
   const lim = Math.max(30, nice(effRate(s, 0) * BAL.reserveSecs / (P[k].rec ? 3 : 1)));
   return Math.max(0, lim - (s.reserve.used[k] || 0));
 }
-const reservePrice = k => P[k].floor * BAL.reserveMult;
+const reservePrice = k => vPrice(k, Date.now()) * 1.25;   // le village revend au cours (+ son écart)
 
-/* ---------- Cours du village ----------
-   Le même pour tout le monde (calculé à partir de l'heure, sans serveur) : 3 vagues de durées différentes
-   par produit, donc jamais deux produits au même moment. Entre ~0,4× et ~2,5× le prix de base. */
+/* ---------- Cours du village : 6 forces (11 nov. 2026) ----------
+   Le cours de chaque produit = son prix de base × 6 forces. Cinq sont calculées à partir de l'heure (les mêmes
+   pour tout le monde, sans serveur), la 6e est partagée par le serveur :
+     1. la saison (printemps, été, automne, hiver : 1 h 30 chacune, affichée) ;
+     2. la commande phare (le produit de la prochaine grande commande, annoncé 20 min avant, affiché) ;
+     3. la nouvelle du village (une par créneau, au hasard, affichée) ;
+     4. les liens entre produits (cachés : expliqués dans la fiche) ;
+     5. l'emballement (une bulle qui gonfle puis éclate à un moment inconnu, l'avertissement est affiché) ;
+     6. le village : ce que tout le monde achète et vend au village (caché, partagé par le serveur).
+   Plus une petite vague de fond pour que ça bouge toujours un peu. Entre ×0,3 et ×3 le prix de base. */
+const MIN = 60000, LN2 = Math.LN2;
+const MK = { press:{}, med:5, bigs:{} };                       // rempli par l'interface depuis le serveur
+function setMarket(o){ if (o.press) MK.press = o.press; if (o.med) MK.med = +o.med; if (o.bigs) MK.bigs = o.bigs; }
+const SEASONS = [{ id:"printemps", label:"Printemps", e:"🌸" }, { id:"ete", label:"Été", e:"☀️" }, { id:"automne", label:"Automne", e:"🍂" }, { id:"hiver", label:"Hiver", e:"❄️" }];
+const SEASON_MS = 90 * MIN;
+// effet de chaque saison sur le prix (de -2 : abondant, pas cher, à +2 : recherché, cher)
+const SEASONV = { ble:[1, -2, 0, 1], oeufs:[-2, 0, 1, 1], lait:[-1, 1, -1, 1], fruits:[1, -1, -2, 2], miel:[1, -2, 0, 1], bois:[-1, -2, 2, 1] };
+function seasonAt(t){ const n = Math.floor(t / SEASON_MS); return { i: ((n % 4) + 4) % 4, left: (n + 1) * SEASON_MS - t, next: (((n + 1) % 4) + 4) % 4 }; }
+function seasonLog(k, t){
+  const v = SEASONV[k]; if (!v) return 0;
+  const s = seasonAt(t), blend = 20 * MIN, f = s.left < blend ? 1 - s.left / blend : 0;   // les 20 dernières minutes, on glisse vers la suivante
+  return 0.13 * (v[s.i] * (1 - f) + v[s.next] * f);
+}
+const WAVE = [0.12, 0.08, 0.05];
 const VPH = {}; ALL.forEach(k => { const r = rng(hash("cours:" + k)); VPH[k] = BAL.vPeriods.map(T => ({ T: T * (0.75 + r() * 0.5), ph: r() * Math.PI * 2 })); });
+function waveLog(k, t){ const sec = t / 1000; let x = 0; VPH[k].forEach((w, j) => x += WAVE[j] * Math.sin(2 * Math.PI * sec / w.T + w.ph)); return x; }
+// la nouvelle du village : une par créneau de 20 min, tirée au hasard (la même pour tous), qui s'efface en ~1 h
+const NEWS = {
+  ble:    { up:["Orage sur les champs","La rouille attaque les épis","Les moineaux pillent les champs"], down:["Moisson record","Le meunier a trop de grain","Pluie idéale sur les champs"] },
+  oeufs:  { up:["Un renard rôde au poulailler","Les poules ont la grippe","Le château commande une omelette géante"], down:["Les poules pondent comme jamais","Une charrette d'œufs arrive de la ville","Printemps des poussins"] },
+  lait:   { up:["Les vaches sont malades","Le fromager de la ville achète tout","Sécheresse dans les prés"], down:["Herbe grasse dans les prés","Les vaches donnent sans compter","Trop de lait au village"] },
+  fruits: { up:["La grêle abîme le verger","Les guêpes dévorent les pommes","La confiturerie du château a faim"], down:["Les arbres croulent sous les fruits","Récolte précoce au verger","Arrivage de fruits du sud"] },
+  miel:   { up:["Les abeilles ont essaimé","Un ours a visité les ruches","Les apothicaires s'arrachent le miel"], down:["Les fleurs sont partout","Les ruches débordent","Un colporteur brade son miel"] },
+  bois:   { up:["Le pont du village s'est effondré","L'hiver s'annonce rude","Le seigneur construit une tour"], down:["Une tempête a couché la forêt","Les bûcherons de la vallée arrivent","Le chantier du château est fini"] },
+};
+const NEWS_MS = 30 * MIN;
+const newsCache = {};
+function newsOf(slot){
+  if (slot in newsCache) return newsCache[slot];
+  const r = rng(hash("nouvelle:" + slot)); let n = null;
+  if (r() >= 0.12){
+    const k = RAW[Math.floor(r() * RAW.length)], up = r() < 0.5, mag = 0.28 + r() * 0.32, l = NEWS[k][up ? "up" : "down"];
+    n = { slot, k, up, mag, txt: l[Math.floor(r() * l.length)] };
+  }
+  return newsCache[slot] = n;
+}
+function newsLog(k, t){
+  const cur = Math.floor(t / BAL.slotMs); let x = 0;
+  for (let s = cur - 3; s <= cur; s++){ const n = newsOf(s); if (!n || n.k !== k) continue; const dt = t - s * BAL.slotMs; if (dt >= 0) x += (n.up ? 1 : -1) * n.mag * Math.exp(-dt / NEWS_MS); }
+  return x;
+}
+// la commande phare : le produit de la prochaine grande commande monte pendant les 20 min d'annonce, puis redescend
+function phareLog(k, t){
+  const sl = Math.floor(t / BAL.slotMs), f = (t - sl * BAL.slotMs) / BAL.slotMs; let x = 0;
+  if (MK.bigs[sl + 1] === k) x += 0.22 * f;
+  if (MK.bigs[sl] === k) x += 0.22 * (1 - 0.7 * f);
+  if (MK.bigs[sl - 1] === k) x += 0.066 * (1 - f);
+  return x;
+}
+// le village (partagé) : la poussée des achats (+) et des ventes (-) de tout le monde, oubliée de moitié en 20 min
+const HALF = 20 * MIN;
+function pressAt(k, t){
+  const r = MK.press[k]; if (!r) return 0;
+  if (t >= r.t) return r.p * Math.pow(0.5, (t - r.t) / HALF);
+  const h = r.h || []; let e = null;
+  for (let j = h.length - 1; j >= 0; j--) if (h[j][0] <= t){ e = h[j]; break; }
+  return e ? e[1] * Math.pow(0.5, (t - e[0]) / HALF) : 0;
+}
+const DEPTH = { pain:0.5, confiture:0.5, crepes:0.34, tarte:0.34, gateau:0.25 };
+const depth = k => Math.max(1, MK.med * 1800 * (P[k].sub ? 0.1 : DEPTH[k] || 1));
+function pushLocal(k, units, t){
+  const r = MK.press[k] || { p:0, t, h:[] }, p = Math.max(-4, Math.min(4, pressAt(k, t) + units / depth(k)));
+  MK.press[k] = { p, t, h: (r.h || []).concat([[t, p]]) };
+}
+// l'emballement : par moments, un produit gonfle longtemps… puis la bulle éclate d'un coup (on ne sait pas quand)
+const EPOCH = 7 * 3600000;
+function bubbleOf(k, E){
+  const r = rng(hash("bulle:" + k + ":" + E)); if (r() > 0.6) return null;
+  const off = (hash("decal:" + k) % 1000) / 1000 * EPOCH;
+  return { s: E * EPOCH + off + r() * 2.5 * 3600000, d: (70 + r() * 150) * MIN };
+}
+const CRASH = 6 * MIN, RECOV = 40 * MIN, PEAK = 0.6, DIP = -0.3;
+function bubbleAt(k, t){
+  if (!SEASONV[k]) return null;
+  const off = (hash("decal:" + k) % 1000) / 1000 * EPOCH, E = Math.floor((t - off) / EPOCH);
+  for (const e of [E, E - 1]){
+    const b = bubbleOf(k, e); if (!b) continue;
+    const a = t - b.s; if (a < 0) continue;
+    if (a < b.d){ const x = a / b.d; return { ph:"monte", x: PEAK * Math.pow(x, 1.6), warn: a > 45 * MIN }; }
+    if (a < b.d + CRASH) return { ph:"krach", x: PEAK + (DIP - PEAK) * (a - b.d) / CRASH };
+    if (a < b.d + CRASH + RECOV) return { ph:"apres", x: DIP * (1 - (a - b.d - CRASH) / RECOV) };
+  }
+  return null;
+}
+// les liens entre produits (cachés) : qui entraîne qui
+const LINKS = { oeufs:[["lait", 0.35]], lait:[["oeufs", 0.35]], fruits:[["miel", 0.3]], miel:[["fruits", 0.3]], ble:[["bois", -0.3]], bois:[["ble", -0.3]] };
+function fundLog(k, t){ return waveLog(k, t) + seasonLog(k, t) + newsLog(k, t) + phareLog(k, t) + LN2 * pressAt(k, t); }
+function linkLog(k, t){
+  if (P[k].rec){ const ks = Object.keys(P[k].rec); return 0.7 * ks.reduce((a, x) => a + fundLog(x, t), 0) / ks.length; }
+  if (P[k].sub) return 0.6 * fundLog(P[k].of, t);
+  return (LINKS[k] || []).reduce((a, [x, w]) => a + w * fundLog(x, t), 0);
+}
 function vMul(k, t){
-  const sec = t / 1000; let x = 0;
-  if (P[k].aged){ const w = VPH[k][2]; return vMul(P[k].src, t) * Math.exp(BAL.luxSwing * Math.sin(2 * Math.PI * sec / w.T + w.ph)); }
-  VPH[k].forEach((w, j) => x += BAL.vSwing[j] * Math.sin(2 * Math.PI * sec / w.T + w.ph));
-  return Math.exp(x);
+  if (P[k].aged){ const w = VPH[k][2]; return vMul(P[k].src, t) * Math.exp(BAL.luxSwing * Math.sin(2 * Math.PI * (t / 1000) / w.T + w.ph) + LN2 * pressAt(k, t)); }
+  const b = bubbleAt(k, t);
+  return Math.exp(Math.max(-1.2, Math.min(1.1, fundLog(k, t) + linkLog(k, t) + (b ? b.x : 0))));
 }
 const vPrice = (k, t) => P[k].floor * vMul(k, t);
-// ce que tu as vendu au village récemment (ça s'oublie petit à petit)
-function vSold(s, k, t){
-  s.vsold = s.vsold || {}; const v = s.vsold[k]; if (!v) return 0;
-  return v.q * Math.pow(0.5, Math.max(0, t - v.t) / 1000 / BAL.vHalfLife);
-}
-const vAbsorb = s => Math.max(60, effRate(s, 0) * BAL.vAbsorb);
-// ton prix à toi en ce moment (cours du village, baissé par tes ventes récentes)
-const vMyPrice = (s, k, t) => vPrice(k, t) / (1 + vSold(s, k, t) / vAbsorb(s));
-// combien rapporte la vente de q unités d'un coup (le prix baisse à chaque unité vendue)
+const SPREAD = 1.25;                                          // le village revend 25 % plus cher qu'il ne rachète
+const vAsk = (k, t) => vPrice(k, t) * SPREAD;
+const vMyPrice = (s, k, t) => vPrice(k, t);
+// vendre q unités d'un coup au village : le cours baisse à chaque unité vendue
 function vValue(s, k, q, t){
   if (q <= 0) return 0;
-  const A = vAbsorb(s), x0 = vSold(s, k, t);
-  return Math.floor(vPrice(k, t) * A * Math.log((A + x0 + q) / (A + x0)));
+  const A = depth(k); return Math.floor(vPrice(k, t) * A / LN2 * (1 - Math.exp(-LN2 * q / A)));
 }
+// acheter q unités au village : le cours monte à chaque unité achetée
+function vBuyCost(k, q, t){
+  if (q <= 0) return 0;
+  const A = depth(k); return Math.ceil(vAsk(k, t) * A / LN2 * (Math.exp(LN2 * q / A) - 1));
+}
+function vBuyMax(k, coins, t){ const A = depth(k), x = 1 + coins * LN2 / (vAsk(k, t) * A); return Math.max(0, Math.floor(A / LN2 * Math.log(x))); }
 function vSell(s, k, q, t){
   q = Math.min(Math.floor(q), Math.floor(s.stock[k] || 0)); if (q < 1) return 0;
   const g = vValue(s, k, q, t);
-  s.stock[k] -= q; s.vsold[k] = { q: vSold(s, k, t) + q, t };
+  s.stock[k] -= q; pushLocal(k, -q, t);
   s.coins += g; s.stats.earned += g; s.stats.villageSold += g;
   return g;
 }
 
+/* ---------- Le pari (une position à effet de levier) ----------
+   Tu mises sur la hausse ou la baisse d'un produit. Ta mise suit le cours du village ×2. Tu te retires quand tu veux.
+   Si le cours part trop dans le mauvais sens, ta mise tombe à zéro et le pari se ferme tout seul. Petite taxe à l'ouverture. */
+const BET = { lev:2, fee:0.03, max:3 };
+const betCap = (k, t) => Math.max(200, nice(depth(k) * 0.5 * vPrice(k, t)));     // ~15 min de production du groupe
+const betValue = (b, t) => Math.max(0, b.m * (1 + b.d * BET.lev * (vPrice(b.k, t) / b.p0 - 1)));
+const betLimit = b => b.p0 * (1 - b.d / BET.lev);                                 // le cours où la mise tombe à zéro
+function openBet(s, k, d, m, t){
+  m = Math.floor(m); s.bets = s.bets || [];
+  const fee = Math.ceil(m * BET.fee);
+  if (m < 1 || s.bets.length >= BET.max || m > betCap(k, t) || m + fee > s.coins) return null;
+  const b = { id: t + "-" + k, k, d: d > 0 ? 1 : -1, m, p0: vPrice(k, t), t0: t, chk: t };
+  s.coins -= m + fee; s.bets.push(b); s.stats.betIn = (s.stats.betIn || 0) + m;
+  return b;
+}
+function closeBet(s, id, t){
+  const b = (s.bets || []).find(x => x.id === id); if (!b) return null;
+  const v = Math.floor(betValue(b, t)); s.coins += v; s.stats.betOut = (s.stats.betOut || 0) + v;
+  s.bets = s.bets.filter(x => x !== b); return v;
+}
+// au retour (ou en jouant), on vérifie que le cours n'a pas touché la limite entre-temps
+function checkBets(s, t){
+  const out = [];
+  (s.bets || []).slice().forEach(b => {
+    const from = Math.max(b.chk || b.t0, t - 24 * 3600000), step = Math.max(2 * MIN, (t - from) / 400);
+    let dead = false;
+    for (let x = from; x <= t && !dead; x += step) if (betValue(b, x) <= 0) dead = true;
+    if (!dead && betValue(b, t) <= 0) dead = true;
+    if (dead){ s.bets = s.bets.filter(y => y !== b); out.push(b); } else b.chk = t;
+  });
+  return out;
+}
+
 /* ---------- Fortune ---------- */
-function fortune(s){
-  let st = 0; ALL.forEach(k => st += (s.stock[k] || 0) * P[k].floor);
+function fortune(s, t){
+  t = t || Date.now(); let st = 0; (s.bets || []).forEach(b => st += betValue(b, t)); ALL.forEach(k => st += (s.stock[k] || 0) * P[k].floor);
   if (s.cellar) s.cellar.slots.forEach(sl => { if (sl) st += sl.qty * P[P[sl.k].src].floor; });
   return Math.floor(s.coins + st + s.stats.invested * 0.5);
 }
@@ -514,7 +644,8 @@ function bottleneck(s, key, now){
 return { SUB, SUBOF, AGED, AGEDOF, TQ, TOOLK, tmOf, toolName, toolIcon, toolRecipe, canCraft, craftTool, cellarSlots, cellarBatch, caskLeft, caskDur, cellarPut, cellarYield, cellarBottle, ageState,
   RAW, CRAFT, ALL, P, BAL, gateOf, gateState, newParcel, fixFarm, quaiCap, pendTotal, elevRate, cartRate, startParcel, startElev, startCart, CHARS, MILES, isPalier, newState, newFarm, step, catchUp, farmRates, effRate, prodValue,
   stockUnits, barnCap, barnFree, costs, canPay, pay, bulk, nextParcelCost, nice, ovenTick, ovenBatch, ovenDur, canBake,
-  ensureOrders, genOrders, deliver, bigOf, fullBonus, reserveLeft, reservePrice, fortune, unlocked, bottleneck, farmMul, pRate, vMul, vPrice, vMyPrice, vValue, vSell };
+  ensureOrders, genOrders, deliver, bigOf, fullBonus, reserveLeft, reservePrice, fortune, unlocked, bottleneck, farmMul, pRate, vMul, vPrice, vMyPrice, vValue, vSell,
+  setMarket, MK, SEASONS, SEASONV, seasonAt, newsOf, bubbleAt, LINKS, depth, vAsk, vBuyCost, vBuyMax, pushLocal, SPREAD, BET, betCap, betValue, betLimit, openBet, closeBet, checkBets };
 })();
 
 try{ window.BARON_ENGINE = BX; }catch(e){}
@@ -661,7 +792,7 @@ function fixState(s){
   s.reserve = s.reserve || { slot:0, used:{} }; s.vsold = s.vsold || {};
   if (!s.ord2){ s.ord2 = 1; s.orders = { slot:0, list:[], prog:{} }; }
   s.ord3 = 1; s.v4 = 1; s.v5 = 1;                                                  // atelier, sous-produits, cellier
-  s.tools = s.tools || {}; s.atelier = s.atelier || 0; s.cellar = s.cellar || { lvl:0, slots:[] };                                                            // demandes surprises (11 nov. 2026)   // commandes du village en course (11 nov. 2026)
+  s.bets = s.bets || []; s.tools = s.tools || {}; s.atelier = s.atelier || 0; s.cellar = s.cellar || { lvl:0, slots:[] };                                                            // demandes surprises (11 nov. 2026)   // commandes du village en course (11 nov. 2026)
   s.claims = (s.claims || []).map(c => ({ id: c.id, slot: c.slot })); s.wonIds = s.wonIds || [];
   // une seule exploitation en plus : on garde la plus développée
   const extra = Object.keys(s.farms).filter(k => k !== s.spec);
@@ -696,6 +827,7 @@ async function loadWorld(force){
   if (!force && now() - W.at < 25000) return;
   try{
     const r = await rpc("baron2_world", {});
+    BX.setMarket({ press: r.press || {}, med: r.med });
     W = { res: r.reserve || null, players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
     await loadOrders(true);
     if (wrapEl && (view === "market" || view === "village")) draw();
@@ -1251,6 +1383,39 @@ const STYLE = `
 .b2-oven > div{min-width:0}
 .b2-oven .b2-btn{max-width:100%;white-space:normal;display:inline-flex;flex-wrap:wrap;justify-content:center;align-items:center;column-gap:6px;row-gap:2px}
 .b2-paper{min-width:0;max-width:100%;box-sizing:border-box}
+/* marché : saisons, forces, fiche, paris (11 nov. 2026) */
+.b2-sea{border:0;cursor:pointer}.b2-sea .lb{font-size:13px}
+.b2-mhead .b2-seachip{display:inline-block;margin-top:4px;padding:3px 10px!important;border-radius:999px!important;background:rgba(239,234,219,.12)!important;color:var(--chalk)!important;font:800 12.5px var(--round)!important}
+.b2-news{display:flex;align-items:center;gap:10px;width:100%;margin:12px 0 0;padding:10px 12px!important;border-radius:14px!important;background:#FFF4E0!important;color:var(--ink)!important;text-align:left;box-shadow:0 3px 0 rgba(0,0,0,.25)}
+.b2-news.calm{background:rgba(239,234,219,.08)!important;color:var(--chalk)!important;box-shadow:none}
+.b2-news .i{font-size:24px;line-height:1}.b2-news .sp{flex:1;min-width:0}
+.b2-news b{display:block;font:400 italic 19px/1.15 var(--disp)}
+.b2-news small{display:block;font:800 12px var(--round);opacity:.75;margin-top:2px}
+.b2-news .go{font:900 22px var(--round);opacity:.5}
+.b2-intro{position:relative;margin:12px 0 0;padding:10px 34px 10px 12px;border-radius:14px;background:rgba(242,179,61,.16);border:1px solid rgba(242,179,61,.5);font:700 13px/1.4 var(--round);color:var(--chalk)}
+.b2-intro > b{display:block;color:var(--gold);font-size:14px}
+.b2-intro button{position:absolute;top:6px;right:8px;font-size:18px!important;color:var(--chalk2)!important}
+.b2-fhead{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.b2-q{width:30px;height:30px;border-radius:50%!important;background:rgba(239,234,219,.15)!important;color:var(--chalk)!important;font:900 16px var(--round)!important;flex:none;margin-top:12px}
+.b2-forces{border-radius:14px;background:rgba(239,234,219,.06);padding:2px 10px}
+.b2-frow{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-top:1px solid rgba(127,127,127,.15)}
+.b2-frow:first-child{border-top:0}
+.b2-frow .i{font-size:20px;line-height:1.1;width:24px;text-align:center;flex:none}
+.b2-frow .tx{flex:1;min-width:0}.b2-frow b{display:block;font:800 14px/1.3 var(--round)}
+.b2-frow small{display:block;font:700 12.5px/1.35 var(--round);opacity:.72;margin-top:1px}
+.b2-frow .up{color:var(--up)}.b2-frow .down{color:var(--down)}
+.b2-board .b2-frow .up{color:#6EE09A}.b2-board .b2-frow .down{color:#FF8A70}
+.b2-board .b2-frow.up b{color:#6EE09A}.b2-board .b2-frow.down b{color:#FF8A70}.b2-board .b2-frow.warn b{color:#F2B33D}
+.b2-fiche{max-height:56vh;overflow:auto;margin:0 0 12px;color:var(--ink)}
+.b2-seas{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0 0 6px 34px}
+.b2-seas span{background:rgba(59,31,23,.06);border-radius:10px;padding:5px 8px;font:800 12px var(--round);color:var(--ink2)}
+.b2-seas span.on{box-shadow:0 0 0 2px var(--gold)}
+.b2-seas b{display:block;font:800 12.5px var(--round);color:var(--ink)}
+.b2-seas b.up{color:var(--up2)}.b2-seas b.down{color:var(--red)}
+.b2-ord.bet .pr{width:auto;min-width:56px}
+.b2-ord.bet .who{white-space:normal}.b2-ord.bet .who small{white-space:normal;line-height:1.3}
+.b2-ord .pr.up{color:#6EE09A}.b2-ord .pr.down{color:#FF8A70}
+@media (max-width:420px){ .b2-sea .lb{display:none} .b2-sea{padding:4px 6px!important} }
 .b2-barnrow{flex-wrap:wrap}
 @media (max-width:420px){
   .b2-hud{padding-left:8px;padding-right:8px}
@@ -1472,7 +1637,7 @@ function openBaron(){
   closeBaron(true);
   const w = document.createElement("div"); w.className = "b2-wrap"; w.setAttribute("role", "dialog"); w.setAttribute("aria-label", "Le Baron");
   w.innerHTML = `<div class="b2-hud"><div class="b2-col"><button class="b2-hbtn" data-a="arcade" aria-label="Retour à l'Arcade">‹</button>
-    <div class="b2-pill"><i class="b2-coin"></i><span data-live="coins">…</span></div><div class="b2-pill"><span class="b2-e">🪵</span><span data-live="wood">…</span></div>
+    <div class="b2-pill"><i class="b2-coin"></i><span data-live="coins">…</span></div><div class="b2-pill"><span class="b2-e">🪵</span><span data-live="wood">…</span></div><button class="b2-pill b2-sea" data-a="season" aria-label="Saison"><span class="b2-e" data-live="sea-e">🌸</span><span class="lb" data-live="sea">…</span></button>
     <div class="b2-sp"></div><button class="b2-crown" data-a="rank" aria-label="Classement"><span class="c">${CROWN}</span><b data-live="rank">–</b></button><button class="b2-hbtn" data-a="close" aria-label="Fermer">×</button></div></div>
     <div class="b2-scroll" id="b2-main"><div class="b2-load">Le Baron se prépare…</div></div><div id="b2-dock"></div><nav class="b2-tabs" id="b2-tabs"></nav>`;
   document.body.appendChild(w); document.body.style.overflow = "hidden"; wrapEl = w;
@@ -1530,6 +1695,7 @@ function loop(){
     if (n % 80 === 40 && S.claims.length) S.claims.forEach(c => claimOrder(c));
     live();
     if (n % 4 === 0) checkSurprises();
+    if (n % 20 === 10) betCheck();
     n++;
     if (n % 4 === 0) rankTick();
     if (n % 4 === 0 && !sheetOpen){ const sig = unlockSig(); if (sig !== lastSig){ lastSig = sig; draw(); } }
@@ -1633,6 +1799,8 @@ function live(force){
     const el = wrapEl.querySelector(`[data-live="${k}"]`); if (el) el.textContent = fmtN(shown[k]);
   }
   try{ localStorage.setItem("bn2_coins", String(Math.floor(S.coins))); }catch(e){}
+  { const sa = BX.seasonAt(now()), c = BX.SEASONS[sa.i], e1 = wrapEl.querySelector('[data-live="sea-e"]'), e2 = wrapEl.querySelector('[data-live="sea"]'); if (e1) e1.textContent = c.e; if (e2) e2.textContent = c.label; }
+  q("[data-bet]").forEach(el => { const b = (S.bets || []).find(x => x.id === el.dataset.bet); if (!b) return; const v = BX.betValue(b, now()); el.textContent = fmtN(v); el.classList.toggle("up", v >= b.m); el.classList.toggle("down", v < b.m); });
   // boutons trop chers
   q("[data-cc]").forEach(b => { const ok = S.coins >= +b.dataset.cc && S.stock.bois >= +(b.dataset.cw || 0); b.classList.toggle("no", !ok); });
   q("[data-mgrc]").forEach(b => b.classList.toggle("can", S.coins >= +b.dataset.mgrc));
@@ -1826,7 +1994,7 @@ const TIPS = [
   { id:"slow",   when: () => !!BX.bottleneck(S, S.cur, now()) && S.farms[S.cur].parcels[0].mgr, i:"🐢", txt:"Le badge « Lent » montre le maillon qui freine ta ferme. Paniers pleins en bas : améliore le monte-charge. Tas en haut : la charrette." },
   { id:"boost",  when: () => BX.unlocked(S, "boost"), i: () => P[S.spec].act.e, txt: () => `${P[S.spec].act.txt}, pendant 1 minute. Tu peux recommencer toutes les 4 minutes.` },
   { id:"marche", when: () => BX.unlocked(S, "marche"), i:"📈", txt:"Le marché est ouvert ! Le prix du village monte et descend toute la journée : vends quand il est haut, achète à tes amis quand il est bas." },
-  { id:"crash",  when: () => BX.unlocked(S, "marche") && S.stats.villageSold > 0, i:"📉", txt:"Attention : si tu vends trop d'un coup au village, son prix s'écroule. Garde ta récolte dans la grange et vends au bon moment." },
+  { id:"crash",  when: () => BX.unlocked(S, "marche") && S.stats.villageSold > 0, i:"📉", txt:"Attention : quand tout le monde vend au village, son prix s'écroule. Garde ta récolte dans la grange et vends au bon moment." },
   { id:"wood",   when: () => { const n = BX.nextParcelCost(S.farms[S.spec]); return n.wood > 0 && S.spec !== "bois"; }, i:"🪵", txt:"Les constructions demandent du bois. Achète-le au marché, ou au village (plus cher)." },
   { id:"village",when: () => BX.unlocked(S, "village"), i:"🏘️", txt:"Le village passe commande toutes les 20 minutes, avec de grosses primes. Et le four est prêt à être construit dans la grange." },
   { id:"farm2",  when: () => BX.unlocked(S, "farm2"), i:"⚔️", txt:"Tu peux maintenant ouvrir une 2e exploitation, d'un produit d'un ami. Tout en bas de ta ferme." },
@@ -2032,6 +2200,114 @@ function spark(k){
   const up = vChg(k) >= 0;
   return `<svg class="b2-spark" viewBox="0 0 72 28" aria-hidden="true"><path d="${v.map((x, j) => (j ? "L" : "M") + (j * 72 / n).toFixed(1) + " " + y(x).toFixed(1)).join(" ")}" fill="none" stroke="${up ? "#6EE09A" : "#FF8A70"}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
 }
+/* ---------- Le marché : saisons, forces, fiche, paris (11 nov. 2026) ---------- */
+const fmtMin = ms => { const m = Math.max(1, Math.round(ms / 60000)); return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}` : `${m} min`; };
+const seaWord = v => v >= 2 ? "très recherché" : v === 1 ? "recherché" : v === 0 ? "normal" : v === -1 ? "abondant" : "très abondant";
+const seaCls = v => v > 0 ? "up" : v < 0 ? "down" : "";
+function seasonLine(){ const s = BX.seasonAt(now()), c = BX.SEASONS[s.i]; return `${c.e} ${c.label} · encore ${fmtMin(s.left)}`; }
+function setPress(k, r){ if (!r || r.p == null) return; const o = BX.MK.press[k] || { h:[] }; BX.MK.press[k] = { p: +r.p, t: +r.t, h: (o.h || []).filter(e => e[0] < +r.t).concat([[+r.t, +r.p]]) }; }
+// vendre au village : le cours baisse pour tout le monde (le serveur garde la poussée commune)
+function villageSell(k, q){
+  const before = Math.floor(S.stock[k] || 0), g = BX.vSell(S, k, q, now()), sold = before - Math.floor(S.stock[k] || 0);
+  if (sold > 0) queue(() => rpc("baron2_vtrade", { p_token: getToken(), p_product: k, p_units: -sold })).then(r => setPress(k, r)).catch(() => {});
+  return g;
+}
+function newsBanner(){
+  const n = BX.newsOf(curSlot());
+  if (!n) return `<div class="b2-news calm"><span class="i">📰</span><span class="sp"><b>Calme plat au village</b><small>Aucune nouvelle sur ce créneau</small></span></div>`;
+  return `<button class="b2-news" data-a="mkt-k" data-k="${n.k}"><span class="i">📰</span><span class="sp"><b>${esc(n.txt)}</b><small>${P[n.k].e} ${esc(P[n.k].label)} : le prix ${n.up ? "grimpe" : "chute"}</small></span><span class="go">›</span></button>`;
+}
+const frow = (i, b, sm, cls) => `<div class="b2-frow ${cls || ""}"><span class="i">${i}</span><span class="tx"><b>${b}</b>${sm ? `<small>${sm}</small>` : ""}</span></div>`;
+// ce qui se voit : saison, commande phare, nouvelle, emballement
+function forcesHTML(k){
+  const t = now(), rows = [], v = BX.SEASONV[k];
+  if (v){
+    const s = BX.seasonAt(t), c = BX.SEASONS[s.i], nx = BX.SEASONS[s.next];
+    rows.push(frow(c.e, `${c.label} : <span class="${seaCls(v[s.i])}">${seaWord(v[s.i])}</span>`, `Dans ${fmtMin(s.left)}, ${nx.e} ${nx.label.toLowerCase()} : ${seaWord(v[s.next])}`));
+  }
+  if (ORD && ORD.next_big === k) rows.push(frow("📋", "Commande phare", `Le maire en voudra beaucoup au prochain créneau`));
+  else if (bigNow() === k) rows.push(frow("📋", "Grande commande en cours", "Tout le village en cherche"));
+  const cur = curSlot();
+  for (let sl = cur; sl >= cur - 2; sl--){
+    const n = BX.newsOf(sl); if (!n || n.k !== k) continue;
+    const ago = t - sl * BAL.slotMs; if (n.mag * Math.exp(-ago / 1800000) < 0.08) continue;
+    rows.push(frow("📰", esc(n.txt), sl === cur ? `Le prix ${n.up ? "grimpe" : "chute"}` : `Il y a ${fmtMin(ago)}, l'effet s'estompe`, n.up ? "up" : "down"));
+    break;
+  }
+  const b = BX.bubbleAt(k, t);
+  if (b && b.ph === "monte" && b.warn) rows.push(frow("🔥", "Ça s'emballe", "Ça monte depuis longtemps… la bulle peut éclater à tout moment", "warn"));
+  if (b && b.ph === "krach") rows.push(frow("💥", "La bulle éclate !", "Le prix s'effondre", "down"));
+  if (b && b.ph === "apres") rows.push(frow("💥", "Après la bulle", "Le prix se remet doucement", "down"));
+  return `<div class="b2-fhead"><h3 class="b2-h3">Ce qui fait bouger le prix</h3><button class="b2-q" data-a="mfiche" data-k="${k}" aria-label="Comment ça marche">?</button></div>
+    <div class="b2-forces">${rows.join("") || frow("🤫", "Rien d'annoncé", "Le reste, à toi de le deviner")}</div>`;
+}
+const lab = k => `${P[k].e} ${esc(P[k].label)}`;
+function linksText(k){
+  if (P[k].rec) return `Suit le prix de ses ingrédients : ${Object.keys(P[k].rec).map(lab).join(", ")}.`;
+  if (P[k].sub) return `Suit le prix de la récolte d'où il vient : ${lab(P[k].of)}.`;
+  if (P[k].aged) return `Suit le prix de sa matière : ${lab(P[k].src)}, en toujours plus cher.`;
+  const l = (BX.LINKS[k] || []).map(([x, w]) => w > 0 ? `Lié à ${lab(x)} : quand l'un grimpe, l'autre suit un peu.` : `Lié à ${lab(x)}, à l'envers : quand l'un grimpe, l'autre baisse un peu.`);
+  const dep = BX.CRAFT.filter(r => P[r].rec[k]);
+  return l.join(" ") + (dep.length ? ` Il entraîne aussi ${dep.map(lab).join(", ")}.` : "");
+}
+function ficheSheet(k){
+  sheetCtx = null;
+  const v = BX.SEASONV[k], s = BX.seasonAt(now()), nw = BX.newsOf ? (k in { ble:1, oeufs:1, lait:1, fruits:1, miel:1, bois:1 }) : false;
+  const sea = v ? `<div class="b2-seas">${BX.SEASONS.map((c, i) => `<span class="${i === s.i ? "on" : ""}">${c.e} ${c.label}<b class="${seaCls(v[i])}">${seaWord(v[i])}</b></span>`).join("")}</div>`
+    : `<p class="b2-note" style="margin:0 0 6px">Pas de saison à lui.</p>`;
+  sheet(`<h3>${P[k].e} Comment bouge le prix</h3>
+    <p>Le cours du village dépend de 6 choses. Certaines s'affichent, les autres se devinent, comme en vrai.</p>
+    <div class="b2-fiche">
+    ${frow("🌸", "La saison", "Printemps, été, automne, hiver : 1 h 30 chacune. Recherché = cher, abondant = pas cher.")}${sea}
+    ${frow("📋", "La commande phare", "20 min avant, on annonce le produit de la prochaine grande commande : il grimpe, puis redescend.")}
+    ${frow("📰", "La nouvelle du village", nw ? "Une par créneau, au hasard, sans prévenir. Elle fait bondir ou chuter un produit, puis s'efface en une heure environ." : "Elles touchent les récoltes, et donc ce qui en dépend.")}
+    ${frow("🔗", "Les liens (ça ne s'affiche pas)", linksText(k))}
+    ${frow("👥", "Le village (ça ne s'affiche pas)", "Quand beaucoup de monde vend au village, le prix baisse. Quand beaucoup achète, il monte. On ne te dit pas qui : à toi de le sentir. Ça s'oublie de moitié en 20 min.")}
+    ${frow("🔥", "L'emballement", "Parfois un produit monte, monte… puis la bulle éclate d'un coup et il tombe plus bas qu'avant. On voit quand ça s'emballe, jamais quand ça éclate.")}
+    ${frow("🏘️", "Acheter et vendre au village", "Le village rachète au cours, et revend un quart plus cher. Plus tu en prends d'un coup, plus ça grimpe ; plus tu en vends, plus ça baisse.")}
+    ${P[k].sub ? "" : frow("🎯", "Le pari", `Tu mises sur la hausse ou la baisse. Ta mise suit le cours ×${BX.BET.lev} : si le cours monte de moitié, ta mise à la hausse double. Tu te retires quand tu veux. Si le cours part trop dans l'autre sens, tu perds ta mise. 3 pièces de taxe pour 100 misées.`)}
+    </div><button class="b2-btn big" data-a="close-sheet">Compris</button>`);
+}
+function seasonSheet(){
+  sheetCtx = null;
+  const s = BX.seasonAt(now()), c = BX.SEASONS[s.i], nx = BX.SEASONS[s.next];
+  sheet(`<h3>${c.e} ${c.label}</h3><p>Encore ${fmtMin(s.left)}, puis ${nx.e} ${nx.label.toLowerCase()}. Chaque saison dure 1 h 30. Recherché = cher, abondant = pas cher.</p>
+    <div class="b2-fiche">${BX.RAW.map(k => { const v = BX.SEASONV[k]; return frow(P[k].e, `${esc(P[k].label)} : <span class="${seaCls(v[s.i])}">${seaWord(v[s.i])}</span>`, `Puis ${nx.label.toLowerCase()} : ${seaWord(v[s.next])}`); }).join("")}</div>
+    <button class="b2-btn big" data-a="close-sheet">Fermer</button>`);
+}
+// les paris en cours
+function betRow(b){
+  const v = BX.betValue(b, now());
+  return `<div class="b2-ord bet"><span class="who">${P[b.k].e} ${b.d > 0 ? "📈 Hausse" : "📉 Baisse"}<small>Misé ${fmtN(b.m)} · zéro si le cours passe ${b.d > 0 ? "sous" : "au-dessus de"} ${fmtP(BX.betLimit(b))}</small></span>
+    <span class="pr ${v >= b.m ? "up" : "down"}" data-bet="${esc(b.id)}">${fmtN(v)}</span><button class="b2-btn gold" data-a="bet-close" data-id="${esc(b.id)}">Me retirer</button></div>`;
+}
+function betsHTML(k){
+  const l = (S.bets || []).filter(b => !k || b.k === k);
+  if (!k) return l.length ? `<h3 class="b2-msec">Tes paris</h3><div class="b2-book">${l.map(betRow).join("")}</div>` : "";
+  if (P[k].sub) return "";
+  return `<h3 class="b2-h3">Parier</h3>${l.length ? `<div class="b2-book">${l.map(betRow).join("")}</div>` : ""}
+    <div class="b2-two"><button class="b2-btn" data-a="bet" data-k="${k}" data-d="1">📈 À la hausse</button><button class="b2-btn red" data-a="bet" data-k="${k}" data-d="-1">📉 À la baisse</button></div>
+    <p class="b2-note" style="color:var(--chalk2)">Ta mise suit le cours ×${BX.BET.lev}. Tu te retires quand tu veux.</p>`;
+}
+function betSheet(k, d){
+  const t = now(); S.bets = S.bets || [];
+  if (S.bets.length >= BX.BET.max){ toast(`${BX.BET.max} paris en même temps au maximum. Retire-toi d'un pari d'abord.`, "err"); return; }
+  const cap = Math.min(BX.betCap(k, t), Math.floor(S.coins / (1 + BX.BET.fee)));
+  if (cap < 1){ toast("Tu n'as pas assez de pièces pour parier.", "err"); return; }
+  sheetCtx = { type:"bet", k, d };
+  sheet(`<h3>${d > 0 ? "📈 Parier à la hausse" : "📉 Parier à la baisse"}</h3>
+    <p>${lab(k)} · cours ${fmtP(BX.vPrice(k, t))}. Ta mise suit le cours ×${BX.BET.lev}. Tu te retires quand tu veux. Au pire, tu perds ta mise.</p>
+    ${qtyBlock(cap, Math.max(1, Math.floor(cap / 4)), "q")}<div class="b2-sum" data-sum></div><p class="b2-note" data-betex></p>
+    <p class="b2-note">Mise maximale sur ce produit : ${fmtN(BX.betCap(k, t))}.</p>
+    <button class="b2-btn gold big" data-a="confirm">Parier</button>`);
+  sheetSum();
+}
+function betCheck(){
+  if (!S || !W.at || !(S.bets || []).length) return;
+  const dead = BX.checkBets(S, now());
+  dead.forEach(b => { toast(`💥 Ton pari ${b.d > 0 ? "à la hausse" : "à la baisse"} sur ${P[b.k].label.toLowerCase()} est tombé à zéro`, "err"); dirty = true; });
+  if (dead.length){ save(true); if (view === "market" && !sheetOpen) draw(); }
+}
 function marketListHTML(){
   const casks = x => S.cellar.slots.filter(sl => sl && sl.k === x);
   const row = x => {
@@ -2042,7 +2318,9 @@ function marketListHTML(){
   };
   const sec = (title, list) => list.length ? `<h3 class="b2-msec">${title}</h3><div class="b2-mlist">${list.map(row).join("")}</div>` : "";
   return `<div class="b2-board"><div class="b2-col" style="padding:6px 16px 28px">
-    <div class="b2-mhead"><h2>Le marché</h2><small>Cours du village · courbe sur 3 h · variation sur 1 h</small></div>
+    <div class="b2-mhead"><h2>Le marché</h2><button class="b2-seachip" data-a="season">${seasonLine()}</button></div>
+    ${seen("mk2") ? "" : `<div class="b2-intro"><b>Nouveau marché</b><span>Saisons, nouvelles, emballement… et les paris. Touche le <b>?</b> d'un produit pour tout comprendre. Le village vend maintenant au cours.</span><button data-a="mk2x" aria-label="J'ai compris">×</button></div>`}
+    ${newsBanner()}${betsHTML()}
     ${sec("Récoltes", BX.RAW)}${BX.unlocked(S, "four") ? sec("Recettes", BX.CRAFT) : ""}${sec("Sous-produits", BX.SUB)}${sec("Produits de luxe", BX.AGED)}
   </div></div>`;
 }
@@ -2067,16 +2345,18 @@ function marketHTML(){
   const colpL = P[k].sub ? BX.reserveLeft(S, k, now()) : 0;
   const res = P[k].aged ? "" : P[k].sub ? `<div class="b2-ord res"><span class="who">🧳 Le marchand<small>Dépannage, cher</small></span><span class="q">${fmtN(colpL)}</span><span class="pr">${fmtP(P[k].floor * BAL.colpMult)}</span>
     <button class="b2-btn gold" data-a="buy-colp" ${colpL < 1 ? "disabled" : ""}>Acheter</button></div>`
-    : `<div class="b2-ord res"><span class="who">🏘️ Le village<small>Réserve commune</small></span><span class="q">${fmtN(resL)}</span><span class="pr">${fmtP(BX.reservePrice(k))}</span>
+    : `<div class="b2-ord res"><span class="who">🏘️ Le village<small>Au cours, + un quart</small></span><span class="q">${fmtN(resL)}</span><span class="pr">${fmtP(BX.vAsk(k, now()))}</span>
     <button class="b2-btn gold" data-a="buy-res" ${resL < 1 ? "disabled" : ""}>Acheter</button></div>`;
   const hist = W.trades.filter(t => t.product === k).slice(-12).reverse().map(t => `<div class="b2-ord"><span class="who">${esc(t.buyer_id === ME.id ? "Toi" : nameOf(t.buyer_id))} ← ${esc(t.seller_id === ME.id ? "toi" : nameOf(t.seller_id))}<small>${fmtAgo(t.ts)}</small></span><span class="q">${fmtN(t.qty)}</span><span class="pr">${fmtP(+t.price)}</span></div>`).join("");
   return `<div class="b2-board"><div class="b2-col" style="padding:4px 16px 24px">
     <div class="b2-mtop"><button class="b2-back" data-a="mkt-back" aria-label="Retour au marché">‹</button><span class="ic">${P[k].e}</span><b>${esc(P[k].label)}</b></div>
-    <div class="b2-quote"><div><div style="font:800 13px var(--round);color:var(--chalk2)">Cours du village</div><span class="big">${COIN}${fmtP(BX.vPrice(k, now()))}</span><span class="ch">${chg(vChg(k))} <small style="opacity:.6">1 h</small></span></div>
-      <div class="lim">${qv.p != null ? `Entre joueurs (24 h) <b>${fmtP(qv.p)}</b><br>` : ""}${BX.vMyPrice(S, k, now()) < BX.vPrice(k, now()) * 0.95 ? `Pour toi <b>${fmtP(BX.vMyPrice(S, k, now()))}</b> (tu as trop vendu)<br>` : ""}${P[k].aged ? "" : P[k].sub ? `Marchand <b>${fmtP(P[k].floor * BAL.colpMult)}</b><br>` : `Réserve du village <b>${fmtP(BX.reservePrice(k))}</b><br>`}Tu en as <b>${fmtN(S.stock[k])}</b></div></div>
+    <div class="b2-quote"><div><div style="font:800 13px var(--round);color:var(--chalk2)">Le village rachète</div><span class="big">${COIN}${fmtP(BX.vPrice(k, now()))}</span><span class="ch">${chg(vChg(k))} <small style="opacity:.6">1 h</small></span></div>
+      <div class="lim">${P[k].aged ? "" : P[k].sub ? `Marchand <b>${fmtP(P[k].floor * BAL.colpMult)}</b><br>` : `Le village vend <b>${fmtP(BX.vAsk(k, now()))}</b><br>`}${qv.p != null ? `Entre joueurs (24 h) <b>${fmtP(qv.p)}</b><br>` : ""}Tu en as <b>${fmtN(S.stock[k])}</b></div></div>
     <div class="b2-seg">${["1h", "24h", "7j"].map(p => `<button class="${mkt.period === p ? "on" : ""}" data-a="mkt-p" data-p="${p}">${p === "1h" ? "1 h" : p === "24h" ? "24 h" : "7 j"}</button>`).join("")}</div>
     <div class="b2-chart">${chartSVG(k, mkt.period)}</div>
     <div class="b2-two"><button class="b2-btn" data-a="list" data-k="${k}" ${S.stock[k] < 1 ? "disabled" : ""}>Mettre en vente</button><button class="b2-btn gold" data-a="sell" data-k="${k}" ${S.stock[k] < 1 ? "disabled" : ""}>Vendre au village</button></div>
+    ${forcesHTML(k)}
+    ${betsHTML(k)}
     ${P[k].aged ? casksHTML(k) : ""}
     <h3 class="b2-h3">Offres des joueurs</h3>
     <div class="b2-book">${rows || `<div class="b2-empty">Personne n'en vend pour l'instant.${k === S.spec || k === BX.SUBOF[S.spec] ? " Tu es le seul à en produire : à toi de fixer ton prix." : ""}</div>`}${res}</div>
@@ -2158,13 +2438,14 @@ async function loadOrders(){
     const r = await rpc("baron2_orders", {}); if (!r || !Array.isArray(r.list)) return;
     const prev = ORD && ORD.slot === +r.slot ? (ORD.winners || {}) : null, fresh = ORD && ORD.slot !== +r.slot;
     ORD = { slot: +r.slot, list: r.list, winners: r.winners || {}, next_big: r.next_big };
+    BX.setMarket({ bigs: r.bigs || {} });
     syncOrders();
     if (prev) for (const id in ORD.winners){
       const w = ORD.winners[id]; if (prev[id] || w.id === ME.id) continue;
       const o = ORD.list.find(x => x.id === id); if (!o) continue;
       toast(`🏆 ${esc(w.name)} a raflé la prime ${o.big ? "du maire" : "de " + (BX.CHARS[o.who] || BX.CHARS.epiciere).name.toLowerCase()} : ${COIN}${fmtN(o.bonus)}`, (S.orders.prog[id] || 0) > 0 ? "err" : "");
     }
-    if (fresh) toast("📜 Nouvelles commandes au village : premier arrivé, premier servi !");
+    if (fresh){ toast("📜 Nouvelles commandes au village : premier arrivé, premier servi !"); const n = BX.newsOf(+r.slot); if (n && BX.unlocked(S, "marche")) setTimeout(() => toast(`📰 ${esc(n.txt)} : le ${esc(P[n.k].label.toLowerCase())} ${n.up ? "grimpe" : "chute"}`, n.up ? "gold" : "err"), 2500); }
     if (wrapEl && view === "village" && !sheetOpen) draw();
   }catch(e){} finally { ordBusy = false; }
 }
@@ -2280,12 +2561,18 @@ function sheetSum(){
   if (c.type === "sell"){ const g = BX.vValue(S, c.k, q, now()); s.innerHTML = `<span>Le village te paie${q > 0 ? ` <small>(${fmtP(g / q)} l'unité)</small>` : ""}</span><span>${COIN}${fmtN(g)}</span>`; }
   if (c.type === "list"){ const p = Math.max(0, +String(wrapEl.querySelector("[data-price]").value).replace(",", ".") || 0); s.innerHTML = `<span>Si tout part</span><span>${COIN}${fmtN(q * p)}</span>`; }
   if (c.type === "cellar"){ const a = BX.AGEDOF[c.k], t = now(); s.innerHTML = `<span>${P[c.k].e} ${COIN}${fmtN(q * BX.vPrice(c.k, t))} → ${P[a].e}</span><span>${COIN}${fmtN(q * BX.vPrice(a, t))}</span>`; }
-  if (c.type === "buy" || c.type === "res" || c.type === "colp"){ s.innerHTML = `<span>Tu paies</span><span>${COIN}${fmtN(q * c.price)}</span>`; const b = wrapEl.querySelector("[data-a=confirm]"); if (b) b.disabled = q < 1 || q * c.price > S.coins; }
+  if (c.type === "res"){ const cost = BX.vBuyCost(c.k, q, now()); s.innerHTML = `<span>Tu paies${q > 0 ? ` <small>(${fmtP(cost / q)} l'unité)</small>` : ""}</span><span>${COIN}${fmtN(cost)}</span>`; const b = wrapEl.querySelector("[data-a=confirm]"); if (b) b.disabled = q < 1 || cost > S.coins; }
+  if (c.type === "bet"){ const fee = Math.ceil(q * BX.BET.fee), p0 = BX.vPrice(c.k, now()), d = c.d, L = BX.BET.lev, val = p => Math.max(0, q * (1 + d * L * (p / p0 - 1)));
+    s.innerHTML = `<span>Mise + taxe</span><span>${COIN}${fmtN(q + fee)}</span>`;
+    const ex = wrapEl.querySelector("[data-betex]"), pu = p0 * 1.25, pd = p0 * 0.8;
+    if (ex) ex.innerHTML = `Si le cours passe à ${fmtP(pu)} → ta mise vaut <b>${fmtN(val(pu))}</b>. S'il passe à ${fmtP(pd)} → <b>${fmtN(val(pd))}</b>. À ${fmtP(p0 * (1 - d / L))}, elle tombe à zéro.`;
+    const b = wrapEl.querySelector("[data-a=confirm]"); if (b) b.disabled = q < 1 || q + fee > S.coins; }
+  if (c.type === "buy" || c.type === "colp"){ s.innerHTML = `<span>Tu paies</span><span>${COIN}${fmtN(q * c.price)}</span>`; const b = wrapEl.querySelector("[data-a=confirm]"); if (b) b.disabled = q < 1 || q * c.price > S.coins; }
   if (c.type === "bake"){ s.innerHTML = `<span>Cuisson</span><span>${fmtT(BX.ovenDur(S, c.k))}</span>`; }
 }
 function sellSheet(k){
   sheetCtx = { type:"sell", k };
-  sheet(`<h3>${P[k].e} Vendre au village</h3><p>Cours du village : <b>${fmtP(BX.vPrice(k, now()))}</b> ${vTrend(k)}. Plus tu vends d'un coup, plus son prix baisse.</p>
+  sheet(`<h3>${P[k].e} Vendre au village</h3><p>Cours du village : <b>${fmtP(BX.vPrice(k, now()))}</b> ${vTrend(k)}. Plus tu vends d'un coup, plus son prix baisse, pour tout le village.</p>
     ${qtyBlock(S.stock[k], S.stock[k], "q")}<div class="b2-sum" data-sum></div><button class="b2-btn gold big" data-a="confirm">Vendre au village</button>`);
   sheetSum();
 }
@@ -2315,9 +2602,9 @@ function buySheet(l){
   sheetSum();
 }
 function resSheet(k){
-  const pr = BX.reservePrice(k), left = resLeft(k), max = Math.min(left, Math.floor(S.coins / pr));
+  const pr = BX.vAsk(k, now()), left = resLeft(k), max = Math.min(left, BX.vBuyMax(k, S.coins, now()));
   sheetCtx = { type:"res", k, price: pr };
-  sheet(`<h3>🏘️ Réserve du village</h3><p>Une seule réserve pour tout le village, à ${fmtP(pr)} l'unité. Il en reste ${fmtN(left)} ${P[k].e} jusqu'au prochain réassort (toutes les 20 min). Si tu la vides, plus personne ne peut en acheter ici.</p>
+  sheet(`<h3>🏘️ Le village vend</h3><p>Au cours du village, un quart plus cher qu'il ne rachète : ${fmtP(pr)} l'unité pour commencer, et ça grimpe à chaque unité achetée (pour tout le monde). Il en reste ${fmtN(left)} ${P[k].e} jusqu'au prochain réassort (toutes les 20 min).</p>
     ${qtyBlock(max, max, "q")}<div class="b2-sum" data-sum></div><button class="b2-btn gold big" data-a="confirm" ${max < 1 ? "disabled" : ""}>Acheter</button>`);
   sheetSum();
 }
@@ -2348,20 +2635,25 @@ async function confirm(){
   const c = sheetCtx; if (!c) return;
   const q = qval("q"); if (q < 1) return;
   const btn = wrapEl.querySelector("[data-a=confirm]"); if (btn) btn.disabled = true;
+  if (c.type === "bet"){
+    const b = BX.openBet(S, c.k, c.d, q, now());
+    if (!b){ toast("Ce pari n'est pas possible.", "err"); closeSheet(); return; }
+    dirty = true; save(true); closeSheet(); draw(); sound("up"); toast(`🎯 ${fmtN(q)} misés ${c.d > 0 ? "à la hausse" : "à la baisse"} sur ${P[c.k].label.toLowerCase()}`); return;
+  }
   if (c.type === "sell"){
     if (S.stock[c.k] < q) return;
-    const g = BX.vSell(S, c.k, q, now()); dirty = true;
+    const g = villageSell(c.k, q); dirty = true;
     closeSheet(); draw(); sound("coin"); coinsFly(wrapEl.querySelector(`[data-k="${c.k}"]`) || wrapEl.querySelector("#b2-main"), 6); toast(`+${COIN}${fmtN(g)}`, "gold");
     return;
   }
   if (c.type === "res"){
-    if (q * c.price > S.coins) return;
+    if (BX.vBuyCost(c.k, q, now()) > S.coins) return;
     queue(async () => {
       let g = 0;
       try{ g = +(await rpc("baron2_reserve_buy", { p_token: getToken(), p_product: c.k, p_qty: q })) || 0; }
       catch(e){ toast(errText(e), "err"); if (btn) btn.disabled = false; return; }
       if (g >= 1){
-        const cost = g * c.price; S.coins -= cost; S.stock[c.k] += g; S.stats.bought += cost; dirty = true;
+        const cost = Math.min(S.coins, BX.vBuyCost(c.k, g, now())); S.coins -= cost; S.stock[c.k] += g; S.stats.bought += cost; BX.pushLocal(c.k, g, now()); dirty = true;
         if (W.res){ W.res.used = W.res.used || {}; W.res.used[c.k] = (+W.res.used[c.k] || 0) + g; }
       }
       closeSheet(); loadWorld(true); draw();
@@ -2543,10 +2835,15 @@ function onClick(e){
     }
     case "prod": prodSheet(b.dataset.k); return;
     case "sell": sellSheet(b.dataset.k); return;
+    case "mfiche": ficheSheet(b.dataset.k); return;
+    case "season": seasonSheet(); return;
+    case "mk2x": markSeen("mk2"); draw(); return;
+    case "bet": betSheet(b.dataset.k, +b.dataset.d); return;
+    case "bet-close": { const v = BX.closeBet(S, b.dataset.id, now()); if (v == null) return; dirty = true; save(true); sound("coin"); toast(`Tu te retires : +${COIN}${fmtN(v)}`, "gold"); draw(); return; }
     case "quick-sell": {
       const k = S.cur, q = Math.floor(S.stock[k] || 0);
       if (q < 1){ toast("La grange est vide : attends que la charrette livre ta récolte."); bounce(b); return; }
-      const g = BX.vSell(S, k, q, now()); dirty = true;
+      const g = villageSell(k, q); dirty = true;
       markSeen("tip_sell"); sound("coin"); buzz(15); bounce(b); coinsFly(b, 8); floatText(b, "+" + fmtN(g), "gold");
       if (!seen("hint_market") && BX.unlocked(S, "marche")){ markSeen("hint_market"); setTimeout(() => toast("Astuce : au Marché, tes amis peuvent t'acheter plus cher que le village."), 1200); }
       live(); setTimeout(draw, 900); return;
