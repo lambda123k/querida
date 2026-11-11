@@ -48,7 +48,7 @@ const P = {
 
 /* ---------- Outils de l'atelier ----------
    3 emplacements (parcelles, monte-charge, charrette), 3 qualités. Un outil s'use : il dure un temps, puis il faut le refaire.
-   Ils se fabriquent avec du bois et les sous-produits des AUTRES fermes. Ils ne marchent que sur ta ferme principale. */
+   Ils se fabriquent avec du bois (les sous-produits servent à l'établi). Ils ne marchent que sur ta ferme principale. */
 const TQ = [
   { id:"simple", label:"Simple", mul:1.3, h:1, qty:1,  need:1 },
   { id:"solide", label:"Solide", mul:1.6, h:3, qty:4,  need:2 },
@@ -309,7 +309,7 @@ function toolSubs(s, kind){
 }
 function toolRecipe(s, kind, qi){
   const q = Math.max(5, nice(effRate(s, 0) * BAL.subRatio * BAL.toolSecs * TQ[qi].qty));
-  const rec = {}; toolSubs(s, kind).forEach(k => rec[k] = q); rec.bois = (rec.bois || 0) + q * 2;
+  const rec = { bois: q * 4 };
   return rec;
 }
 const canCraft = (s, kind, qi) => { const r = toolRecipe(s, kind, qi); return (s.atelier || 0) >= TQ[qi].need && Object.keys(r).every(k => s.stock[k] >= r[k]); };
@@ -752,7 +752,8 @@ let mkt = { k: null, period: "24h", open: false, tab: "market" };
 
 function publicStats(){
   return { fortune: BX.fortune(S), prod: Math.round(BX.prodValue(S) * 100) / 100, baked: Math.floor(S.stats.baked), orders: S.stats.orders,
-    traded: Math.floor(S.stats.sold + S.stats.bought), farms: Object.keys(S.farms), parcels: S.farms[S.spec].parcels.length, pio: S.reform ? 1 : 0 };
+    traded: Math.floor(S.stats.sold + S.stats.bought), farms: Object.keys(S.farms), parcels: S.farms[S.spec].parcels.length, pio: S.reform ? 1 : 0,
+    etb: S.etb && S.etb.job && S.etb.job.cid === etbCid(now()) ? S.etb.job.cid : 0, crafted: S.stats.crafted || 0 };
 }
 function applyCredits(list){
   const msgs = [];
@@ -792,6 +793,7 @@ function fixState(s){
   s.reserve = s.reserve || { slot:0, used:{} }; s.vsold = s.vsold || {};
   if (!s.ord2){ s.ord2 = 1; s.orders = { slot:0, list:[], prog:{} }; }
   s.ord3 = 1; s.v4 = 1; s.v5 = 1;                                                  // atelier, sous-produits, cellier
+  s.etb = Object.assign({ rep:0, job:null, inv:{} }, s.etb || {}); s.etb.inv = s.etb.inv || {};
   s.bets = s.bets || []; s.tools = s.tools || {}; s.atelier = s.atelier || 0; s.cellar = s.cellar || { lvl:0, slots:[] };                                                            // demandes surprises (11 nov. 2026)   // commandes du village en course (11 nov. 2026)
   s.claims = (s.claims || []).map(c => ({ id: c.id, slot: c.slot })); s.wonIds = s.wonIds || [];
   // une seule exploitation en plus : on garde la plus développée
@@ -829,8 +831,8 @@ async function loadWorld(force){
     const r = await rpc("baron2_world", {});
     BX.setMarket({ press: r.press || {}, med: r.med });
     W = { res: r.reserve || null, players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
-    await loadOrders(true);
-    if (wrapEl && (view === "market" || view === "village")) draw();
+    await loadOrders(true); await loadEtb();
+    if (wrapEl && (view === "market" || view === "village" || view === "atelier") && !gestOpen && !sheetOpen) draw();
   }catch(e){}
 }
 const groupProd = () => {
@@ -1398,6 +1400,50 @@ const STYLE = `
 .b2-fhead{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .b2-q{width:30px;height:30px;border-radius:50%!important;background:rgba(239,234,219,.15)!important;color:var(--chalk)!important;font:900 16px var(--round)!important;flex:none;margin-top:12px}
 .b2-q.top{margin:0 0 0 auto}
+/* l'établi (12 nov. 2026) */
+.b2-erep{display:flex;align-items:center;gap:8px;margin-top:8px;font:900 12px var(--round);color:var(--gold2)}
+.b2-erep .bar{flex:1;height:8px;border-radius:9px;background:rgba(59,31,23,.1);overflow:hidden}.b2-erep .bar i{display:block;height:100%;background:linear-gradient(90deg,#F2B33D,#E08A1E)}
+.b2-client{margin-top:12px;border-radius:16px;background:linear-gradient(160deg,#3B2A4F,#2B1E3A);color:#F6EEDD;padding:14px;position:relative;overflow:hidden}
+.b2-client.king{background:linear-gradient(160deg,#6B4A12,#3E2A08);box-shadow:0 0 0 2px #F2B33D}
+.b2-client .ctop{display:flex;gap:12px;align-items:center}
+.b2-client .av{width:54px;height:54px;border-radius:50%;background:#F4E2C4;display:grid;place-items:center;font-size:32px;border:3px solid var(--gold);flex:none}
+.b2-client .cn{font:900 16px var(--round);flex:1;min-width:0}.b2-client .cn small{display:block;font:800 12px var(--round);opacity:.7;margin-top:1px}
+.b2-client .timer{align-self:flex-start;background:rgba(255,255,255,.12);border-radius:999px;padding:4px 10px;font:900 12px var(--round);white-space:nowrap;font-variant-numeric:tabular-nums}
+.b2-client .quote{font:400 italic 20px/1.2 var(--disp);margin:12px 0 10px}
+.b2-client .obj{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.08);border-radius:14px;padding:10px}
+.b2-client .obj .big{font-size:36px;line-height:1}.b2-client .obj b{font:900 15px var(--round);display:block}.b2-client .obj small{font:800 12px var(--round);opacity:.75}
+.b2-client .prime{margin-left:auto;text-align:right}.b2-client .prime b{font:900 20px var(--round);color:#FFD45E;display:flex;align-items:center;gap:4px;justify-content:flex-end}.b2-client .prime small{display:block;font:800 11px var(--round);opacity:.7}
+.b2-eing{display:flex;gap:6px;margin-top:10px}
+.b2-eing span{flex:1;min-width:0;text-align:center;border-radius:12px;padding:7px 4px;background:rgba(255,255,255,.1);font:900 12.5px var(--round);font-variant-numeric:tabular-nums}
+.b2-eing span .b2-ic{display:block;margin:0 auto 2px;font-size:26px}.b2-eing span b{display:block;font:900 12px var(--round)}
+.b2-eing .ko{box-shadow:inset 0 0 0 2px #FF8A70;color:#FFB3A2}.b2-eing .ok{box-shadow:inset 0 0 0 2px #6EE09A}
+.b2-esteps{display:flex;align-items:center;justify-content:center;gap:6px;margin:12px 0 10px;opacity:.9}
+.b2-esteps em{font-style:normal;font-size:18px;background:rgba(255,255,255,.12);width:34px;height:34px;border-radius:50%;display:grid;place-items:center}
+.b2-esteps em.done{background:#2F9E57}.b2-esteps i{font-style:normal;opacity:.6}
+.b2-client .b2-two{margin-top:0}.b2-client .b2-btn.big{width:100%;margin-top:10px}
+.b2-client .race{margin-top:10px;font:800 12px var(--round);opacity:.8;text-align:center}
+.b2-ewin{margin-top:12px;text-align:center;background:rgba(255,255,255,.08);border-radius:12px;padding:10px}.b2-ewin b{font:900 15px var(--round)}.b2-ewin small{display:block;font:800 12px var(--round);opacity:.75;margin-top:2px}
+.b2-einv{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.b2-einv div{background:#FFFAF1;border-radius:12px;padding:8px;display:flex;align-items:center;gap:8px;box-shadow:0 2px 0 rgba(124,74,36,.2)}
+.b2-einv span{font-size:26px}.b2-einv b{font:900 13px var(--round);min-width:0}.b2-einv small{display:block;font:800 11px var(--round);color:var(--ink2)}
+.b2-geste{position:absolute;inset:0;z-index:30;background:radial-gradient(circle at 50% 30%,#5A3A22,#2A1A10);color:#F6EEDD;display:flex;flex-direction:column;align-items:center;padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 20px;animation:b2-in .25s ease;touch-action:manipulation}
+.b2-geste .gtop{display:flex;align-items:center;gap:10px;width:100%;max-width:420px;font:900 13px var(--round)}
+.b2-geste .x{width:36px;height:36px;border-radius:50%!important;background:rgba(255,255,255,.12)!important;color:#F6EEDD!important;font-size:18px!important}
+.b2-geste .prog{flex:1;display:flex;gap:6px}.b2-geste .prog i{flex:1;height:8px;border-radius:9px;background:rgba(255,255,255,.15)}.b2-geste .prog i.on{background:var(--gold)}.b2-geste .prog i.done{background:#6EE09A}
+.b2-geste .gt{text-align:center;margin-top:10px}.b2-geste .gt b{font:400 italic 32px/1.1 var(--disp);display:block}.b2-geste .gt small{font:800 14px var(--round);opacity:.75}
+.b2-geste .stage{margin-top:14px;width:min(330px,86vw);aspect-ratio:1.08;border-radius:24px;background:repeating-linear-gradient(90deg,#9B6A3E 0 30px,#93633A 30px 31px);box-shadow:inset 0 0 40px rgba(0,0,0,.35),0 8px 0 #4A2C15;position:relative;display:grid;place-items:center}
+.b2-geste .stage svg{width:92%;height:92%}
+.b2-geste .fb{margin-top:16px;font:900 18px var(--round);min-height:24px}.b2-geste .fb.p{color:#9CF2BD}.b2-geste .fb.r{color:#FF8A70}
+.b2-geste .chips{display:flex;gap:8px;margin-top:10px}.b2-geste .chips span{background:rgba(255,255,255,.1);border-radius:12px;padding:7px 10px;font:900 12.5px var(--round)}
+.b2-geste .chips .p{background:rgba(110,224,154,.2);color:#9CF2BD}.b2-geste .chips .r{background:rgba(255,138,112,.2);color:#FFB3A2}
+.b2-geste .tap{margin-top:auto;width:100%;max-width:340px;padding:20px!important;border-radius:20px!important;font:900 21px var(--round)!important;background:var(--gold)!important;color:#4A2A0A!important;box-shadow:0 6px 0 var(--gold2);-webkit-user-select:none;user-select:none;touch-action:none}
+.b2-geste .tap:active{transform:translateY(3px);box-shadow:0 3px 0 var(--gold2)}.b2-geste .tap:disabled{opacity:.5}
+.b2-geste .foot{font:800 12.5px var(--round);opacity:.65;margin:12px 0 0;text-align:center}
+.b2-geste .gauge{position:absolute;left:24px;top:24px;bottom:24px;width:46px;border-radius:14px;background:rgba(0,0,0,.35);overflow:hidden;box-shadow:inset 0 0 0 3px rgba(255,255,255,.2)}
+.b2-geste .gauge .zone{position:absolute;left:0;right:0;background:rgba(110,224,154,.55);box-shadow:0 0 0 2px #6EE09A}
+.b2-geste .gauge .fill{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(#E8A33A,#B5701A);opacity:.85}
+.b2-geste .plank{font-size:110px;margin-left:50px;filter:drop-shadow(0 6px 6px rgba(0,0,0,.4))}
+
 .b2-fh4{margin:4px 0 6px;font:800 12px var(--round);letter-spacing:.08em;text-transform:uppercase;color:var(--ink2)}
 .b2-fbox{border-radius:12px;background:rgba(59,31,23,.06);padding:0 10px;margin-bottom:14px}
 .b2-fiche .b2-frow.up b,.b2-fiche .b2-frow .up{color:var(--up2)!important}.b2-fiche .b2-frow.down b,.b2-fiche .b2-frow .down{color:var(--red)!important}.b2-fiche .b2-frow.warn b{color:var(--gold2)!important}.b2-fiche .b2-frow small{color:var(--ink2)}
@@ -1710,6 +1756,8 @@ function loop(){
     live();
     if (n % 4 === 0) checkSurprises();
     if (n % 20 === 10) betCheck();
+    if (view === "atelier") etbTick(now());
+    if (n % 80 === 20 && view === "atelier") loadEtb().then(() => { if (view === "atelier" && !sheetOpen && !gestOpen) draw(); });
     n++;
     if (n % 4 === 0) rankTick();
     if (n % 4 === 0 && !sheetOpen){ const sig = unlockSig(); if (sig !== lastSig){ lastSig = sig; draw(); } }
@@ -2073,6 +2121,257 @@ function ovenHTML(){
     <div class="b2-paper"><h2 class="b2-h2">Recettes<small>En vert : tu as l'ingrédient. En rouge : il te manque.</small></h2>${recs}</div>`;
 }
 
+/* ---------- L'Établi (12 nov. 2026) ----------
+   Un grand client pour tout le village toutes les 30 min (même tirage sur tous les téléphones).
+   Il veut un objet sur mesure fait de sous-produits de plusieurs fermes. On le fabrique en 2-3 gestes à faire soi-même
+   (découper, coudre, assembler, vernir) ; la précision fixe le prix, tout parfait = chef-d'œuvre ×3.
+   Le premier qui livre gagne (serveur : baron2_etabli_win). Un objet livré trop tard reste dans « tes objets ». */
+const ETB = {
+  ms: 1800000, mins: 40, dryMs: 180000,
+  OBJ: {
+    fauteuil: { label:"Fauteuil",          e:"🪑", subs:["cuir","plumes","sciure"],  g:["cut","sew","build"],   q:"Un fauteuil en cuir, rembourré de plumes, pour mon salon." },
+    matelas:  { label:"Matelas",           e:"🛏️", subs:["paille","plumes"],         g:["cut","sew"],           q:"Un matelas de paille et de plumes. Je dors si mal !" },
+    lustre:   { label:"Lustre",            e:"🏮", subs:["cire","sciure"],           g:["build","polish"],      q:"Un lustre plein de bougies pour ma grande salle." },
+    selle:    { label:"Selle",             e:"🐎", subs:["cuir","paille"],           g:["cut","sew","polish"],  q:"Une selle en cuir pour mon plus beau cheval." },
+    coffre:   { label:"Coffre",            e:"🧰", subs:["sciure","cuir","cire"],    g:["cut","build","polish"],q:"Un coffre bien solide pour cacher mes trésors." },
+    bougies:  { label:"Bougies parfumées", e:"🕯️", subs:["cire","noyaux"],           g:["cut","polish"],        q:"Des bougies qui sentent bon le fruit." },
+    collier:  { label:"Collier",           e:"📿", subs:["noyaux","cuir"],           g:["cut","build"],         q:"Un collier de noyaux polis, pour le bal de ce soir." },
+    eventail: { label:"Éventail",          e:"🪭", subs:["plumes","sciure"],         g:["build","polish"],      q:"Un éventail de plumes, il fait si chaud à la cour." },
+  },
+  CLI: [{ n:"La Duchesse", e:"👒", f:1 }, { n:"Le Notaire", e:"🎩" }, { n:"L'Aubergiste", e:"🧔" }, { n:"Le Comte", e:"🤵" }, { n:"La Capitaine", e:"⚓", f:1 }, { n:"L'Abbesse", e:"⛪", f:1 }],
+  KING: { n:"Le Roi", e:"👑" },
+  REP: [[0, "Apprenti", 1], [3, "Artisan", 1.25], [10, "Maître", 1.5], [25, "Grand maître", 2]],
+  G: {
+    cut:    { e:"✂️", t:"Découper", h:"Touche quand la lame passe sur une croix", btn:"Couper !", n:4 },
+    sew:    { e:"🧵", t:"Coudre",   h:"Touche quand le cercle touche le point",    btn:"Piquer !", n:4 },
+    build:  { e:"🔨", t:"Assembler",h:"Touche pour lâcher la pièce pile en place", btn:"Lâcher !", n:3 },
+    polish: { e:"🎨", t:"Vernir",   h:"Reste appuyé, lâche dans la zone verte",     btn:"Appuie…",  n:3 },
+  },
+};
+const enice = n => { if (n < 100) return Math.ceil(n); const p = Math.pow(10, Math.floor(Math.log10(n)) - 1); return Math.ceil(n / p) * p; };
+const ehash = str => { let h = 2166136261; for (let i = 0; i < str.length; i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+function erng(seed){ let a = seed >>> 0; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const etbCid = t => Math.floor(t / ETB.ms);
+const OBJK = Object.keys(ETB.OBJ);
+function etbObjOf(cid){ const r = erng(ehash("etabli:" + cid)); return OBJK[Math.floor(r() * OBJK.length)]; }
+function etbClient(cid){
+  const r = erng(ehash("etabli:" + cid)); r();
+  let o = etbObjOf(cid); if (o === etbObjOf(cid - 1)) o = OBJK[(OBJK.indexOf(o) + 1 + Math.floor(r() * (OBJK.length - 1))) % OBJK.length];
+  const king = r() < 0.12, c = king ? ETB.KING : ETB.CLI[Math.floor(r() * ETB.CLI.length)];
+  return { cid, o, king, n: c.n, e: c.e, f: !!c.f };
+}
+let ETW = {};                                             // gagnants des clients en cours (serveur)
+async function loadEtb(){ try{ const r = await rpc("baron2_etabli_get", {}); ETW = r || {}; }catch(e){} }
+const etbRep = () => { const n = S.etb.rep; let cur = ETB.REP[0], nx = null; for (const x of ETB.REP){ if (n >= x[0]) cur = x; else { nx = x; break; } } return { n, cur, nx }; };
+function etbNeed(k, king){ return Math.max(20, enice(BX.effRate(S, 0) * BAL.subRatio * 900 * (king ? 1.5 : 1))); }
+function etbRecipe(cl){ const r = {}; ETB.OBJ[cl.o].subs.forEach(k => r[k] = etbNeed(k, cl.king)); return r; }
+function etbBase(cl){
+  const own = BX.prodValue(S), prime = Math.min(Math.max(groupProd(), own), own * 5);
+  return enice(Math.max(5000, prime * 60 * ETB.mins * (cl.king ? 2 : 1) * etbRep().cur[2]));
+}
+const etbPay = (cl, it) => enice(etbBase(cl) * (0.5 + 0.5 * it.q) * (it.chef ? 3 : 1));
+const qWord = it => it.chef ? "Chef-d'œuvre ✨" : it.q >= 0.75 ? "Belle facture" : it.q >= 0.45 ? "Correct" : "Un peu raté";
+function etbWorkers(cid){ return W.players.filter(p => p.id !== ME.id && p.stats && +p.stats.etb === cid).map(p => esc(p.name)); }
+
+function etabliHTML(t){
+  const cl = etbClient(etbCid(t)), O = ETB.OBJ[cl.o], left = (cl.cid + 1) * ETB.ms - t, w = ETW[cl.cid], rp = etbRep(), job = S.etb.job;
+  const recipe = etbRecipe(cl), have = (S.etb.inv[cl.o] || []).slice().sort((a, b) => etbPay(cl, b) - etbPay(cl, a))[0];
+  const steps = O.g.map((g, i) => `<em class="${job && job.cid === cl.cid && i < job.step ? "done" : ""}">${ETB.G[g].e}</em>`).join("<i>›</i>");
+  let body;
+  if (w){
+    body = `<div class="b2-ewin">🏆 <b>${w.id === ME.id ? "Tu l'as livré" : esc(w.name) + " a livré"}</b><small>Prochain client dans <span data-etbt>${fmtT(left)}</span></small></div>`;
+  } else if (job && job.cid === cl.cid){
+    const dry = job.dry > t;
+    body = `<div class="b2-esteps">${steps}</div>
+      ${dry ? `<button class="b2-btn big" disabled>${ETB.G[O.g[job.step - 1]].e} Ça sèche… <span data-etbd>${fmtT(job.dry - t)}</span></button>`
+        : `<button class="b2-btn gold big" data-a="etb-go">${ETB.G[O.g[job.step]].e} ${ETB.G[O.g[job.step]].t} (${job.step + 1}/${O.g.length})</button>`}`;
+  } else if (have){
+    body = `<button class="b2-btn gold big" data-a="etb-give" data-o="${cl.o}">Livrer ton ${esc(O.label.toLowerCase())} · ${qWord(have)}</button>`;
+  } else {
+    const miss = Object.keys(recipe).find(k => S.stock[k] < recipe[k]);
+    body = `<div class="b2-eing">${Object.keys(recipe).map(k => `<span class="${S.stock[k] >= recipe[k] ? "ok" : "ko"}">${P[k].e}<b>${esc(P[k].label)}</b>${fmtN(Math.floor(S.stock[k]))} / ${fmtN(recipe[k])}</span>`).join("")}</div>
+      <div class="b2-esteps">${steps}</div>
+      ${job ? `<p class="b2-note" style="color:#F6EEDD;opacity:.8;text-align:center">Finis d'abord ton ${esc(ETB.OBJ[job.o].label.toLowerCase())} en cours.</p>`
+        : `<div class="b2-two">${miss ? `<button class="b2-btn red" data-a="goto-mkt" data-k="${miss}">Acheter ${P[miss].e}</button>` : ""}<button class="b2-btn" data-a="etb-start" ${miss ? "disabled" : ""}>Fabriquer</button></div>`}`;
+  }
+  const wk = w ? [] : etbWorkers(cl.cid);
+  const old = job && job.cid !== cl.cid ? `<div class="b2-slot" style="margin-top:10px"><span class="ic">${ETB.OBJ[job.o].e}</span><div class="sp"><b>${esc(ETB.OBJ[job.o].label)} en cours</b><small>Le client est parti : il ira dans tes objets</small></div>
+      ${job.dry > t ? `<span class="t" data-etbd>${fmtT(job.dry - t)}</span>` : `<button class="b2-btn" data-a="etb-go">Finir</button>`}</div>` : "";
+  const inv = OBJK.flatMap(k => (S.etb.inv[k] || []).map(it => ({ k, it })));
+  return `<div class="b2-paper b2-etabli">
+    <div style="display:flex;align-items:flex-start;gap:8px"><h2 class="b2-h2" style="flex:1;margin:0">L'établi<small>Des objets sur mesure pour les grands clients</small></h2><button class="b2-q" style="margin:0;background:rgba(59,31,23,.08)!important;color:var(--ink)!important" data-a="etb-help" aria-label="Comment ça marche">?</button></div>
+    <div class="b2-erep"><span>⭐ ${rp.cur[1]}</span><div class="bar"><i style="width:${rp.nx ? Math.min(100, (rp.n - rp.cur[0]) / (rp.nx[0] - rp.cur[0]) * 100) : 100}%"></i></div><span>${rp.nx ? rp.nx[1] + " →" : "×" + rp.cur[2]}</span></div>
+    <div class="b2-client ${cl.king ? "king" : ""}">
+      <div class="ctop"><div class="av">${cl.e}</div><div class="cn">${cl.n}<small>${cl.king ? "Rare ! Paie double" : (cl.f ? "Cliente" : "Client") + " de tout le village"}</small></div>${w ? "" : `<div class="timer">⏳ <span data-etbt>${fmtT(left)}</span></div>`}</div>
+      <div class="quote">« ${esc(O.q)} »</div>
+      <div class="obj"><span class="big">${O.e}</span><div><b>${esc(O.label)}</b><small>${O.g.length} gestes</small></div><div class="prime"><b>${COIN}${fmtN(etbBase(cl))}</b><small>×3 si chef-d'œuvre</small></div></div>
+      ${body}
+      ${wk.length ? `<div class="race">🔨 ${wk.join(", ")} ${wk.length > 1 ? "sont" : "est"} aussi à l'établi…</div>` : ""}
+    </div>${old}
+    ${inv.length ? `<h3 class="b2-msec" style="color:var(--ink2);margin:14px 2px 6px">Tes objets</h3><div class="b2-einv">${inv.map(({ k, it }) => `<div><span>${ETB.OBJ[k].e}</span><b>${esc(ETB.OBJ[k].label)}<small>${qWord(it)}</small></b></div>`).join("")}</div>` : ""}
+  </div>`;
+}
+function etbHelp(){
+  sheetCtx = null;
+  sheet(`<h3>🪑 L'établi</h3><div class="b2-fiche">
+    ${frow("👒", "Un client pour tout le village", "Toutes les 30 min, un grand client passe. Il veut un objet sur mesure. Le premier qui le lui livre empoche la prime.")}
+    ${frow(P.cuir.e, "Les sous-produits", "Chaque ferme en sort un peu : 1 pour 10 récoltés. Un objet en demande de plusieurs fermes : achète ceux des autres au marché, vends-leur les tiens.")}
+    ${frow("✂️", "Les gestes", "Découper, coudre, assembler, vernir : c'est toi qui les fais. Plus tu es précis, plus le client paie. Après l'assemblage, la colle sèche 3 min.")}
+    ${frow("✨", "Chef-d'œuvre", "Tous les gestes parfaits : le client paie ×3.")}
+    ${frow("⭐", "Réputation", "Chaque objet livré te fait monter : Artisan (×1,25), Maître (×1,5), Grand maître (×2).")}
+    ${frow("👑", "Le Roi", "Il passe rarement, demande plus et paie double.")}
+    ${frow("🧰", "Trop tard ?", "Si un ami livre avant toi, ton objet n'est pas perdu : le prochain client qui veut le même te le prend tout de suite.")}
+    </div><button class="b2-btn big" data-a="close-sheet">Compris</button>`);
+}
+function etbStart(){
+  const t = now(), cl = etbClient(etbCid(t)), r = etbRecipe(cl);
+  if (S.etb.job || ETW[cl.cid]) return;
+  if (Object.keys(r).some(k => S.stock[k] < r[k])){ toast("Il te manque des sous-produits.", "err"); return; }
+  for (const k in r) S.stock[k] -= r[k];
+  S.etb.job = { cid: cl.cid, o: cl.o, step: 0, sc: [], perf: true, dry: 0 };
+  dirty = true; save(true); etbPlay();
+}
+function etbPlay(){
+  const job = S.etb.job; if (!job || job.dry > now()) return;
+  const O = ETB.OBJ[job.o], g = O.g[job.step];
+  gesture(g, job.step, O, res => {
+    if (res == null){ draw(); return; }                   // abandon : on reprendra à cette étape
+    job.sc.push(res.avg); job.perf = job.perf && res.perfect; job.step++;
+    dirty = true;
+    if (job.step >= O.g.length){ etbFinish(); return; }
+    if (g === "build") job.dry = now() + ETB.dryMs;
+    save(true); draw();
+    if (job.dry > now()) toast(`${O.e} La colle sèche : reviens dans 3 min`);
+    else setTimeout(etbPlay, 350);
+  });
+}
+function etbFinish(){
+  const job = S.etb.job, it = { q: job.sc.reduce((a, b) => a + b, 0) / job.sc.length, chef: job.perf };
+  S.etb.job = null; S.etb.inv[job.o] = (S.etb.inv[job.o] || []).concat(it);
+  S.stats.crafted = (S.stats.crafted || 0) + 1;
+  sound("done"); buzz(30);
+  if (job.cid === etbCid(now())) etbGive(job.o, it);
+  else { toast(`${ETB.OBJ[job.o].e} ${ETB.OBJ[job.o].label} terminé · ${qWord(it)}. Il attend un client.`, "gold"); save(true); draw(); }
+}
+let etbBusy = false;
+async function etbGive(o, pick){
+  if (etbBusy) return;
+  const t = now(), cl = etbClient(etbCid(t)); if (cl.o !== o) return;
+  const list = S.etb.inv[o] || []; if (!list.length) return;
+  const it = pick || list.slice().sort((a, b) => etbPay(cl, b) - etbPay(cl, a))[0];
+  etbBusy = true;
+  try{
+    const r = await rpc("baron2_etabli_win", { p_token: getToken(), p_cid: cl.cid });
+    if (r && r.won){
+      const i = list.indexOf(it); if (i >= 0) list.splice(i, 1);
+      const g = etbPay(cl, it), before = etbRep().cur[1];
+      S.coins += g; S.stats.earned += g; S.etb.rep++;
+      ETW[cl.cid] = { id: ME.id, name: ME.name };
+      toast(`🏆 ${cl.e} ${esc(cl.n)} est ravi${cl.f ? "e" : ""} : +${COIN}${fmtN(g)}${it.chef ? " · chef-d'œuvre ✨" : ""}`, "gold");
+      const after = etbRep().cur[1]; if (after !== before) setTimeout(() => toast(`⭐ Te voilà ${after} ! Tes clients paient plus.`, "gold"), 1400);
+    } else if (r && r.name){ ETW[cl.cid] = { id: "?", name: r.name }; toast(`Trop tard : ${esc(r.name)} a livré avant toi. Ton objet attend le prochain client.`, "err"); }
+    else toast("Le client est déjà reparti. Ton objet attend le prochain.", "err");
+  }catch(e){ toast("Pas de réseau : réessaie de livrer.", "err"); }
+  etbBusy = false; dirty = true; save(true); if (view === "atelier" && !sheetOpen) draw();
+}
+function etbTick(t){
+  wrapEl.querySelectorAll("[data-etbt]").forEach(el => { const left = (etbCid(t) + 1) * ETB.ms - t; el.textContent = fmtT(left); });
+  const job = S.etb.job;
+  wrapEl.querySelectorAll("[data-etbd]").forEach(el => { if (!job || job.dry <= t){ if (!sheetOpen && !gestOpen) draw(); } else el.textContent = fmtT(job.dry - t); });
+  if (wrapEl.querySelector(".b2-etabli") && wrapEl.querySelector(".b2-etabli").dataset.cid != etbCid(t) && !sheetOpen && !gestOpen) draw();
+}
+
+/* ----- les gestes : une petite scène plein écran, chaque touche est notée de 0 à 1 ----- */
+let gestOpen = false;
+function gesture(kind, stepI, O, done){
+  const G = ETB.G[kind], N = G.n, scores = [];
+  const ov = document.createElement("div"); ov.className = "b2-geste";
+  ov.innerHTML = `<div class="gtop"><button class="x" aria-label="Arrêter">×</button><div class="prog">${O.g.map((x, i) => `<i class="${i < stepI ? "done" : i === stepI ? "on" : ""}"></i>`).join("")}</div><span>${stepI + 1}/${O.g.length}</span></div>
+    <div class="gt"><b>${G.t} ${kind === "cut" ? "le cuir" : kind === "sew" ? "les coutures" : kind === "build" ? "les pièces" : "le bois"}</b><small>${G.h}</small></div>
+    <div class="stage"></div><div class="fb">&nbsp;</div><div class="chips">${Array.from({ length: N }, () => `<span>${G.e} …</span>`).join("")}</div>
+    <button class="tap">${G.btn}</button><p class="foot">Tout parfait sur tous les gestes = chef-d'œuvre ×3</p>`;
+  wrapEl.appendChild(ov); gestOpen = true;
+  const stage = ov.querySelector(".stage"), fb = ov.querySelector(".fb"), chips = ov.querySelectorAll(".chips span"), tap = ov.querySelector(".tap");
+  let raf = 0, over = false, t0 = performance.now();
+  const end = res => { if (over) return; over = true; cancelAnimationFrame(raf); setTimeout(() => { ov.remove(); gestOpen = false; done(res); }, res ? 700 : 0); };
+  ov.querySelector(".x").addEventListener("click", e => { e.stopPropagation(); end(null); });
+  ov.addEventListener("click", e => e.stopPropagation());
+  const mark = s => {
+    const i = scores.length; scores.push(s);
+    const w = s >= 0.85 ? ["✨ Parfait !", "p"] : s >= 0.5 ? ["👍 Bien", "b"] : ["😬 Raté", "r"];
+    fb.textContent = w[0]; fb.className = "fb " + w[1]; chips[i].textContent = `${G.e} ${w[0].split(" ")[1]}`; chips[i].className = w[1];
+    sound(s >= 0.5 ? "coin" : "err"); buzz(s >= 0.85 ? 25 : 10);
+    if (scores.length >= N){ tap.disabled = true; const avg = scores.reduce((a, b) => a + b, 0) / N; end({ avg, perfect: scores.every(x => x >= 0.85) }); }
+  };
+  const loopF = fn => { const f = now2 => { if (over) return; fn((now2 - t0) / 1000); raf = requestAnimationFrame(f); }; raf = requestAnimationFrame(f); };
+  if (kind === "cut"){
+    // la lame fait le tour d'un carré ; 4 croix au milieu des côtés
+    stage.innerHTML = `<svg viewBox="0 0 270 250"><path d="M30 40 Q20 10 70 18 L200 12 Q250 14 246 60 L252 190 Q254 236 200 232 L70 238 Q22 240 24 190 Z" fill="#8A4B26" stroke="#5E3017" stroke-width="3"/>
+      <rect x="60" y="50" width="150" height="150" rx="6" fill="none" stroke="#F6EEDD" stroke-width="3" stroke-dasharray="9 7"/>
+      <path class="cutp" d="" fill="none" stroke="#6EE09A" stroke-width="5" stroke-linecap="round"/>
+      <g class="crx" stroke="#FFD45E" stroke-width="4" stroke-linecap="round"></g><text class="blade" font-size="40" text-anchor="middle" dominant-baseline="middle">🔪</text></svg>`;
+    const pt = u => { u = ((u % 1) + 1) % 1; const s = u * 4, i = Math.floor(s), f = s - i; return [[60 + 150 * f, 50], [210, 50 + 150 * f], [210 - 150 * f, 200], [60, 200 - 150 * f]][i]; };
+    const X = [0.125, 0.375, 0.625, 0.875];
+    stage.querySelector(".crx").innerHTML = X.map((u, i) => { const [x, y] = pt(u); return `<path data-i="${i}" d="M${x - 7} ${y - 7} l14 14 M${x + 7} ${y - 7} l-14 14"/>`; }).join("");
+    const sp = 0.16 + Math.random() * 0.03, u0 = -0.1; let u = u0;
+    const blade = stage.querySelector(".blade"), cutp = stage.querySelector(".cutp");
+    const hit = s => { stage.querySelector(`[data-i="${scores.length}"]`)?.setAttribute("stroke", s >= 0.85 ? "#6EE09A" : s >= 0.5 ? "#F6EEDD" : "#FF8A70"); mark(s); };
+    loopF(sec => {
+      u = u0 + sec * sp; const [x, y] = pt(u); blade.setAttribute("x", x); blade.setAttribute("y", y - 14);
+      let d = "M60 50"; const steps = Math.min(200, Math.floor(u * 200)); for (let k = 1; k <= steps; k++){ const p = pt(k / 200); d += ` L${p[0]} ${p[1]}`; } cutp.setAttribute("d", d);
+      const next = X[scores.length]; if (next != null && u - next > 0.06) hit(0);
+      if (u >= 1.02 && scores.length < N) hit(0);
+    });
+    tap.addEventListener("click", () => { const next = X[scores.length]; if (next == null) return; hit(Math.max(0, 1 - Math.abs(u - next) / 0.05)); });
+  } else if (kind === "sew"){
+    // un cercle se resserre sur un point de couture
+    const P4 = [[60, 125], [110, 110], [160, 140], [210, 120]];
+    stage.innerHTML = `<svg viewBox="0 0 270 250"><rect x="20" y="40" width="230" height="170" rx="18" fill="#E9D8B4" stroke="#B89A66" stroke-width="3"/>
+      <path d="M40 125 C 90 95, 140 160, 230 115" fill="none" stroke="#B89A66" stroke-width="2" stroke-dasharray="6 6"/>
+      <g class="pts">${P4.map(([x, y], i) => `<circle data-i="${i}" cx="${x}" cy="${y}" r="9" fill="#7A4A2A"/>`).join("")}</g>
+      <circle class="ring" r="60" fill="none" stroke="#3B2A4F" stroke-width="4"/><text class="nd" font-size="30" text-anchor="middle">🪡</text></svg>`;
+    const ring = stage.querySelector(".ring"), nd = stage.querySelector(".nd"), dur = 1.25;
+    let s0 = 0.4, r = 60;
+    const cur = () => P4[scores.length];
+    const hit = s => { stage.querySelector(`[data-i="${scores.length}"]`)?.setAttribute("fill", s >= 0.85 ? "#2F9E57" : s >= 0.5 ? "#C98A12" : "#CC3F27"); mark(s); };
+    loopF(sec => {
+      const p = cur(); if (!p){ ring.setAttribute("r", 0); return; }
+      const k = (sec - s0) / dur; r = k < 0 ? 60 : 60 - 60 * k;
+      ring.setAttribute("cx", p[0]); ring.setAttribute("cy", p[1]); ring.setAttribute("r", Math.max(0, r)); ring.style.opacity = k < 0 ? 0.25 : 1;
+      nd.setAttribute("x", p[0] + 22); nd.setAttribute("y", p[1] - 18);
+      if (r < 0){ hit(0); s0 = sec + 0.35 + Math.random() * 0.3; }
+    });
+    tap.addEventListener("click", () => { if (!cur() || r >= 60) return; const sec = (performance.now() - t0) / 1000; hit(Math.max(0, 1 - Math.abs(r - 12) / 14)); s0 = sec + 0.35 + Math.random() * 0.3; r = 60; });
+  } else if (kind === "build"){
+    // une pièce glisse au-dessus de sa place ; on la lâche
+    stage.innerHTML = `<svg viewBox="0 0 270 250"><rect x="0" y="222" width="270" height="20" fill="#6B3E1E"/>
+      <g class="stk"></g><rect class="slot" width="90" height="26" rx="4" fill="none" stroke="#F6EEDD" stroke-width="3" stroke-dasharray="7 5"/>
+      <rect class="pc" width="90" height="26" rx="4" fill="#C98A50" stroke="#7A4A20" stroke-width="3"/></svg>`;
+    const pc = stage.querySelector(".pc"), slot = stage.querySelector(".slot"), stk = stage.querySelector(".stk");
+    let x = 0, base = 0;
+    const lay = () => { const sx = 90 + (scores.length % 2 ? -14 : 14) * (scores.length ? 1 : 0), sy = 196 - scores.length * 28; slot.setAttribute("x", sx); slot.setAttribute("y", sy); return [sx, sy]; };
+    let [sx, sy] = lay();
+    loopF(sec => { const sp = 1.6 + scores.length * 0.35; x = 90 + Math.sin((sec - base) * sp) * 88; pc.setAttribute("x", x); pc.setAttribute("y", sy - 70); });
+    tap.addEventListener("click", () => {
+      if (scores.length >= N) return;
+      const s = Math.max(0, 1 - Math.abs(x - sx) / 34);
+      stk.insertAdjacentHTML("beforeend", `<rect x="${x}" y="${sy}" width="90" height="26" rx="4" fill="${s >= 0.85 ? "#D9A066" : s >= 0.5 ? "#C98A50" : "#9E5E30"}" stroke="#7A4A20" stroke-width="3"/>`);
+      mark(s); [sx, sy] = lay(); base = (performance.now() - t0) / 1000 + Math.random() * 2;
+    });
+  } else {
+    // vernir : appuyer pour remplir, lâcher dans la zone verte
+    stage.innerHTML = `<div class="gauge"><div class="zone"></div><div class="fill"></div></div><div class="plank">🪵</div>`;
+    const zone = stage.querySelector(".zone"), fill = stage.querySelector(".fill");
+    let a = 0, v = 0, hold = false, h0 = 0;
+    const newZone = () => { a = 0.45 + Math.random() * 0.38; zone.style.bottom = a * 100 + "%"; zone.style.height = "14%"; v = 0; fill.style.height = "0%"; };
+    newZone();
+    const release = () => { if (!hold) return; hold = false; tap.textContent = G.btn; const c = a + 0.07, s = v >= a && v <= a + 0.14 ? 1 - Math.max(0, Math.abs(v - c) - 0.03) * 2 : Math.max(0, 1 - Math.min(Math.abs(v - a), Math.abs(v - a - 0.14)) / 0.18) * 0.8; mark(Math.max(0, Math.min(1, s))); if (scores.length < N) setTimeout(newZone, 350); };
+    loopF(() => { if (!hold) return; v = Math.min(1.05, (performance.now() - h0) / 1000 / (1.5 - scores.length * 0.15)); fill.style.height = Math.min(100, v * 100) + "%"; if (v >= 1.05) release(); });
+    tap.addEventListener("pointerdown", e => { e.preventDefault(); if (scores.length >= N || hold) return; hold = true; h0 = performance.now(); tap.textContent = "Lâche dans le vert !"; });
+    ["pointerup", "pointerleave", "pointercancel"].forEach(ev => tap.addEventListener(ev, release));
+  }
+}
+
 /* ---------- Atelier : outils + cellier ---------- */
 const toolLeft = (kind, t) => { const x = S.tools && S.tools[kind]; return x && x.until > t ? x.until - t : 0; };
 function toolRow(kind, t){
@@ -2099,7 +2398,7 @@ function caskTick(el, t){
 function atelierHTML(){
   const t = now(), ac = BX.costs.atelier(S);
   const tools = !S.atelier
-    ? `<div class="b2-paper"><div class="b2-oven cold"><div class="art" style="font-size:54px;display:grid;place-items:center">🛠️</div><div><h2 class="b2-h2">L'atelier<small>Des outils qui accélèrent ta ferme. Ils s'usent, et se fabriquent avec les sous-produits des autres.</small></h2>
+    ? `<div class="b2-paper"><div class="b2-oven cold"><div class="art" style="font-size:54px;display:grid;place-items:center">🛠️</div><div><h2 class="b2-h2">L'atelier<small>Des outils qui accélèrent ta ferme. Ils s'usent, et se fabriquent avec du bois.</small></h2>
       <button class="b2-btn gold" data-a="up-atelier" data-cc="${ac.coins}" data-cw="${ac.wood}">Construire ${price(ac)}</button></div></div></div>`
     : `<div class="b2-paper"><div style="display:flex;align-items:center;gap:8px"><h2 class="b2-h2" style="flex:1;margin:0">L'atelier<small>Niveau ${S.atelier} · outils ${BX.TQ.filter(q => q.need <= S.atelier).map(q => q.label.toLowerCase()).join(", ")}</small></h2>
       ${S.atelier < BAL.atelierMax ? `<button class="b2-btn" data-a="up-atelier" data-cc="${ac.coins}" data-cw="${ac.wood}">Niv. ${S.atelier + 1} ${price(ac)}</button>` : ""}</div>
@@ -2112,7 +2411,7 @@ function atelierHTML(){
       ${L < BAL.cellarMax ? `<button class="b2-btn" data-a="up-cellar" data-cc="${cc.coins}" data-cw="${cc.wood}">Niv. ${L + 1} ${price(cc)}</button>` : ""}</div>
       <div class="b2-slots">${Array.from({ length: BX.cellarSlots(S) }, (_, i) => cellarRow(i, t)).join("")}</div>
       <p class="b2-note">Un produit de luxe vaut toujours plus que sa matière première. Plus c'est long, plus ça vaut.</p></div>`;
-  return `<div class="b2-barnin"><div class="b2-col b2-pad">${tools}${cellar}</div></div>`;
+  return `<div class="b2-barnin"><div class="b2-col b2-pad">${etabliHTML(t).replace('class="b2-paper b2-etabli"', `class="b2-paper b2-etabli" data-cid="${etbCid(t)}"`)}${tools}${cellar}</div></div>`;
 }
 function toolSheet(kind){
   const cur = S.tools && S.tools[kind] && toolLeft(kind, now()) > 0;
@@ -2371,21 +2670,20 @@ function marketHTML(){
       ${mine ? `<button class="b2-btn ghost" style="color:var(--chalk)!important;background:rgba(255,255,255,.1)!important" data-a="unlist" data-id="${l.id}">Retirer</button>` : `<button class="b2-btn" data-a="buy" data-id="${l.id}">Acheter</button>`}</div>`;
   }).join("");
   const colpL = P[k].sub ? BX.reserveLeft(S, k, now()) : 0;
-  const res = P[k].aged ? "" : P[k].sub ? `<div class="b2-ord res"><span class="who">🧳 Le marchand<small>Dépannage, cher</small></span><span class="q">${fmtN(colpL)}</span><span class="pr">${fmtP(P[k].floor * BAL.colpMult)}</span>
-    <button class="b2-btn gold" data-a="buy-colp" ${colpL < 1 ? "disabled" : ""}>Acheter</button></div>`
+  const res = P[k].aged || P[k].sub ? ""
     : `<div class="b2-ord res"><span class="who">🏘️ Le village<small>Au cours, + un quart</small></span><span class="q">${fmtN(resL)}</span><span class="pr">${fmtP(BX.vAsk(k, now()))}</span>
     <button class="b2-btn gold" data-a="buy-res" ${resL < 1 ? "disabled" : ""}>Acheter</button></div>`;
   const hist = W.trades.filter(t => t.product === k).slice(-12).reverse().map(t => `<div class="b2-ord"><span class="who">${esc(t.buyer_id === ME.id ? "Toi" : nameOf(t.buyer_id))} ← ${esc(t.seller_id === ME.id ? "toi" : nameOf(t.seller_id))}<small>${fmtAgo(t.ts)}</small></span><span class="q">${fmtN(t.qty)}</span><span class="pr">${fmtP(+t.price)}</span></div>`).join("");
   return `<div class="b2-board"><div class="b2-col" style="padding:4px 16px 24px">
     <div class="b2-mtop"><button class="b2-back" data-a="mkt-back" aria-label="Retour au marché">‹</button><span class="ic">${P[k].e}</span><b>${esc(P[k].label)}</b><button class="b2-q top" data-a="mfiche" data-k="${k}" aria-label="Ce qui fait bouger le prix">?</button></div>
     <div class="b2-quote"><div><div style="font:800 13px var(--round);color:var(--chalk2)">Le village rachète</div><span class="big">${COIN}${fmtP(BX.vPrice(k, now()))}</span><span class="ch">${chg(vChg(k))} <small style="opacity:.6">1 h</small></span></div>
-      <div class="lim">${P[k].aged ? "" : P[k].sub ? `Marchand <b>${fmtP(P[k].floor * BAL.colpMult)}</b><br>` : `Le village vend <b>${fmtP(BX.vAsk(k, now()))}</b><br>`}${qv.p != null ? `Entre joueurs (24 h) <b>${fmtP(qv.p)}</b><br>` : ""}Tu en as <b>${fmtN(S.stock[k])}</b></div></div>
+      <div class="lim">${P[k].aged || P[k].sub ? "" : `Le village vend <b>${fmtP(BX.vAsk(k, now()))}</b><br>`}${qv.p != null ? `Entre joueurs (24 h) <b>${fmtP(qv.p)}</b><br>` : ""}Tu en as <b>${fmtN(S.stock[k])}</b></div></div>
     <div class="b2-seg">${["1h", "24h", "7j"].map(p => `<button class="${mkt.period === p ? "on" : ""}" data-a="mkt-p" data-p="${p}">${p === "1h" ? "1 h" : p === "24h" ? "24 h" : "7 j"}</button>`).join("")}</div>
     <div class="b2-chart">${chartSVG(k, mkt.period)}</div>
     <div class="b2-two"><button class="b2-btn" data-a="list" data-k="${k}" ${S.stock[k] < 1 ? "disabled" : ""}>Mettre en vente</button><button class="b2-btn gold" data-a="sell" data-k="${k}" ${S.stock[k] < 1 ? "disabled" : ""}>Vendre au village</button></div>
     ${P[k].aged ? casksHTML(k) : ""}
     <h3 class="b2-h3">Offres des joueurs</h3>
-    <div class="b2-book">${rows || `<div class="b2-empty">Personne n'en vend pour l'instant.${k === S.spec || k === BX.SUBOF[S.spec] ? " Tu es le seul à en produire : à toi de fixer ton prix." : ""}</div>`}${res}</div>
+    <div class="b2-book">${rows || `<div class="b2-empty">Personne n'en vend pour l'instant.${k === S.spec || k === BX.SUBOF[S.spec] ? " Tu es le seul à en produire : à toi de fixer ton prix." : P[k].sub ? " Demande à celui qui en produit d'en mettre en vente." : ""}</div>`}${res}</div>
     <h3 class="b2-h3">Dernières transactions</h3>
     <div class="b2-book b2-hist">${hist || `<div class="b2-empty">Aucune transaction encore.</div>`}</div>
   </div></div>`;
@@ -2616,7 +2914,7 @@ function listSheet(k){
   sheet(`<h3>${P[k].e} Mettre en vente</h3><p>Tu fixes ton prix. Tes produits sortent de la grange et attendent un acheteur ; tu peux les retirer quand tu veux.${cheapest ? ` L'offre la moins chère est à ${fmtP(+cheapest.price)}.` : ""}</p>
     ${qtyBlock(S.stock[k], S.stock[k] / 2, "q")}
     <div class="b2-field"><i class="b2-coin"></i><input data-price inputmode="decimal" value="${String(Math.round(sug * 10) / 10).replace(".", ",")}" aria-label="Prix à l'unité"><span style="font:700 13px var(--round);color:var(--ink2)">l'unité</span></div>
-    <p class="b2-note">Cours du village : ${fmtP(BX.vPrice(k, now()))}${P[k].aged ? "" : " · "}${P[k].aged ? "" : P[k].sub ? `Marchand : ${fmtP(P[k].floor * BAL.colpMult)}` : `Réserve du village : ${fmtP(BX.reservePrice(k))}`}</p>
+    <p class="b2-note">Cours du village : ${fmtP(BX.vPrice(k, now()))}${P[k].aged || P[k].sub ? "" : ` · Réserve du village : ${fmtP(BX.reservePrice(k))}`}</p>
     <div class="b2-sum" data-sum></div><button class="b2-btn big" data-a="confirm">Mettre en vente</button>`);
   sheetSum();
 }
@@ -2866,6 +3164,10 @@ function onClick(e){
     case "mk2x": markSeen("mk2"); draw(); return;
     case "bet": betSheet(b.dataset.k, +b.dataset.d); return;
     case "bet-help": betHelpSheet(); return;
+    case "etb-help": etbHelp(); return;
+    case "etb-start": etbStart(); return;
+    case "etb-go": etbPlay(); return;
+    case "etb-give": etbGive(b.dataset.o); return;
     case "mkt-tab": mkt.tab = b.dataset.t; draw(); return;
     case "bet-close": { const v = BX.closeBet(S, b.dataset.id, now()); if (v == null) return; dirty = true; save(true); sound("coin"); toast(`Tu te retires : +${COIN}${fmtN(v)}`, "gold"); draw(); return; }
     case "quick-sell": {
