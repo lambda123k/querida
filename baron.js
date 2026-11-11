@@ -612,7 +612,7 @@ let S = null, ME = null, W = { res:null, players:[], listings:[], trades:[], at:
 // réserve du village commune : ce qu'il reste pour tout le monde sur ce créneau de 20 min
 const resLeft = k => { const r = W.res; if (!r || r.slot !== Math.floor(now() / BAL.slotMs)) return 0; return Math.max(0, Math.floor((+(r.size || {})[k] || 0) - (+(r.used || {})[k] || 0))); };
 let dirty = false, lastSave = 0, lastTick = 0, saving = false, loopT = null, wrapEl = null, view = "farm";
-let mkt = { k: null, period: "24h" };
+let mkt = { k: null, period: "24h", open: false };
 
 function publicStats(){
   return { fortune: BX.fortune(S), prod: Math.round(BX.prodValue(S) * 100) / 100, baked: Math.floor(S.stats.baked), orders: S.stats.orders,
@@ -1079,6 +1079,26 @@ const STYLE = `
 
 /* ======== MARCHÉ (le tableau à la craie) ======== */
 .b2-board{background:var(--board);color:var(--chalk);min-height:100%;background-image:radial-gradient(rgba(255,255,255,.035) 1px,transparent 1px);background-size:6px 6px}
+.b2-mhead{padding:10px 2px 2px}.b2-mhead h2{margin:0;font:400 italic 30px var(--disp);color:var(--chalk)}.b2-mhead small{font:700 12.5px var(--round);color:var(--chalk2)}
+.b2-msec{margin:18px 2px 8px;font:800 12px var(--round);letter-spacing:.08em;text-transform:uppercase;color:var(--chalk2)}
+.b2-mlist{background:var(--board2);border-radius:16px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(239,234,219,.08)}
+.b2-mrow{display:flex;align-items:center;gap:10px;width:100%;padding:11px 12px;text-align:left;color:var(--chalk)!important;background:none!important;border-top:1px solid rgba(239,234,219,.07)!important}
+.b2-mrow:first-child{border-top:0!important}
+.b2-mrow:active{background:rgba(255,255,255,.05)!important}
+.b2-mrow .ic{width:36px;height:36px;display:grid;place-items:center;font-size:26px;flex:none;background:rgba(239,234,219,.92);border-radius:11px}
+.b2-mrow .ic .b2-ic{font-size:24px}
+.b2-mrow .nm{flex:1;min-width:0}.b2-mrow .nm b{display:block;font:800 15px var(--round);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.b2-mrow .nm small{display:block;font:700 12px var(--round);color:var(--chalk2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.b2-spark{width:58px;height:24px;flex:none}
+.b2-mrow .pr{width:62px;text-align:right;flex:none;display:flex;flex-direction:column;font:800 12px var(--round);font-variant-numeric:tabular-nums}
+.b2-mrow .pr b{font:900 15px var(--round);color:var(--chalk)}
+.b2-tag{display:inline-block;vertical-align:1px;border-radius:999px;padding:1px 6px;font:800 10px var(--round);background:rgba(239,234,219,.15);color:var(--chalk)}
+.b2-tag.gold{background:#F2B33D;color:#3B1F17}
+.b2-mtop{display:flex;align-items:center;gap:10px;padding:10px 0 4px}
+.b2-mtop .ic{width:34px;height:34px;display:grid;place-items:center;font-size:24px;background:rgba(239,234,219,.92);border-radius:10px}
+.b2-mtop .ic .b2-ic{font-size:22px}
+.b2-mtop b{font:400 italic 26px var(--disp);color:var(--chalk)}
+.b2-back{width:36px;height:36px;border-radius:12px;background:var(--board2)!important;color:var(--chalk)!important;font:900 22px var(--round)!important;display:grid;place-items:center;box-shadow:inset 0 0 0 1px rgba(239,234,219,.12)}
 .b2-pills{display:flex;gap:6px;overflow-x:auto;padding:12px 16px 4px;scrollbar-width:none}
 .b2-pills::-webkit-scrollbar{display:none}
 .b2-chip{flex:none;display:flex;flex-direction:column;align-items:flex-start;gap:1px;background:var(--board2)!important;border-radius:12px;padding:7px 10px;color:var(--chalk)!important;min-width:76px;box-shadow:inset 0 0 0 1px rgba(239,234,219,.12)}
@@ -1988,11 +2008,29 @@ function chartSVG(k, period){
 
   return `<svg viewBox="0 0 ${W_} ${H}" role="img" aria-label="Cours de ${esc(P[k].label)}">${g}</svg>`;
 }
+// petite courbe du cours du village sur 3 h (couleur : variation sur 1 h, comme le %)
+function spark(k){
+  const t = now(), n = 36, span = 3 * 3600000, v = Array.from({ length: n + 1 }, (_, j) => BX.vPrice(k, t - span + span * j / n));
+  const mx = Math.max(...v), mn = Math.min(...v), y = x => 3 + (mx - x) / Math.max(1e-9, mx - mn) * 22;
+  const up = vChg(k) >= 0;
+  return `<svg class="b2-spark" viewBox="0 0 72 28" aria-hidden="true"><path d="${v.map((x, j) => (j ? "L" : "M") + (j * 72 / n).toFixed(1) + " " + y(x).toFixed(1)).join(" ")}" fill="none" stroke="${up ? "#6EE09A" : "#FF8A70"}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+function marketListHTML(){
+  const row = x => {
+    const n = W.listings.filter(l => l.product === x && l.seller_id !== ME.id).length, mine = x === S.spec || x === BX.SUBOF[S.spec];
+    return `<button class="b2-mrow" data-a="mkt-k" data-k="${x}"><span class="ic">${P[x].e}</span>
+      <span class="nm"><b>${esc(P[x].label)}${x === bigNow() ? ` <span class="b2-tag gold">🎩 Grande commande</span>` : ""}${mine ? ` <span class="b2-tag">Toi</span>` : ""}</b><small>${S.stock[x] >= 1 ? `Tu en as ${fmtN(S.stock[x])}` : "Tu n'en as pas"}${n ? ` · ${n} offre${n > 1 ? "s" : ""}` : ""}</small></span>
+      ${spark(x)}<span class="pr"><b>${fmtP(BX.vPrice(x, now()))}</b>${chg(vChg(x))}</span></button>`;
+  };
+  const sec = (title, list) => list.length ? `<h3 class="b2-msec">${title}</h3><div class="b2-mlist">${list.map(row).join("")}</div>` : "";
+  return `<div class="b2-board"><div class="b2-col" style="padding:6px 16px 28px">
+    <div class="b2-mhead"><h2>Le marché</h2><small>Cours du village · courbe sur 3 h · variation sur 1 h</small></div>
+    ${sec("Récoltes", BX.RAW)}${BX.unlocked(S, "four") ? sec("Recettes", BX.CRAFT) : ""}${sec("Sous-produits", BX.SUB)}
+  </div></div>`;
+}
 function marketHTML(){
-  if (!mkt.k) mkt.k = BX.RAW.find(k => k !== S.spec) || "bois";
+  if (!mkt.open || !mkt.k) return marketListHTML();
   const k = mkt.k, qv = quote(k);
-  const prods = BX.ALL.filter(x => !P[x].rec || BX.unlocked(S, "four"));
-  const pills = prods.map(x => `<button class="b2-chip ${x === k ? "on" : ""}" data-a="mkt-k" data-k="${x}"><span class="n">${P[x].e} ${esc(P[x].label)}${x === bigNow() ? " 🎩" : ""}</span><span class="p">${fmtP(BX.vPrice(x, now()))}</span><span class="c">${chg(vChg(x))}</span></button>`).join("");
   const offers = W.listings.filter(l => l.product === k).sort((a, b) => a.price - b.price || a.id - b.id);
   const resL = resLeft(k);
   const rows = offers.map(l => {
@@ -2006,8 +2044,9 @@ function marketHTML(){
     : `<div class="b2-ord res"><span class="who">🏘️ Le village<small>Réserve commune</small></span><span class="q">${fmtN(resL)}</span><span class="pr">${fmtP(BX.reservePrice(k))}</span>
     <button class="b2-btn gold" data-a="buy-res" ${resL < 1 ? "disabled" : ""}>Acheter</button></div>`;
   const hist = W.trades.filter(t => t.product === k).slice(-12).reverse().map(t => `<div class="b2-ord"><span class="who">${esc(t.buyer_id === ME.id ? "Toi" : nameOf(t.buyer_id))} ← ${esc(t.seller_id === ME.id ? "toi" : nameOf(t.seller_id))}<small>${fmtAgo(t.ts)}</small></span><span class="q">${fmtN(t.qty)}</span><span class="pr">${fmtP(+t.price)}</span></div>`).join("");
-  return `<div class="b2-board"><div class="b2-pills">${pills}</div><div class="b2-col" style="padding:4px 16px 24px">
-    <div class="b2-quote"><div><div style="font:800 13px var(--round);color:var(--chalk2)">${P[k].e} ${esc(P[k].label)} · cours du village</div><span class="big">${COIN}${fmtP(BX.vPrice(k, now()))}</span><span class="ch">${chg(vChg(k))} <small style="opacity:.6">1 h</small></span></div>
+  return `<div class="b2-board"><div class="b2-col" style="padding:4px 16px 24px">
+    <div class="b2-mtop"><button class="b2-back" data-a="mkt-back" aria-label="Retour au marché">‹</button><span class="ic">${P[k].e}</span><b>${esc(P[k].label)}</b></div>
+    <div class="b2-quote"><div><div style="font:800 13px var(--round);color:var(--chalk2)">Cours du village</div><span class="big">${COIN}${fmtP(BX.vPrice(k, now()))}</span><span class="ch">${chg(vChg(k))} <small style="opacity:.6">1 h</small></span></div>
       <div class="lim">${qv.p != null ? `Entre joueurs (24 h) <b>${fmtP(qv.p)}</b><br>` : ""}${BX.vMyPrice(S, k, now()) < BX.vPrice(k, now()) * 0.95 ? `Pour toi <b>${fmtP(BX.vMyPrice(S, k, now()))}</b> (tu as trop vendu)<br>` : ""}${P[k].sub ? `Marchand <b>${fmtP(P[k].floor * BAL.colpMult)}</b>` : `Réserve du village <b>${fmtP(BX.reservePrice(k))}</b>`}<br>Tu en as <b>${fmtN(S.stock[k])}</b></div></div>
     <div class="b2-seg">${["1h", "24h", "7j"].map(p => `<button class="${mkt.period === p ? "on" : ""}" data-a="mkt-p" data-p="${p}">${p === "1h" ? "1 h" : p === "24h" ? "24 h" : "7 j"}</button>`).join("")}</div>
     <div class="b2-chart">${chartSVG(k, mkt.period)}</div>
@@ -2359,6 +2398,7 @@ function onClick(e){
     case "tab": {
       const tb = TABS.find(x => x.id === b.dataset.v);
       if (tb.need && !BX.unlocked(S, tb.need)){ toast(tb.why); bounce(b); return; }
+      if (tb.id === "market") mkt.open = false;
       view = tb.id; markSeen("tab_" + tb.id); closeSheet(); wrapEl.querySelector("#b2-main").scrollTop = 0; draw();
       if (view === "market" || view === "village") loadWorld(true);
       return;
@@ -2486,9 +2526,10 @@ function onClick(e){
     case "list": listSheet(b.dataset.k); return;
     case "goto-mkt": {
       if (!BX.unlocked(S, "marche")){ toast(TABS[2].why); return; }
-      mkt.k = b.dataset.k; view = "market"; closeSheet(); wrapEl.querySelector("#b2-main").scrollTop = 0; draw(); loadWorld(true); return;
+      mkt.k = b.dataset.k; mkt.open = true; view = "market"; closeSheet(); wrapEl.querySelector("#b2-main").scrollTop = 0; draw(); loadWorld(true); return;
     }
-    case "mkt-k": mkt.k = b.dataset.k; draw(); return;
+    case "mkt-k": mkt.k = b.dataset.k; mkt.open = true; wrapEl.querySelector("#b2-main").scrollTop = 0; draw(); return;
+    case "mkt-back": mkt.open = false; draw(); return;
     case "mkt-p": mkt.period = b.dataset.p; draw(); return;
     case "buy": { const l = W.listings.find(x => String(x.id) === b.dataset.id); if (l) buySheet(l); return; }
     case "buy-res": resSheet(mkt.k); return;
