@@ -1,6 +1,6 @@
 -- =====================================================================
 -- Le Baron — produits de luxe échangeables (11 nov. 2026)
--- · Bière, fromage, cidre, hydromel : mis en bouteille depuis le cellier, ce sont des produits en stock
+-- · Bière, cidre, fromage, hydromel : faits au cellier (2 / 4 / 6 / 8 h), même quantité, prime de valeur ; en stock
 --   comme les autres : on peut les vendre / acheter entre joueurs.
 -- · Le village en commande : une commande de luxe une fois sur deux par créneau (tavernier, fromager).
 -- · Garde-fou v5 : un téléphone resté sur l'ancienne version ne peut plus sauvegarder.

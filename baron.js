@@ -18,7 +18,7 @@ const CRAFT = ["pain","crepes","tarte","confiture","gateau"];
 const SUB = ["paille","plumes","cuir","noyaux","cire","sciure"];
 const SUBOF = { ble:"paille", oeufs:"plumes", lait:"cuir", fruits:"noyaux", miel:"cire", bois:"sciure" };
 // produits de luxe : faits au cellier (une ressource brute vieillit en tonneau, puis on la met en bouteille)
-const AGED = ["biere","fromage","cidre","hydromel"];
+const AGED = ["biere","cidre","fromage","hydromel"];
 const ALL = RAW.concat(CRAFT, SUB, AGED);
 const AGEDOF = { ble:"biere", lait:"fromage", fruits:"cidre", miel:"hydromel" };
 const P = {
@@ -39,10 +39,11 @@ const P = {
   noyaux: { label:"Noyaux", e:"🌰", floor:20, sub:true, of:"fruits" },
   cire:   { label:"Cire",   e:"🕯️", floor:20, sub:true, of:"miel" },
   sciure: { label:"Sciure", e:"🍂", floor:20, sub:true, of:"bois" },
-  biere:    { label:"Bière",    e:"🍺", floor:10, aged:true, src:"ble" },
-  fromage:  { label:"Fromage",  e:"🧀", floor:10, aged:true, src:"lait" },
-  cidre:    { label:"Cidre",    e:"🍾", floor:10, aged:true, src:"fruits" },
-  hydromel: { label:"Hydromel", e:"🍷", floor:10, aged:true, src:"miel" },
+  // produits de luxe : même quantité que la matière première, mais une prime sur son cours (plus c'est long, plus ça vaut)
+  biere:    { label:"Bière",    e:"🍺", floor:12.5, aged:true, src:"ble",  prem:1.25, h:2 },
+  cidre:    { label:"Cidre",    e:"🍾", floor:14, aged:true, src:"fruits", prem:1.4, h:4 },
+  fromage:  { label:"Fromage",  e:"🧀", floor:15.5, aged:true, src:"lait", prem:1.55, h:6 },
+  hydromel: { label:"Hydromel", e:"🍷", floor:17, aged:true, src:"miel",   prem:1.7, h:8 },
 };
 
 /* ---------- Outils de l'atelier ----------
@@ -118,9 +119,7 @@ const BAL = {
   cellarMax: 6,
   cellarCost: L => ({ coins: 4e9 * Math.pow(3, L), wood: 2e7 * Math.pow(3, L) }),   // prix fixe : 4B pour le construire, ×3 par niveau
   cellarBatch: (L, eff) => Math.max(50, eff * 600 * (1 + 0.5 * (L - 1))),   // ~10 min de production par place
-  // rendement du tonneau : monte jusqu'à ×1,4 vers 3 h 30 (à point), puis ça se gâte (×1,1 à 10 h, ×0,6 au pire)
-  agePeak: 3.5, ageTop: 1.4,
-  ageMul: h => h <= 3.5 ? 1 + 0.4 * Math.sin(Math.PI / 2 * h / 3.5) : Math.max(0.6, 1.4 - 0.3 * Math.pow((h - 3.5) / 6.5, 1.3)),
+  luxSwing: 0.1,                                // le cours d'un produit de luxe = cours de sa matière × prime × (±10 %) : toujours plus cher
   // cours du village : chaque produit a son cours (le même pour tous), qui monte et descend tout seul
   vSwing: [0.45, 0.3, 0.15],                    // amplitude des 3 vagues (lente, moyenne, rapide)
   vPeriods: [9 * 3600, 2.3 * 3600, 37 * 60],    // durée de chaque vague, en secondes (variée selon le produit)
@@ -325,22 +324,23 @@ function craftTool(s, kind, qi, now){
 /* ---------- Cellier ---------- */
 const cellarSlots = s => Math.min(BAL.cellarMax, s.cellar.lvl);
 const cellarBatch = s => nice(BAL.cellarBatch(s.cellar.lvl, effRate(s, 0)));
-const ageMul = (sl, t) => BAL.ageMul(Math.max(0, t - sl.t0) / 3600000);
 function cellarPut(s, src, q, t){
   const k = AGEDOF[src]; if (!k) return false;
   q = Math.min(Math.floor(q), Math.floor(s.stock[src] || 0), cellarBatch(s)); if (q < 1) return false;
   let i = -1; for (let j = 0; j < cellarSlots(s); j++) if (!s.cellar.slots[j]){ i = j; break; }
   if (i < 0) return false;
-  s.stock[src] -= q; s.cellar.slots[i] = { k, qty: q, t0: t };
+  s.stock[src] -= q; s.cellar.slots[i] = { k, qty: q, t0: t, dur: P[k].h * 3600000 };
   return true;
 }
-// vendre un tonneau au village : cours du jour × vieillissement
-// mettre en bouteille : le tonneau devient un produit en stock (le vieillissement a multiplié la quantité)
-const cellarYield = (sl, t) => Math.floor(sl.qty * ageMul(sl, t));
-const ageState = (sl, t) => { const h = Math.max(0, t - sl.t0) / 3600000; return h < BAL.agePeak - 0.5 ? "monte" : h <= BAL.agePeak + 1 ? "point" : "gate"; };
+// un tonneau est prêt au bout de sa durée (comme une cuisson) ; attendre plus longtemps ne change rien
+const caskDur = sl => sl.dur || P[sl.k].h * 3600000;
+const caskLeft = (sl, t) => Math.max(0, sl.t0 + caskDur(sl) - t);
+const cellarYield = sl => Math.floor(sl.qty);
+const ageState = (sl, t) => caskLeft(sl, t) > 0 ? "monte" : "point";
+// mettre en bouteille : le tonneau devient un produit en stock, seulement quand il est prêt
 function cellarBottle(s, i, t){
-  const sl = s.cellar.slots[i]; if (!sl) return 0;
-  const q = cellarYield(sl, t); s.cellar.slots[i] = null;
+  const sl = s.cellar.slots[i]; if (!sl || caskLeft(sl, t) > 0) return 0;
+  const q = cellarYield(sl); s.cellar.slots[i] = null;
   s.stock[sl.k] = (s.stock[sl.k] || 0) + q; s.stats.aged = (s.stats.aged || 0) + q;
   return q;
 }
@@ -452,6 +452,7 @@ const reservePrice = k => P[k].floor * BAL.reserveMult;
 const VPH = {}; ALL.forEach(k => { const r = rng(hash("cours:" + k)); VPH[k] = BAL.vPeriods.map(T => ({ T: T * (0.75 + r() * 0.5), ph: r() * Math.PI * 2 })); });
 function vMul(k, t){
   const sec = t / 1000; let x = 0;
+  if (P[k].aged){ const w = VPH[k][2]; return vMul(P[k].src, t) * Math.exp(BAL.luxSwing * Math.sin(2 * Math.PI * sec / w.T + w.ph)); }
   VPH[k].forEach((w, j) => x += BAL.vSwing[j] * Math.sin(2 * Math.PI * sec / w.T + w.ph));
   return Math.exp(x);
 }
@@ -481,7 +482,7 @@ function vSell(s, k, q, t){
 /* ---------- Fortune ---------- */
 function fortune(s){
   let st = 0; ALL.forEach(k => st += (s.stock[k] || 0) * P[k].floor);
-  if (s.cellar) s.cellar.slots.forEach(sl => { if (sl) st += sl.qty * P[sl.k].floor * ageMul(sl, Date.now()); });
+  if (s.cellar) s.cellar.slots.forEach(sl => { if (sl) st += sl.qty * P[P[sl.k].src].floor; });
   return Math.floor(s.coins + st + s.stats.invested * 0.5);
 }
 // ce qui se découvre petit à petit
@@ -510,7 +511,7 @@ function bottleneck(s, key, now){
   return null;
 }
 
-return { SUB, SUBOF, AGED, AGEDOF, TQ, TOOLK, tmOf, toolName, toolIcon, toolRecipe, canCraft, craftTool, cellarSlots, cellarBatch, ageMul, cellarPut, cellarYield, cellarBottle, ageState,
+return { SUB, SUBOF, AGED, AGEDOF, TQ, TOOLK, tmOf, toolName, toolIcon, toolRecipe, canCraft, craftTool, cellarSlots, cellarBatch, caskLeft, caskDur, cellarPut, cellarYield, cellarBottle, ageState,
   RAW, CRAFT, ALL, P, BAL, gateOf, gateState, newParcel, fixFarm, quaiCap, pendTotal, elevRate, cartRate, startParcel, startElev, startCart, CHARS, MILES, isPalier, newState, newFarm, step, catchUp, farmRates, effRate, prodValue,
   stockUnits, barnCap, barnFree, costs, canPay, pay, bulk, nextParcelCost, nice, ovenTick, ovenBatch, ovenDur, canBake,
   ensureOrders, genOrders, deliver, bigOf, fullBonus, reserveLeft, reservePrice, fortune, unlocked, bottleneck, farmMul, pRate, vMul, vPrice, vMyPrice, vValue, vSell };
@@ -1084,9 +1085,8 @@ const STYLE = `
 /* ======== MARCHÉ (le tableau à la craie) ======== */
 .b2-board{background:var(--board);color:var(--chalk);min-height:100%;background-image:radial-gradient(rgba(255,255,255,.035) 1px,transparent 1px);background-size:6px 6px}
 .b2-luxe{display:grid;gap:8px}
-.b2-cask .st{font-weight:800}.b2-cask.point .st{color:var(--up2)}.b2-cask.gate .st{color:var(--down)}
-.b2-cask.point{box-shadow:0 0 0 2px #F2B33D,0 2px 0 rgba(124,74,36,.2)}
-.b2-cask.gate .ic{filter:saturate(.5)}.b2-luxe .b2-slot{color:var(--ink)}
+.b2-cask .st{font-weight:800;color:var(--up2)!important}
+.b2-cask.point{box-shadow:0 0 0 2px #F2B33D,0 2px 0 rgba(124,74,36,.2)}.b2-luxe .b2-slot{color:var(--ink)}
 .b2-mhead{padding:10px 2px 2px}.b2-mhead h2{margin:0;font:400 italic 30px var(--disp);color:var(--chalk)}.b2-mhead small{font:700 12.5px var(--round);color:var(--chalk2)}
 .b2-msec{margin:18px 2px 8px;font:800 12px var(--round);letter-spacing:.08em;text-transform:uppercase;color:var(--chalk2)}
 .b2-mlist{background:var(--board2);border-radius:16px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(239,234,219,.08)}
@@ -1903,18 +1903,16 @@ function toolRow(kind, t){
 function cellarRow(i, t){
   const sl = S.cellar.slots[i];
   if (!sl) return `<button class="b2-slot free" data-a="cellar">＋ Place libre · mettre à vieillir</button>`;
-  const m = BX.ageMul(sl, t), st = BX.ageState(sl, t), peak = sl.t0 + BAL.agePeak * 3600000;
-  const lab = st === "monte" ? `À point dans ${fmtT(peak - t)}` : st === "point" ? "À point !" : "Ça se gâte…";
-  return `<div class="b2-slot b2-cask ${st}" data-cask="${i}"><span class="ic">${P[sl.k].e}</span><div class="sp"><b>${fmtN(sl.qty)} ${esc(P[sl.k].label)}</b><small><span data-age class="st">${lab}</span> · <span data-mul>×${m.toFixed(2).replace(".", ",")}</span></small></div>
-    <button class="b2-btn ${st === "point" ? "gold" : ""}" data-a="cel-sell" data-i="${i}">🍾 <span data-val>${fmtN(BX.cellarYield(sl, t))}</span></button></div>`;
+  const st = BX.ageState(sl, t), left = BX.caskLeft(sl, t), tot = BX.caskDur(sl);
+  return `<div class="b2-slot b2-cask ${st}" data-cask="${i}"><span class="ic">${P[sl.k].e}</span><div class="sp"><b>${fmtN(sl.qty)} ${esc(P[sl.k].label)}</b>
+    ${st === "monte" ? `<div class="pb"><i style="width:${(1 - left / tot) * 100}%"></i></div>` : `<small class="st">Prêt !</small>`}</div>
+    ${st === "monte" ? `<span class="t" data-age>${fmtT(left)}</span>` : `<button class="b2-btn gold" data-a="cel-sell" data-i="${i}">🍾 Mettre en bouteille</button>`}</div>`;
 }
 function caskTick(el, t){
   const sl = S.cellar.slots[+el.dataset.cask]; if (!sl) return;
   const st = BX.ageState(sl, t);
   if (!el.classList.contains(st)){ if (!sheetOpen) draw(); return; }
-  const v = el.querySelector("[data-val]"); if (v) v.textContent = fmtN(BX.cellarYield(sl, t));
-  const m = el.querySelector("[data-mul]"); if (m) m.textContent = "×" + BX.ageMul(sl, t).toFixed(2).replace(".", ",");
-  if (st === "monte"){ const a = el.querySelector("[data-age]"); if (a) a.textContent = `À point dans ${fmtT(sl.t0 + BAL.agePeak * 3600000 - t)}`; }
+  if (st === "monte"){ const left = BX.caskLeft(sl, t); const a = el.querySelector("[data-age]"); if (a) a.textContent = fmtT(left); const b = el.querySelector(".pb i"); if (b) b.style.width = (1 - left / BX.caskDur(sl)) * 100 + "%"; }
 }
 function atelierHTML(){
   const t = now(), ac = BX.costs.atelier(S);
@@ -1931,7 +1929,7 @@ function atelierHTML(){
     : `<div class="b2-paper"><div style="display:flex;align-items:center;gap:8px"><h2 class="b2-h2" style="flex:1;margin:0">Le cellier<small>Niveau ${L} · ${BX.cellarSlots(S)} place${BX.cellarSlots(S) > 1 ? "s" : ""} · ${fmtN(BX.cellarBatch(S))} max par tonneau</small></h2>
       ${L < BAL.cellarMax ? `<button class="b2-btn" data-a="up-cellar" data-cc="${cc.coins}" data-cw="${cc.wood}">Niv. ${L + 1} ${price(cc)}</button>` : ""}</div>
       <div class="b2-slots">${Array.from({ length: BX.cellarSlots(S) }, (_, i) => cellarRow(i, t)).join("")}</div>
-      <p class="b2-note">À point vers 3 h 30 (×1,4), puis ça se gâte. Mets en bouteille au bon moment.</p></div>`;
+      <p class="b2-note">Un produit de luxe vaut toujours plus que sa matière première. Plus c'est long, plus ça vaut.</p></div>`;
   return `<div class="b2-barnin"><div class="b2-col b2-pad">${tools}${cellar}</div></div>`;
 }
 function toolSheet(kind){
@@ -1951,13 +1949,13 @@ function toolSheet(kind){
 function cellarSheet(src){
   if (!src){
     sheetCtx = null;
-    sheet(`<h3>Que mettre à vieillir ?</h3>${Object.keys(BX.AGEDOF).map(k => { const a = BX.AGEDOF[k]; return `<div class="b2-rec"><span class="ic">${P[a].e}</span><div class="sp"><b>${esc(P[a].label)}</b><div class="b2-ing"><span class="${S.stock[k] >= 1 ? "ok" : "ko"}">${P[k].e} ${fmtN(S.stock[k])}</span></div></div>
+    sheet(`<h3>Que mettre à vieillir ?</h3>${BX.AGED.map(a => P[a].src).map(k => { const a = BX.AGEDOF[k]; return `<div class="b2-rec"><span class="ic">${P[a].e}</span><div class="sp"><b>${esc(P[a].label)} <span class="b2-mul">×${String(P[a].prem).replace(".", ",")}</span> <span style="font:700 12px var(--round);color:var(--ink2)">· ${P[a].h} h</span></b><div class="b2-ing"><span class="${S.stock[k] >= 1 ? "ok" : "ko"}">${P[k].e} ${fmtN(S.stock[k])}</span></div></div>
       ${S.stock[k] >= 1 ? `<button class="b2-btn" data-a="cellar" data-k="${k}">Choisir</button>` : BX.unlocked(S, "marche") ? `<button class="b2-btn red" data-a="goto-mkt" data-k="${k}">Acheter ${P[k].e}</button>` : ""}</div>`; }).join("")}`);
     return;
   }
   const a = BX.AGEDOF[src], max = Math.min(Math.floor(S.stock[src]), BX.cellarBatch(S));
   sheetCtx = { type:"cellar", k: src };
-  sheet(`<h3>${P[a].e} ${esc(P[a].label)}</h3><p>${P[src].e} ${esc(P[src].label)} → ${P[a].e} ${esc(P[a].label)}. Ça gonfle en vieillissant jusqu'à ×1,4 vers 3 h 30, puis ça se gâte : reviens le mettre en bouteille à temps.</p>
+  sheet(`<h3>${P[a].e} ${esc(P[a].label)}</h3><p>${P[src].e} ${esc(P[src].label)} → ${P[a].e} ${esc(P[a].label)} en ${P[a].h} h. Même quantité, mais ça se vend environ ${String(P[a].prem).replace(".", ",")} fois plus cher.</p>
     ${qtyBlock(max, max, "q")}<div class="b2-sum" data-sum></div><button class="b2-btn big" data-a="confirm">Mettre en tonneau</button>`);
   sheetSum();
 }
@@ -2281,7 +2279,7 @@ function sheetSum(){
   const s = wrapEl.querySelector("[data-sum]");
   if (c.type === "sell"){ const g = BX.vValue(S, c.k, q, now()); s.innerHTML = `<span>Le village te paie${q > 0 ? ` <small>(${fmtP(g / q)} l'unité)</small>` : ""}</span><span>${COIN}${fmtN(g)}</span>`; }
   if (c.type === "list"){ const p = Math.max(0, +String(wrapEl.querySelector("[data-price]").value).replace(",", ".") || 0); s.innerHTML = `<span>Si tout part</span><span>${COIN}${fmtN(q * p)}</span>`; }
-  if (c.type === "cellar"){ const a = BX.AGEDOF[c.k]; s.innerHTML = `<span>À point dans 3 h 30</span><span>${P[a].e} ${fmtN(q * BAL.ageTop)}</span>`; }
+  if (c.type === "cellar"){ const a = BX.AGEDOF[c.k], t = now(); s.innerHTML = `<span>${P[c.k].e} ${COIN}${fmtN(q * BX.vPrice(c.k, t))} → ${P[a].e}</span><span>${COIN}${fmtN(q * BX.vPrice(a, t))}</span>`; }
   if (c.type === "buy" || c.type === "res" || c.type === "colp"){ s.innerHTML = `<span>Tu paies</span><span>${COIN}${fmtN(q * c.price)}</span>`; const b = wrapEl.querySelector("[data-a=confirm]"); if (b) b.disabled = q < 1 || q * c.price > S.coins; }
   if (c.type === "bake"){ s.innerHTML = `<span>Cuisson</span><span>${fmtT(BX.ovenDur(S, c.k))}</span>`; }
 }
@@ -2533,7 +2531,7 @@ function onClick(e){
     case "cellar": cellarSheet(b.dataset.k); return;
     case "cel-sell": {
       const sl = S.cellar.slots[+b.dataset.i]; if (!sl) return;
-      const g = BX.cellarBottle(S, +b.dataset.i, now()); if (!g) return; dirty = true;
+      const g = BX.cellarBottle(S, +b.dataset.i, now()); if (!g){ toast("Pas encore prêt."); return; } dirty = true;
       sound("done"); toast(`🍾 ${fmtN(g)} ${P[sl.k].e} ${esc(P[sl.k].label.toLowerCase())} mis en bouteille, dans ta grange`, "gold"); draw(); return;
     }
     case "buy-colp": colpSheet(mkt.k); return;
