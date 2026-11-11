@@ -3,7 +3,7 @@
 (function(){
 const _now = Date.now.bind(Date); let OFF = 0; Date.now = () => _now() + OFF;
 window.DEMO_SKIP = ms => { OFF += ms; };
-const KEY = "baron_demo_db_v1";
+const KEY = "baron_demo_db_v3";
 let D = null; try{ D = JSON.parse(localStorage.getItem(KEY) || "null"); }catch(e){}
 const H = 3600000, now = () => Date.now();
 const bots = [
@@ -40,7 +40,9 @@ const F = {
     if (D.players.length >= 6) throw new Error("partie complète");
     if (D.players.some(p => p.specialty === p_spec)) throw new Error("spécialité prise");
     D.players.push({ id:p_profile, name:p_name, specialty:p_spec, stats:{}, created: now() });
-    const t = "tok-" + Math.random().toString(36).slice(2); D.secrets[t] = p_profile; D.saves[p_profile] = clone(p_state); return t;
+    const st = clone(p_state); st.coins = 2e6; st.stock.bois = 6000; st.barn = 5; st.stock.pain = 400; st.stock.crepes = 400; st.stock.tarte = 400; st.stock.confiture = 400; st.stock.gateau = 400; ["oeufs","lait","fruits","miel"].forEach(k => st.stock[k] = 3000);
+    const f = st.farms[p_spec]; while (f.parcels.length < 4) f.parcels.push({ lvl: 12, mgr:true, pend:0, ph:"idle", t:0 }); f.elev.mgr = f.cart.mgr = true; f.elev.lvl = f.cart.lvl = 20;
+    const t = "tok-" + Math.random().toString(36).slice(2); D.secrets[t] = p_profile; D.saves[p_profile] = st; return t;
   },
   baron2_load({ p_token }){ const v = pid(p_token), p = D.players.find(x => x.id === v); return { me:{ id:p.id, name:p.name, specialty:p.specialty }, state: clone(D.saves[v]), credits: credits(v, D.saves[v]) }; },
   baron2_save({ p_token, p_state, p_stats }){ const v = pid(p_token); D.saves[v] = clone(p_state); D.players.find(x => x.id === v).stats = p_stats; return { credits: credits(v, p_state) }; },
@@ -50,6 +52,19 @@ const F = {
   },
   baron2_list({ p_token, p_state, p_product, p_qty, p_price }){ const v = pid(p_token); const id = D.seq++; D.listings.push({ id, seller_id:v, product:p_product, qty: Math.floor(p_qty), price: Math.round(p_price * 10) / 10, created_at: new Date(now()).toISOString() }); D.saves[v] = clone(p_state); return id; },
   baron2_unlist({ p_token, p_state, p_id, p_qty }){ const v = pid(p_token); const i = D.listings.findIndex(l => l.id === p_id && l.seller_id === v && +l.qty === +p_qty); if (i < 0) throw new Error("offre changée"); D.listings.splice(i, 1); D.saves[v] = clone(p_state); return null; },
+  baron2_reserve_buy({ p_qty }){ return Math.floor(p_qty); },
+  baron2_orders(){
+    const sl = Math.floor(now() / 1200000); D.ord = D.ord || {};
+    const gen = x => { const raw = ["ble","oeufs","lait","fruits","miel","bois"], rec = ["pain","crepes","tarte","confiture","gateau"], who = { ble:"boulanger", pain:"boulanger", oeufs:"aubergiste", lait:"aubergiste", crepes:"aubergiste", gateau:"patissiere", tarte:"patissiere", confiture:"epiciere", fruits:"epiciere", miel:"epiciere", bois:"charpentier" };
+      const pick = a => a[Math.floor(Math.random() * a.length)]; const big = pick(raw), used = [big];
+      const l = [{ id: x + "-G", k: big, big: true, who: "maire", qty: 4000, bonus: 120000 }];
+      for (let i = 0; i < 4; i++){ let k; do k = pick(i < 2 ? raw : rec); while (used.includes(k)); used.push(k); l.push({ id: x + "-" + i, k, qty: i < 2 ? 2500 : 300, bonus: i < 2 ? 60000 : 90000, who: who[k] }); }
+      return { list: l, winners: {} }; };
+    if (!D.ord[sl]) D.ord[sl] = gen(sl); if (!D.ord[sl + 1]) D.ord[sl + 1] = gen(sl + 1);
+    return clone({ slot: sl, list: D.ord[sl].list, winners: D.ord[sl].winners, next_big: D.ord[sl + 1].list[0].k }); },
+  baron2_order_win({ p_token, p_slot, p_oid }){ const v = pid(p_token), o = D.ord && D.ord[p_slot]; if (!o) return { won:false, late:true };
+    const it = o.list.find(x => x.id === p_oid), w = o.winners[p_oid]; if (w) return { won: w.id === v, name: w.name, bonus: it.bonus };
+    o.winners[p_oid] = { id: v, name: D.players.find(x => x.id === v).name }; return { won: true, bonus: it.bonus }; },
   baron2_buy({ p_token, p_state, p_id, p_qty, p_price }){
     const v = pid(p_token); const l = D.listings.find(x => x.id === p_id);
     if (!l || +l.price !== +p_price || l.qty < p_qty || p_qty < 1) throw new Error("offre changée");
@@ -70,6 +85,7 @@ setInterval(() => {
     D.credits.push({ id: D.seq++, player_id:me.id, coins:q * l.price, product:l.product, qty:q, buyer:b.name }); } });
   if (Math.random() < .5){ const s = bots[Math.floor(Math.random() * 4)], b = bots[Math.floor(Math.random() * 4)]; const last = D.trades.filter(t => t.product === s.specialty).slice(-1)[0];
     D.trades.push({ id: D.seq++, product:s.specialty, qty: Math.round(20 + Math.random() * 200), price: Math.max(10.2, Math.round(((last ? last.price : 14) * (1 + (Math.random() - .5) * .06)) * 10) / 10), buyer_id:b.id, seller_id:s.id, at:new Date(now()).toISOString() }); }
+  if (D.ord){ const sl = Math.floor(now() / 1200000), o = D.ord[sl]; if (o && Math.random() < .25){ const free = o.list.filter(x => !o.winners[x.id]); if (free.length){ const b = bots[Math.floor(Math.random() * 4)]; o.winners[free[0].id] = { id: b.id, name: b.name }; } } }
   bots.forEach(b => { const p = D.players.find(x => x.id === b.id); p.stats.fortune = Math.round(p.stats.fortune * (1 + Math.random() * .004)); });
   persist();
 }, 15000);

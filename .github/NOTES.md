@@ -74,6 +74,11 @@ ne sont volontairement pas écrits ici : les demander à Naim.
 - À faire : Naim trouve que l'interface « ne donne pas envie de jouer ». Piste : moins de marron et de texte, décor plus vif,
   retours plus satisfaisants, objectif visible.
 
+- Commandes en course (11 nov.) : les mêmes commandes pour tout le village, générées par le serveur
+  (`baron2_orders`, table `baron2_orders`, `supabase/baron2_04_commandes.sql`) ; chacun livre (payé au prix de base),
+  la prime va au premier qui termine (`baron2_order_win`). Plus de carton plein. Garde-fou `ord2` contre les anciennes versions.
+- Coups de malice (Cartes Chance, Almanach, prête-nom, contrats) : codés sur la branche `baron-malice`, mis de côté par Naim.
+
 ## Tests
 - Serveur local `python3 -m http.server 8770` dans le dépôt, puis Playwright (Chromium préinstallé)
   avec un faux client Supabase injecté à la place de `supabase.min.js`. Toujours tester côté amis ET côté

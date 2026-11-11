@@ -23,27 +23,27 @@ const P = {
 const MILES = [10, 25, 50, 100, 150, 200, 300, 400, 500, 750, 1000];
 const miles = L => { let n = 0; for (const m of MILES) if (L >= m) n++; return n; };
 // paliers façon Idle Miner : avant les champs 4, 7, 10, 13… il faut réunir une grosse somme, payer, puis attendre la fin des travaux
-const GATES = [{ coins:5e6, h:.5 }, { coins:5e9, h:2 }, { coins:5e12, h:6 }, { coins:5e15, h:12 }];
+const GATES = [{ coins:5e7, h:1 }, { coins:5e10, h:3 }, { coins:5e13, h:8 }, { coins:5e16, h:16 }];
 const isPalier = i => i >= 3 && i % 3 === 0;
 const gateOf = i => { if (!isPalier(i)) return null; const k = i / 3 - 1; const g = GATES[Math.min(k, GATES.length - 1)]; const extra = Math.max(0, k - GATES.length + 1);
   return { n: k + 1, coins: g.coins * Math.pow(1000, extra), ms: (extra ? 24 : g.h) * 3600000 }; };
 const BAL = {
   boostDur: 60, boostCd: 240,                   // corvée : ×2 pendant 1 min, toutes les 4 min
   parcelRate: (i, L) => 0.3 * Math.pow(5, i) * L * Math.pow(2, miles(L)),          // unités / s
-  parcelCost: (i, L) => 4 * Math.pow(8, i) * Math.pow(1.13, L - 1),                // niveau L → L+1
-  parcelUnlock: i => i === 0 ? 0 : 60 * Math.pow(10, i - 1),
+  parcelCost: (i, L) => 4 * Math.pow(8, i) * Math.pow(1.2, L - 1),                 // niveau L → L+1 (1,13 au départ, 1,25 trop lent, 1,2)
+  parcelUnlock: i => i === 0 ? 0 : 500 * Math.pow(30, i - 1),
   parcelWood: i => i < 2 ? 0 : Math.round(12 * Math.pow(8, i - 2)),
   parcelMgr: i => 25 * Math.pow(12, i),
   // monte-charge : il descend étage par étage, remplit sa cabine, remonte et vide en haut
   elevCap: L => Math.round(8 * Math.pow(1.2, L - 1) * Math.pow(2, miles(L))),   // unités par trajet
   elevSpeed: L => Math.min(5, 1.2 + 0.05 * (L - 1)),                           // étages par seconde
   elevStop: 0.5, elevUnload: 0.7,
-  elevCost: L => 10 * Math.pow(1.21, L - 1),
+  elevCost: L => 10 * Math.pow(1.25, L - 1),
   // charrette : elle charge le tas du haut, roule jusqu'à la grange, décharge et revient
   cartCap: L => Math.round(9 * Math.pow(1.2, L - 1) * Math.pow(2, miles(L))),
   cartTime: L => Math.max(1.2, 3.2 - 0.05 * (L - 1)),                          // aller simple, en secondes
   cartUnload: 0.7,
-  cartCost: L => 12 * Math.pow(1.21, L - 1),
+  cartCost: L => 12 * Math.pow(1.25, L - 1),
   elevMgr: 40, cartMgr: 60,
   work: 2.4, walk: 1.3,                         // parcelle : récolte, porte au panier, revient (5 s)
   pendCap: r => Math.max(40, r * 120),          // dépôt d'une parcelle : 2 min de production
@@ -58,13 +58,23 @@ const BAL = {
   ovenSpeed: L => Math.pow(0.82, Math.max(0, L - 4)),
   ovenBatch: (L, eff) => Math.max(20, Math.round(eff * 90 * (1 + 0.5 * (L - 1)))),
   farmCost: k => ({ coins: 2e6 * Math.pow(25, k - 1), wood: Math.round(4000 * Math.pow(10, k - 1)) }), // k-ième exploitation en plus
+  farmMax: 2,                                   // ta ferme + une seule exploitation en plus
+  farm2Mul: 0.25,                               // l'exploitation en plus produit 4× moins que ta spécialité
   farmNeeds: 5,                                 // parcelles nécessaires dans ta ferme principale
   slotMs: 20 * 60 * 1000,                       // commandes renouvelées toutes les 20 min
+  bigQty: 1.5, bigBonus: 1.5,                   // la grande commande : même produit pour tout le village, 1,5× la quantité, 1,5× la prime
+  fullBonus: 0.3,                               // carton plein (toutes les commandes livrées) : +30 % des primes
   orders: 4,
   orderSecs: [150, 360], recipeSecs: [60, 150], // quantité = X s de ta production
-  bonusMins: [10, 20], recipeBonus: 1.4,        // prime = X min de production (moyenne du groupe ou la tienne)
+  bonusMins: [5, 10], recipeBonus: 1.4,        // prime = X min de production (moyenne du groupe ou la tienne)
   reserveMult: 3, reserveSecs: 60,              // réserve du village : 3× le prix plancher, limitée
   startWood: 40, startCoins: 0,
+  // cours du village : chaque produit a son cours (le même pour tous), qui monte et descend tout seul
+  vSwing: [0.45, 0.3, 0.15],                    // amplitude des 3 vagues (lente, moyenne, rapide)
+  vPeriods: [9 * 3600, 2.3 * 3600, 37 * 60],    // durée de chaque vague, en secondes (variée selon le produit)
+  // et ton propre cours s'effondre si tu lui vends trop d'un coup
+  vAbsorb: 1800,                                // le village encaisse ~30 min de ta production avant que son prix soit divisé par 2
+  vHalfLife: 20 * 60,                           // il « oublie » tes ventes de moitié toutes les 20 min
 };
 
 /* ---------- État ---------- */
@@ -93,14 +103,16 @@ const pendTotal = f => f.parcels.reduce((a, p) => a + p.pend, 0);
 const elevTrip = (L, n) => 2 * n / BAL.elevSpeed(L) + n * BAL.elevStop + BAL.elevUnload;
 const elevRate = (L, n) => BAL.elevCap(L) / elevTrip(L, n || 1);
 const cartRate = L => BAL.cartCap(L) / (2 * BAL.cartTime(L) + BAL.cartUnload);
-function farmRates(f, now){
+const farmMul = (s, key) => key === s.spec ? 1 : BAL.farm2Mul;
+const pRate = (s, key, i, L) => BAL.parcelRate(i, L) * farmMul(s, key);
+function farmRates(f, now, mul){
   const boost = f.boost > now ? 2 : 1;
-  let P = 0; f.parcels.forEach((p, i) => P += BAL.parcelRate(i, p.lvl) * boost);
+  let P = 0; f.parcels.forEach((p, i) => P += BAL.parcelRate(i, p.lvl) * boost * (mul == null ? 1 : mul));
   return { P, E: elevRate(f.elev.lvl, f.parcels.length), C: cartRate(f.cart.lvl), boost };
 }
 // production réelle possible (en unités / s), le maillon le plus faible de chaque ferme
 function effRate(s, now){
-  let t = 0; for (const k in s.farms){ const r = farmRates(s.farms[k], now || 0); t += Math.min(r.P / r.boost, r.E, r.C); }
+  let t = 0; for (const k in s.farms){ const r = farmRates(s.farms[k], now || 0, farmMul(s, k)); t += Math.min(r.P / r.boost, r.E, r.C); }
   return t;
 }
 const prodValue = s => effRate(s, 0) * 10;      // pièces / s au prix plancher
@@ -117,7 +129,7 @@ function tickFarm(s, key, f, dt, now, ev){
     p.t += dt;
     if (p.ph === "work" && p.t >= BAL.work){ p.ph = "go"; p.t = 0; }
     else if (p.ph === "go" && p.t >= BAL.walk){
-      const r = BAL.parcelRate(i, p.lvl) * boost, amt = r * cyc, cap = BAL.pendCap(r), nv = p.pend + amt;
+      const r = pRate(s, key, i, p.lvl) * boost, amt = r * cyc, cap = BAL.pendCap(r), nv = p.pend + amt;
       if (nv > cap){ f.lost += nv - cap; p.pend = cap; } else p.pend = nv;
       ev && ev.push({ k:"drop", key, i, amt }); p.ph = "back"; p.t = 0;
     } else if (p.ph === "back" && p.t >= BAL.walk){ p.ph = "idle"; p.t = 0; if (p.mgr){ p.ph = "work"; } }
@@ -178,7 +190,7 @@ function stepAvg(s, key, f, dt, now){
   }
   f.parcels.forEach((p, i) => {
     if (!p.mgr) return;
-    const r = BAL.parcelRate(i, p.lvl) * boost, cap = BAL.pendCap(r), nv = p.pend + r * dt;
+    const r = pRate(s, key, i, p.lvl) * boost, cap = BAL.pendCap(r), nv = p.pend + r * dt;
     if (nv > cap){ f.lost += nv - cap; p.pend = cap; } else p.pend = nv;
   });
 }
@@ -257,6 +269,7 @@ const CHARS = {
   patissiere: { name:"La pâtissière",  e:"👩‍🍳", wants:["gateau","tarte"] },
   epiciere:   { name:"L'épicière",     e:"👵", wants:["confiture","fruits","miel"] },
   charpentier:{ name:"Le charpentier", e:"👷", wants:["bois"] },
+  maire:      { name:"Le maire",       e:"🎩", wants:[] },
 };
 const charFor = (k, r) => { const c = Object.keys(CHARS).filter(id => CHARS[id].wants.includes(k)); return c[Math.floor(r() * c.length)] || "epiciere"; };
 function genOrders(s, slot, playerId, groupProd){
@@ -267,17 +280,26 @@ function genOrders(s, slot, playerId, groupProd){
   const recipes = s.oven.lvl ? CRAFT : [];
   const pick = a => a[Math.floor(r() * a.length)];
   const between = (a, b) => a + r() * (b - a);
-  const prods = [pick(others), recipes.length ? pick(recipes) : pick(others), s.spec, pick(recipes.length && r() < .5 ? recipes : RAW)];
-  const used = new Set();
-  return prods.slice(0, BAL.orders).map((k, i) => {
-    if (used.has(k)) k = pick(ALL.filter(x => !used.has(x) && (recipes.length || !P[x].rec)));
+  const prods = [pick(others), recipes.length ? pick(recipes) : pick(others), pick(others), pick(recipes.length && r() < .5 ? recipes : others)];
+  const used = new Set([bigOf(slot)]);
+  const list = prods.slice(0, BAL.orders).map((k, i) => {
+    if (used.has(k)) k = pick(ALL.filter(x => !used.has(x) && x !== s.spec && (recipes.length || !P[x].rec)));
     used.add(k);
     const rec = !!P[k].rec, n = rec ? Object.keys(P[k].rec).length : 1;
     const qty = Math.max(10, nice(eff * (rec ? between(...BAL.recipeSecs) / n : between(...BAL.orderSecs))));
     const bonus = nice(prime * 60 * between(...BAL.bonusMins) * (rec ? BAL.recipeBonus : 1));
     return { id: slot + "-" + i, k, qty, bonus, who: charFor(k, r) };
   });
+  // la grande commande : le même produit pour tout le monde (annoncée 20 min à l'avance)
+  const gk = bigOf(slot);
+  list.unshift({ id: slot + "-G", k: gk, big: true, who: "maire",
+    qty: Math.max(15, nice(eff * between(...BAL.orderSecs) * BAL.bigQty)),
+    bonus: nice(prime * 60 * between(...BAL.bonusMins) * BAL.bigBonus) });
+  return list;
 }
+// produit de la grande commande d'un créneau (identique pour tous les joueurs)
+const bigOf = slot => RAW[Math.floor(rng(hash("grande:" + slot))() * RAW.length)];
+const fullBonus = s => nice(s.orders.list.reduce((a, o) => a + o.bonus, 0) * BAL.fullBonus);
 function ensureOrders(s, now, playerId, groupProd){
   const slot = Math.floor(now / BAL.slotMs);
   if (s.orders.slot !== slot){ s.orders = { slot, list: genOrders(s, slot, playerId, groupProd), prog:{} }; return true; }
@@ -290,8 +312,7 @@ function deliver(s, id){
   const give = Math.min(need, Math.floor(s.stock[o.k]));
   if (give <= 0) return null;
   s.stock[o.k] -= give; s.orders.prog[id] = done + give;
-  let paid = give * P[o.k].floor, complete = false;
-  if (s.orders.prog[id] >= o.qty){ paid += o.bonus; complete = true; s.stats.orders++; }
+  const paid = give * P[o.k].floor, complete = s.orders.prog[id] >= o.qty;
   s.coins += paid; s.stats.earned += paid;
   return { give, paid, complete };
 }
@@ -304,6 +325,38 @@ function reserveLeft(s, k, now){
   return Math.max(0, lim - (s.reserve.used[k] || 0));
 }
 const reservePrice = k => P[k].floor * BAL.reserveMult;
+
+/* ---------- Cours du village ----------
+   Le même pour tout le monde (calculé à partir de l'heure, sans serveur) : 3 vagues de durées différentes
+   par produit, donc jamais deux produits au même moment. Entre ~0,4× et ~2,5× le prix de base. */
+const VPH = {}; ALL.forEach(k => { const r = rng(hash("cours:" + k)); VPH[k] = BAL.vPeriods.map(T => ({ T: T * (0.75 + r() * 0.5), ph: r() * Math.PI * 2 })); });
+function vMul(k, t){
+  const sec = t / 1000; let x = 0;
+  VPH[k].forEach((w, j) => x += BAL.vSwing[j] * Math.sin(2 * Math.PI * sec / w.T + w.ph));
+  return Math.exp(x);
+}
+const vPrice = (k, t) => P[k].floor * vMul(k, t);
+// ce que tu as vendu au village récemment (ça s'oublie petit à petit)
+function vSold(s, k, t){
+  s.vsold = s.vsold || {}; const v = s.vsold[k]; if (!v) return 0;
+  return v.q * Math.pow(0.5, Math.max(0, t - v.t) / 1000 / BAL.vHalfLife);
+}
+const vAbsorb = s => Math.max(60, effRate(s, 0) * BAL.vAbsorb);
+// ton prix à toi en ce moment (cours du village, baissé par tes ventes récentes)
+const vMyPrice = (s, k, t) => vPrice(k, t) / (1 + vSold(s, k, t) / vAbsorb(s));
+// combien rapporte la vente de q unités d'un coup (le prix baisse à chaque unité vendue)
+function vValue(s, k, q, t){
+  if (q <= 0) return 0;
+  const A = vAbsorb(s), x0 = vSold(s, k, t);
+  return Math.floor(vPrice(k, t) * A * Math.log((A + x0 + q) / (A + x0)));
+}
+function vSell(s, k, q, t){
+  q = Math.min(Math.floor(q), Math.floor(s.stock[k] || 0)); if (q < 1) return 0;
+  const g = vValue(s, k, q, t);
+  s.stock[k] -= q; s.vsold[k] = { q: vSold(s, k, t) + q, t };
+  s.coins += g; s.stats.earned += g; s.stats.villageSold += g;
+  return g;
+}
 
 /* ---------- Fortune ---------- */
 function fortune(s){
@@ -320,13 +373,13 @@ function unlocked(s, what){
     case "marche": return np >= 2;
     case "village": return np >= 3;
     case "four": return np >= 3;
-    case "farm2": return np >= BAL.farmNeeds;
+    case "farm2": return np >= BAL.farmNeeds && Object.keys(s.farms).length < BAL.farmMax;
   }
   return true;
 }
 // le maillon lent de la ferme
 function bottleneck(s, key, now){
-  const f = s.farms[key], r = farmRates(f, now);
+  const f = s.farms[key], r = farmRates(f, now, farmMul(s, key));
   if (barnFree(s) < 1) return "barn";
   const anyMgr = f.parcels.some(p => p.mgr) || f.elev.mgr || f.cart.mgr;
   if (!anyMgr) return null;
@@ -337,5 +390,5 @@ function bottleneck(s, key, now){
 
 return { RAW, CRAFT, ALL, P, BAL, gateOf, gateState, newParcel, fixFarm, quaiCap, pendTotal, elevRate, cartRate, startParcel, startElev, startCart, CHARS, MILES, isPalier, newState, newFarm, step, catchUp, farmRates, effRate, prodValue,
   stockUnits, barnCap, barnFree, costs, canPay, pay, bulk, nextParcelCost, nice, ovenTick, ovenBatch, ovenDur, canBake,
-  ensureOrders, genOrders, deliver, reserveLeft, reservePrice, fortune, unlocked, bottleneck };
+  ensureOrders, genOrders, deliver, bigOf, fullBonus, reserveLeft, reservePrice, fortune, unlocked, bottleneck, farmMul, pRate, vMul, vPrice, vMyPrice, vValue, vSell };
 })();

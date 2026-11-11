@@ -322,12 +322,9 @@ function deliver(s, id){
   const give = Math.min(need, Math.floor(s.stock[o.k]));
   if (give <= 0) return null;
   s.stock[o.k] -= give; s.orders.prog[id] = done + give;
-  let paid = give * P[o.k].floor, complete = false;
-  let full = 0;
-  if (s.orders.prog[id] >= o.qty){ paid += o.bonus; complete = true; s.stats.orders++;
-    if (!s.orders.full && s.orders.list.every(x => (s.orders.prog[x.id] || 0) >= x.qty)){ full = fullBonus(s); paid += full; s.orders.full = true; } }
+  const paid = give * P[o.k].floor, complete = s.orders.prog[id] >= o.qty;
   s.coins += paid; s.stats.earned += paid;
-  return { give, paid, complete, full };
+  return { give, paid, complete };
 }
 
 /* ---------- Réserve du village (le plafond) ---------- */
@@ -548,6 +545,8 @@ function fixState(s){
   s.stats = Object.assign({ produced:0, invested:0, baked:0, orders:0, sold:0, bought:0, earned:0, villageSold:0 }, s.stats || {});
   s.seen = s.seen || {}; s.oven = s.oven || { lvl:0, slots:[] }; s.orders = s.orders || { slot:0, list:[], prog:{} };
   s.reserve = s.reserve || { slot:0, used:{} }; s.vsold = s.vsold || {};
+  if (!s.ord2){ s.ord2 = 1; s.orders = { slot:0, list:[], prog:{} }; }   // commandes du village en course (11 nov. 2026)
+  s.claims = (s.claims || []).map(c => ({ id: c.id, slot: c.slot })); s.wonIds = s.wonIds || [];
   // une seule exploitation en plus : on garde la plus développée
   const extra = Object.keys(s.farms).filter(k => k !== s.spec);
   if (extra.length > BAL.farmMax - 1){
@@ -582,7 +581,7 @@ async function loadWorld(force){
   try{
     const r = await rpc("baron2_world", {});
     W = { res: r.reserve || null, players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
-    if (S && BX.ensureOrders(S, now(), ME.id, groupProd())) dirty = true;
+    await loadOrders(true);
     if (wrapEl && (view === "market" || view === "village")) draw();
   }catch(e){}
 }
@@ -1019,10 +1018,12 @@ const STYLE = `
 .b2-order.big{background:linear-gradient(#FFF1CC,#FFE3A3);box-shadow:0 0 0 2px var(--gold),0 3px 0 var(--gold2),0 8px 18px rgba(59,31,23,.18);padding-top:22px}
 .b2-bigtag{position:absolute;top:-10px;left:12px;background:var(--ink);color:#FFE6B8;border-radius:999px;padding:3px 10px;font:800 11px var(--round)}
 .b2-ann{margin-top:10px;background:var(--ink);color:#FFE6B8;border-radius:14px;padding:10px 12px;font:700 13.5px var(--round)}
-.b2-ann b{color:#fff}.b2-ann small{display:block;font-weight:700;font-size:11.5px;opacity:.75;margin-top:2px}
+.b2-ann b{color:#fff}
+.b2-order .prime.lost{color:var(--ink2)}
+.b2-order.done .stamp.lost{border-color:var(--red);color:var(--red)}.b2-ann small{display:block;font-weight:700;font-size:11.5px;opacity:.75;margin-top:2px}
 .b2-full{display:flex;align-items:center;gap:8px;margin-top:8px;background:var(--paper2);border-radius:12px;padding:8px 12px;font:800 13px var(--round);color:var(--ink2);font-variant-numeric:tabular-nums}
 .b2-full .sp{flex:1}.b2-full.ok{background:#DDF3E2;color:var(--up2)}
-.b2-order.done .stamp{position:absolute;right:14px;top:30px;transform:rotate(-12deg);border:3px solid var(--up);color:var(--up);border-radius:8px;padding:2px 8px;font:900 15px var(--round)}
+.b2-order.done .stamp{position:absolute;right:14px;bottom:12px;top:auto;transform:rotate(-12deg);border:3px solid var(--up);color:var(--up);border-radius:8px;padding:2px 8px;font:900 15px var(--round)}
 .b2-baron{position:relative;margin-top:18px;background:linear-gradient(135deg,#3B1F17,#6B2E1F);color:#FFE6B8;border-radius:18px;padding:16px;display:flex;align-items:center;gap:12px;box-shadow:0 4px 0 #22100A}
 .b2-baron .crown{font-size:38px;animation:b2-hint 2.4s ease-in-out infinite}
 .b2-baron .sp{flex:1}
@@ -1360,13 +1361,14 @@ function loop(){
   loopT = setInterval(() => {
     if (!wrapEl || !S) return;
     if (!raf) raf = requestAnimationFrame(frame);
-    if (BX.ensureOrders(S, now(), ME.id, groupProd())){ dirty = true; if (view === "village") draw(); }
+    if (n % 20 === 0 && (!ORD || ORD.slot < curSlot())) loadOrders();
+    if (n % 80 === 40 && S.claims.length) S.claims.forEach(c => claimOrder(c));
     live();
     n++;
     if (n % 4 === 0) rankTick();
     if (n % 4 === 0 && !sheetOpen){ const sig = unlockSig(); if (sig !== lastSig){ lastSig = sig; draw(); } }
     if (n % 80 === 0) save();                       // toutes les 20 s si quelque chose a changé
-    if (n % 120 === 0) loadWorld((view === "market" || view === "village"));
+    if (n % 120 === 0){ loadWorld((view === "market" || view === "village")); loadOrders(); }
   }, 250);
 }
 /* l'animation suit exactement la simulation : où est chaque fermier, la cabine, la charrette */
@@ -1772,7 +1774,7 @@ function marketHTML(){
   if (!mkt.k) mkt.k = BX.RAW.find(k => k !== S.spec) || "bois";
   const k = mkt.k, qv = quote(k);
   const prods = BX.ALL.filter(x => !P[x].rec || BX.unlocked(S, "four"));
-  const pills = prods.map(x => `<button class="b2-chip ${x === k ? "on" : ""}" data-a="mkt-k" data-k="${x}"><span class="n">${P[x].e} ${esc(P[x].label)}${x === BX.bigOf(Math.floor(now() / BAL.slotMs)) ? " 🎩" : ""}</span><span class="p">${fmtP(BX.vPrice(x, now()))}</span><span class="c">${chg(vChg(x))}</span></button>`).join("");
+  const pills = prods.map(x => `<button class="b2-chip ${x === k ? "on" : ""}" data-a="mkt-k" data-k="${x}"><span class="n">${P[x].e} ${esc(P[x].label)}${x === bigNow() ? " 🎩" : ""}</span><span class="p">${fmtP(BX.vPrice(x, now()))}</span><span class="c">${chg(vChg(x))}</span></button>`).join("");
   const offers = W.listings.filter(l => l.product === k).sort((a, b) => a.price - b.price || a.id - b.id);
   const resL = resLeft(k);
   const rows = offers.map(l => {
@@ -1798,26 +1800,26 @@ function marketHTML(){
 
 /* ---------- Village ---------- */
 function villageHTML(){
-  BX.ensureOrders(S, now(), ME.id, groupProd());
-  const notes = S.orders.list.map(o => {
-    const got = S.orders.prog[o.id] || 0, done = got >= o.qty, c = BX.CHARS[o.who], have = Math.floor(S.stock[o.k]);
+  syncOrders();
+  const ready = ORD && S.orders.slot === ORD.slot;
+  const notes = !ready ? `<div class="b2-paper" style="text-align:center;color:var(--ink2);font:700 14px var(--round)">Le village prépare ses commandes…</div>` : S.orders.list.map(o => {
+    const got = S.orders.prog[o.id] || 0, c = BX.CHARS[o.who] || BX.CHARS.epiciere, have = Math.floor(S.stock[o.k]);
+    const w = winnerOf(o.id), mine = !!(w && w.id === ME.id), pend = !w && got >= o.qty, done = !!w || pend;
     const canBake = P[o.k].rec && S.oven.lvl && BX.canBake(S, o.k) >= 1;
     const action = done ? "" : have >= 1 ? `<button class="b2-btn" data-a="deliver" data-id="${o.id}">Livrer ${fmtN(Math.min(have, o.qty - got))}</button>`
       : canBake ? `<button class="b2-btn gold" data-a="bake" data-k="${o.k}">Au four</button>`
       : `<button class="b2-btn red" data-a="goto-mkt" data-k="${o.k}">Acheter</button>`;
     return `<div class="b2-order ${done ? "done" : ""} ${o.big ? "big" : ""}">${o.big ? `<span class="b2-bigtag">Grande commande · tout le village</span>` : ""}<div class="hd"><span class="face">${c.e}</span><div class="sp"><div class="who">${c.name}</div><div class="want">veut ${fmtN(o.qty)} ${P[o.k].e} ${esc(P[o.k].label)}</div></div>
-      <div class="prime">+${COIN}${fmtN(o.bonus)}<small>de prime</small></div></div>
+      <div class="prime ${w && !mine ? "lost" : ""}">${w ? (mine ? "🏆 À toi" : "🏆 " + esc(w.name)) : `+${COIN}${fmtN(o.bonus)}`}<small>${w ? (mine ? `+${fmtN(o.bonus)} gagnés` : "a eu la prime") : "pour le 1er qui finit"}</small></div></div>
       <div class="pb"><i style="width:${Math.min(100, got / o.qty * 100)}%"></i></div>
-      <div class="ft"><span>${fmtN(got)} / ${fmtN(o.qty)} livrés</span><span class="sp"></span><span>Tu en as ${fmtN(have)}</span>${action}</div>${done ? `<span class="stamp">Livré !</span>` : ""}</div>`;
+      <div class="ft"><span>${fmtN(got)} / ${fmtN(o.qty)} livrés</span><span class="sp"></span>${w ? "" : `<span>Tu en as ${fmtN(have)}</span>`}${action}</div>${w ? `<span class="stamp ${mine ? "" : "lost"}">${mine ? "Premier !" : "Trop tard"}</span>` : pend ? `<span class="stamp">…</span>` : ""}</div>`;
   }).join("");
   const players = ranking();
   const top = players[0];
   const best = (key, label, i, unit) => { const p = players.slice().sort((a, b) => (+b.stats?.[key] || 0) - (+a.stats?.[key] || 0))[0]; return p && +p.stats?.[key] > 0 ? `<div class="b2-ttl"><span class="i">${i}</span><b>${label}</b><span>${esc(p.id === ME.id ? "Toi" : p.name)}</span></div>` : `<div class="b2-ttl"><span class="i" style="filter:grayscale(1)">${i}</span><b>${label}</b><span style="color:var(--ink3)">Personne encore</span></div>`; };
   return `<div class="b2-vil"><div class="b2-col b2-pad">
-    <div class="b2-paper" style="background:#FFF4E0"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><h2 class="b2-h2" style="margin:0">Commandes du village<small>Livre en plusieurs fois. La prime tombe à la fin.</small></h2><span class="b2-clock">⏳ <span data-live="clock">${fmtT((S.orders.slot + 1) * BAL.slotMs - now())}</span></span></div></div>
-    ${(() => { const nk = BX.bigOf(S.orders.slot + 1), nd = S.orders.list.filter(o => (S.orders.prog[o.id] || 0) >= o.qty).length, nt = S.orders.list.length;
-      return `<div class="b2-ann"><span>📣 Prochaine grande commande : <b>${P[nk].e} ${esc(P[nk].label)}</b><small>Tout le village en voudra. Fais ton stock avant !</small></span></div>
-      <div class="b2-full ${S.orders.full ? "ok" : ""}"><span>${S.orders.full ? "Carton plein ✓" : `Carton plein : ${nd} / ${nt}`}</span><span class="sp"></span><span>+${COIN}${fmtN(BX.fullBonus(S))}</span></div>`; })()}
+    <div class="b2-paper" style="background:#FFF4E0"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><h2 class="b2-h2" style="margin:0">Commandes du village<small>Les mêmes pour tout le village. La prime va au premier qui termine : les autres sont seulement payés au prix de base.</small></h2><span class="b2-clock">⏳ <span data-live="clock">${fmtT(((ORD ? ORD.slot : curSlot()) + 1) * BAL.slotMs - now())}</span></span></div></div>
+    ${ORD && P[ORD.next_big] ? `<div class="b2-ann"><span>📣 Prochaine grande commande : <b>${P[ORD.next_big].e} ${esc(P[ORD.next_big].label)}</b><small>Fais ton stock avant les autres !</small></span></div>` : ""}
     <div class="b2-notes">${notes}</div>
     ${top ? `<div class="b2-baron"><span class="crown">${CROWN}</span><div class="sp"><small>Le Baron du moment</small><b>${esc(top.id === ME.id ? "C'est toi !" : top.name)}</b><span class="f">${COIN}${fmtN(top.stats?.fortune || 0)} · ${P[top.specialty]?.e || ""} ${esc(P[top.specialty]?.label || "")}</span></div></div>` : ""}
     <div class="b2-paper b2-rank"><h2 class="b2-h2">Classement<small>Fortune : argent, stock et la moitié de ce que tu as construit.</small></h2>
@@ -1825,6 +1827,50 @@ function villageHTML(){
     </div>
     <div class="b2-titles">${best("prod", "Gros producteur", "🏭")}${best("traded", "Meilleur trader", "📈")}${best("baked", "Pâtissier", "🧁")}${best("orders", "Ami du village", "📦")}</div>
   </div></div>`;
+}
+
+/* ---------- Commandes en course : les mêmes pour tous, la prime au premier ---------- */
+let ORD = null;
+const curSlot = () => Math.floor(now() / BAL.slotMs);
+const winnerOf = id => ORD && S && S.orders.slot === ORD.slot ? (ORD.winners || {})[id] : null;
+const bigNow = () => { const o = ORD && (ORD.list || []).find(x => x.big); return o ? o.k : null; };
+function syncOrders(){
+  if (!ORD || !S) return;
+  if (S.orders.slot !== ORD.slot){ S.orders = { slot: ORD.slot, list: ORD.list, prog:{} }; dirty = true; }
+  else S.orders.list = ORD.list;
+}
+let ordBusy = false;
+async function loadOrders(){
+  if (ordBusy) return; ordBusy = true;
+  try{
+    const r = await rpc("baron2_orders", {}); if (!r || !Array.isArray(r.list)) return;
+    const prev = ORD && ORD.slot === +r.slot ? (ORD.winners || {}) : null, fresh = ORD && ORD.slot !== +r.slot;
+    ORD = { slot: +r.slot, list: r.list, winners: r.winners || {}, next_big: r.next_big };
+    syncOrders();
+    if (prev) for (const id in ORD.winners){
+      const w = ORD.winners[id]; if (prev[id] || w.id === ME.id) continue;
+      const o = ORD.list.find(x => x.id === id); if (!o) continue;
+      toast(`🏆 ${esc(w.name)} a raflé la prime ${o.big ? "du maire" : "de " + (BX.CHARS[o.who] || BX.CHARS.epiciere).name.toLowerCase()} : ${COIN}${fmtN(o.bonus)}`, (S.orders.prog[id] || 0) > 0 ? "err" : "");
+    }
+    if (fresh) toast("📜 Nouvelles commandes au village : premier arrivé, premier servi !");
+    if (wrapEl && view === "village" && !sheetOpen) draw();
+  }catch(e){} finally { ordBusy = false; }
+}
+async function claimOrder(c){
+  if (c.busy) return; c.busy = true;
+  try{
+    const r = await rpc("baron2_order_win", { p_token: getToken(), p_slot: c.slot, p_oid: c.id });
+    S.claims = S.claims.filter(x => !(x.id === c.id && x.slot === c.slot));
+    const o = (ORD && ORD.list || []).find(x => x.id === c.id);
+    if (r && r.won){
+      if (!S.wonIds.includes(c.id)){
+        S.wonIds = S.wonIds.concat(c.id).slice(-60);
+        const g = +r.bonus || 0; S.coins += g; S.stats.earned += g; S.stats.orders++;
+        toast(`🏆 Premier ! La prime de ${COIN}${fmtN(g)} est pour toi`, "gold"); sound("done"); buzz(30);
+      }
+    } else toast(r && r.name ? `Trop tard : ${esc(r.name)} a eu la prime${o ? " (" + fmtN(o.bonus) + ")" : ""}` : "Trop tard : la commande est terminée", "err");
+    dirty = true; save(true); await loadOrders(); if (wrapEl && view === "village") draw();
+  }catch(e){ c.busy = false; }
 }
 
 /* ---------- Classement (la couronne en haut) ---------- */
@@ -2183,10 +2229,13 @@ function onClick(e){
       return;
     }
     case "deliver": {
+      const w = winnerOf(b.dataset.id);
+      if (w){ toast(`Trop tard : ${esc(w.name)} a déjà eu la prime`, "err"); draw(); return; }
       const r = BX.deliver(S, b.dataset.id); if (!r) return; dirty = true;
-      sound(r.complete ? "done" : "coin"); coinsFly(b, r.complete ? 8 : 4);
-      toast(r.full ? `Carton plein ! +${COIN}${fmtN(r.paid)}` : r.complete ? `Commande livrée ! +${COIN}${fmtN(r.paid)}` : `${fmtN(r.give)} livrés · +${COIN}${fmtN(r.paid)}`, "gold");
-      draw(); if (r.complete) save(true); return;
+      sound("coin"); coinsFly(b, 4);
+      toast(r.complete ? `Commande terminée ! On vérifie si tu es le premier…` : `${fmtN(r.give)} livrés · +${COIN}${fmtN(r.paid)}`, "gold");
+      if (r.complete){ const c = { id: b.dataset.id, slot: S.orders.slot }; S.claims.push(c); claimOrder(c); }
+      draw(); return;
     }
     case "bake": bakeSheet(b.dataset.k); return;
     case "qset": { const r = wrapEl.querySelector(`[data-q="${b.dataset.id}"]`); if (r){ r.value = Math.max(+r.min, Math.floor(+r.max * +b.dataset.f)); sheetSum(); } return; }

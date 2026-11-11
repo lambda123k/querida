@@ -95,13 +95,15 @@ const errText = e => {
 };
 
 /* =================== État =================== */
-let S = null, ME = null, W = { players:[], listings:[], trades:[], at:0 };
+let S = null, ME = null, W = { res:null, players:[], listings:[], trades:[], at:0 };
+// réserve du village commune : ce qu'il reste pour tout le monde sur ce créneau de 20 min
+const resLeft = k => { const r = W.res; if (!r || r.slot !== Math.floor(now() / BAL.slotMs)) return 0; return Math.max(0, Math.floor((+(r.size || {})[k] || 0) - (+(r.used || {})[k] || 0))); };
 let dirty = false, lastSave = 0, lastTick = 0, saving = false, loopT = null, wrapEl = null, view = "farm";
 let mkt = { k: null, period: "24h" };
 
 function publicStats(){
   return { fortune: BX.fortune(S), prod: Math.round(BX.prodValue(S) * 100) / 100, baked: Math.floor(S.stats.baked), orders: S.stats.orders,
-    traded: Math.floor(S.stats.sold + S.stats.bought), farms: Object.keys(S.farms), parcels: S.farms[S.spec].parcels.length };
+    traded: Math.floor(S.stats.sold + S.stats.bought), farms: Object.keys(S.farms), parcels: S.farms[S.spec].parcels.length, pio: S.reform ? 1 : 0 };
 }
 function applyCredits(list){
   const msgs = [];
@@ -118,11 +120,36 @@ function applyCredits(list){
     sound("coin");
   }
 }
+/* La Grande Réforme (nov. 2026) : les fermes repartent de zéro, chacun garde sa spécialité
+   et reçoit en pièces une part de son ancienne fortune (calculée par le serveur), + une médaille de Pionnier. */
+let reformMsg = null;
+function applyReform(s){
+  const r = s.reform || {}, n = BX.newState(s.spec, now());
+  n.coins = Math.max(0, Math.floor(+r.coins || 0));
+  n.stock.bois = Math.max(BAL.startWood, Math.floor(+r.wood || 0));
+  while (BAL.barnCap(n.barn) < n.stock.bois * 2) n.barn++;   // une grange assez grande pour la récompense
+  n.reform = { v: 1, from: +r.from || 0, coins: n.coins, wood: n.stock.bois, rank: r.rank || 0, at: r.at || now() };
+  n.credit_seen = s.credit_seen || 0;
+  n.seen = Object.assign({}, s.seen || {});
+  ["sold", "bought", "orders", "baked"].forEach(k => n.stats[k] = (s.stats && +s.stats[k]) || 0);
+  reformMsg = n.reform;
+  return n;
+}
 function fixState(s){
+  if (s.reform_todo) s = applyReform(s);
   BX.ALL.forEach(k => { if (typeof s.stock[k] !== "number") s.stock[k] = 0; });
   s.stats = Object.assign({ produced:0, invested:0, baked:0, orders:0, sold:0, bought:0, earned:0, villageSold:0 }, s.stats || {});
   s.seen = s.seen || {}; s.oven = s.oven || { lvl:0, slots:[] }; s.orders = s.orders || { slot:0, list:[], prog:{} };
-  s.reserve = s.reserve || { slot:0, used:{} }; if (!s.farms[s.cur]) s.cur = s.spec;
+  s.reserve = s.reserve || { slot:0, used:{} }; s.vsold = s.vsold || {};
+  if (!s.ord2){ s.ord2 = 1; s.orders = { slot:0, list:[], prog:{} }; }   // commandes du village en course (11 nov. 2026)
+  s.claims = (s.claims || []).map(c => ({ id: c.id, slot: c.slot })); s.wonIds = s.wonIds || [];
+  // une seule exploitation en plus : on garde la plus développée
+  const extra = Object.keys(s.farms).filter(k => k !== s.spec);
+  if (extra.length > BAL.farmMax - 1){
+    const score = k => s.farms[k].parcels.reduce((a, p, i) => a + p.lvl * Math.pow(5, i), 0);
+    extra.sort((a, b) => score(b) - score(a)).slice(BAL.farmMax - 1).forEach(k => delete s.farms[k]);
+  }
+  if (!s.farms[s.cur]) s.cur = s.spec;
   for (const k in s.farms) BX.fixFarm(s.farms[k]);
   return s;
 }
@@ -149,8 +176,8 @@ async function loadWorld(force){
   if (!force && now() - W.at < 25000) return;
   try{
     const r = await rpc("baron2_world", {});
-    W = { players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
-    if (S && BX.ensureOrders(S, now(), ME.id, groupProd())) dirty = true;
+    W = { res: r.reserve || null, players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
+    await loadOrders(true);
     if (wrapEl && (view === "market" || view === "village")) draw();
   }catch(e){}
 }
