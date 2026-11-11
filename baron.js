@@ -748,7 +748,7 @@ let S = null, ME = null, W = { res:null, players:[], listings:[], trades:[], at:
 // réserve du village commune : ce qu'il reste pour tout le monde sur ce créneau de 20 min
 const resLeft = k => { const r = W.res; if (!r || r.slot !== Math.floor(now() / BAL.slotMs)) return 0; return Math.max(0, Math.floor((+(r.size || {})[k] || 0) - (+(r.used || {})[k] || 0))); };
 let dirty = false, lastSave = 0, lastTick = 0, saving = false, loopT = null, wrapEl = null, view = "farm";
-let mkt = { k: null, period: "24h", open: false };
+let mkt = { k: null, period: "24h", open: false, tab: "market" };
 
 function publicStats(){
   return { fortune: BX.fortune(S), prod: Math.round(BX.prodValue(S) * 100) / 100, baked: Math.floor(S.stats.baked), orders: S.stats.orders,
@@ -1397,7 +1397,21 @@ const STYLE = `
 .b2-intro button{position:absolute;top:6px;right:8px;font-size:18px!important;color:var(--chalk2)!important}
 .b2-fhead{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .b2-q{width:30px;height:30px;border-radius:50%!important;background:rgba(239,234,219,.15)!important;color:var(--chalk)!important;font:900 16px var(--round)!important;flex:none;margin-top:12px}
-.b2-forces{border-radius:14px;background:rgba(239,234,219,.06);padding:2px 10px}
+.b2-q.top{margin:0 0 0 auto}
+.b2-fh4{margin:4px 0 6px;font:800 12px var(--round);letter-spacing:.08em;text-transform:uppercase;color:var(--ink2)}
+.b2-fbox{border-radius:12px;background:rgba(59,31,23,.06);padding:0 10px;margin-bottom:14px}
+.b2-fiche .b2-frow.up b,.b2-fiche .b2-frow .up{color:var(--up2)!important}.b2-fiche .b2-frow.down b,.b2-fiche .b2-frow .down{color:var(--red)!important}.b2-fiche .b2-frow.warn b{color:var(--gold2)!important}.b2-fiche .b2-frow small{color:var(--ink2)}
+.b2-mtabs{margin-top:12px}
+.b2-pint{margin:12px 0 0;font:700 13px/1.4 var(--round);color:var(--chalk2)}
+.b2-pempty{color:var(--chalk2)}
+.b2-prow{display:flex;align-items:center;gap:8px;padding:8px 10px 8px 0;border-top:1px solid rgba(239,234,219,.07)}
+.b2-prow:first-child{border-top:0}
+.b2-pnm{flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:3px 0 3px 12px;text-align:left;color:var(--chalk)!important;background:none!important}
+.b2-pnm .ic{width:36px;height:36px;display:grid;place-items:center;font-size:26px;flex:none;background:rgba(239,234,219,.92);border-radius:11px}
+.b2-pnm .nm{min-width:0}.b2-pnm b{display:block;font:800 15px var(--round);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.b2-pnm small{display:block;font:800 12px var(--round);color:var(--chalk2);font-variant-numeric:tabular-nums}
+.b2-pb{width:46px;height:40px;flex:none;border-radius:12px!important;font-size:20px!important;display:grid;place-items:center}
+.b2-pb.up{background:#2F9E5B!important;box-shadow:0 3px 0 #1E6E3E}.b2-pb.down{background:#C9452B!important;box-shadow:0 3px 0 #8E2C19}
 .b2-frow{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-top:1px solid rgba(127,127,127,.15)}
 .b2-frow:first-child{border-top:0}
 .b2-frow .i{font-size:20px;line-height:1.1;width:24px;text-align:center;flex:none}
@@ -2219,7 +2233,7 @@ function newsBanner(){
 }
 const frow = (i, b, sm, cls) => `<div class="b2-frow ${cls || ""}"><span class="i">${i}</span><span class="tx"><b>${b}</b>${sm ? `<small>${sm}</small>` : ""}</span></div>`;
 // ce qui se voit : saison, commande phare, nouvelle, emballement
-function forcesHTML(k){
+function forcesRows(k){
   const t = now(), rows = [], v = BX.SEASONV[k];
   if (v){
     const s = BX.seasonAt(t), c = BX.SEASONS[s.i], nx = BX.SEASONS[s.next];
@@ -2238,8 +2252,7 @@ function forcesHTML(k){
   if (b && b.ph === "monte" && b.warn) rows.push(frow("🔥", "Ça s'emballe", "Ça monte depuis longtemps… la bulle peut éclater à tout moment", "warn"));
   if (b && b.ph === "krach") rows.push(frow("💥", "La bulle éclate !", "Le prix s'effondre", "down"));
   if (b && b.ph === "apres") rows.push(frow("💥", "Après la bulle", "Le prix se remet doucement", "down"));
-  return `<div class="b2-fhead"><h3 class="b2-h3">Ce qui fait bouger le prix</h3><button class="b2-q" data-a="mfiche" data-k="${k}" aria-label="Comment ça marche">?</button></div>
-    <div class="b2-forces">${rows.join("") || frow("🤫", "Rien d'annoncé", "Le reste, à toi de le deviner")}</div>`;
+  return rows;
 }
 const lab = k => `${P[k].e} ${esc(P[k].label)}`;
 function linksText(k){
@@ -2255,9 +2268,12 @@ function ficheSheet(k){
   const v = BX.SEASONV[k], s = BX.seasonAt(now()), nw = BX.newsOf ? (k in { ble:1, oeufs:1, lait:1, fruits:1, miel:1, bois:1 }) : false;
   const sea = v ? `<div class="b2-seas">${BX.SEASONS.map((c, i) => `<span class="${i === s.i ? "on" : ""}">${c.e} ${c.label}<b class="${seaCls(v[i])}">${seaWord(v[i])}</b></span>`).join("")}</div>`
     : `<p class="b2-note" style="margin:0 0 6px">Pas de saison à lui.</p>`;
-  sheet(`<h3>${P[k].e} Comment bouge le prix</h3>
-    <p>Le cours du village dépend de 6 choses. Certaines s'affichent, les autres se devinent, comme en vrai.</p>
+  const nowRows = forcesRows(k);
+  sheet(`<h3>${P[k].e} ${esc(P[k].label)} : le prix</h3>
     <div class="b2-fiche">
+    <h4 class="b2-fh4">En ce moment</h4>
+    <div class="b2-fbox">${nowRows.join("") || frow("🤫", "Rien d'annoncé", "Le reste, à toi de le deviner")}</div>
+    <h4 class="b2-fh4">Les 6 choses qui le font bouger</h4>
     ${frow("🌸", "La saison", "Printemps, été, automne, hiver : 1 h 30 chacune. Recherché = cher, abondant = pas cher.")}${sea}
     ${frow("📋", "La commande phare", "20 min avant, on annonce le produit de la prochaine grande commande : il grimpe, puis redescend.")}
     ${frow("📰", "La nouvelle du village", nw ? "Une par créneau, au hasard, sans prévenir. Elle fait bondir ou chuter un produit, puis s'efface en une heure environ." : "Elles touchent les récoltes, et donc ce qui en dépend.")}
@@ -2265,7 +2281,6 @@ function ficheSheet(k){
     ${frow("👥", "Le village (ça ne s'affiche pas)", "Quand beaucoup de monde vend au village, le prix baisse. Quand beaucoup achète, il monte. On ne te dit pas qui : à toi de le sentir. Ça s'oublie de moitié en 20 min.")}
     ${frow("🔥", "L'emballement", "Parfois un produit monte, monte… puis la bulle éclate d'un coup et il tombe plus bas qu'avant. On voit quand ça s'emballe, jamais quand ça éclate.")}
     ${frow("🏘️", "Acheter et vendre au village", "Le village rachète au cours, et revend un quart plus cher. Plus tu en prends d'un coup, plus ça grimpe ; plus tu en vends, plus ça baisse.")}
-    ${P[k].sub ? "" : frow("🎯", "Le pari", `Tu mises sur la hausse ou la baisse. Ta mise suit le cours ×${BX.BET.lev} : si le cours monte de moitié, ta mise à la hausse double. Tu te retires quand tu veux. Si le cours part trop dans l'autre sens, tu perds ta mise. 3 pièces de taxe pour 100 misées.`)}
     </div><button class="b2-btn big" data-a="close-sheet">Compris</button>`);
 }
 function seasonSheet(){
@@ -2281,13 +2296,25 @@ function betRow(b){
   return `<div class="b2-ord bet"><span class="who">${P[b.k].e} ${b.d > 0 ? "📈 Hausse" : "📉 Baisse"}<small>Misé ${fmtN(b.m)} · zéro si le cours passe ${b.d > 0 ? "sous" : "au-dessus de"} ${fmtP(BX.betLimit(b))}</small></span>
     <span class="pr ${v >= b.m ? "up" : "down"}" data-bet="${esc(b.id)}">${fmtN(v)}</span><button class="b2-btn gold" data-a="bet-close" data-id="${esc(b.id)}">Me retirer</button></div>`;
 }
-function betsHTML(k){
-  const l = (S.bets || []).filter(b => !k || b.k === k);
-  if (!k) return l.length ? `<h3 class="b2-msec">Tes paris</h3><div class="b2-book">${l.map(betRow).join("")}</div>` : "";
-  if (P[k].sub) return "";
-  return `<h3 class="b2-h3">Parier</h3>${l.length ? `<div class="b2-book">${l.map(betRow).join("")}</div>` : ""}
-    <div class="b2-two"><button class="b2-btn" data-a="bet" data-k="${k}" data-d="1">📈 À la hausse</button><button class="b2-btn red" data-a="bet" data-k="${k}" data-d="-1">📉 À la baisse</button></div>
-    <p class="b2-note" style="color:var(--chalk2)">Ta mise suit le cours ×${BX.BET.lev}. Tu te retires quand tu veux.</p>`;
+function parisHTML(){
+  const l = S.bets || [];
+  const row = x => `<div class="b2-prow"><button class="b2-pnm" data-a="mkt-k" data-k="${x}"><span class="ic">${P[x].e}</span><span class="nm"><b>${esc(P[x].label)}</b><small>${fmtP(BX.vPrice(x, now()))} ${chg(vChg(x))}</small></span></button>
+    <button class="b2-pb up" data-a="bet" data-k="${x}" data-d="1" aria-label="Parier à la hausse">📈</button><button class="b2-pb down" data-a="bet" data-k="${x}" data-d="-1" aria-label="Parier à la baisse">📉</button></div>`;
+  const sec = (title, list) => list.length ? `<h3 class="b2-msec">${title}</h3><div class="b2-mlist">${list.map(row).join("")}</div>` : "";
+  return `<div class="b2-fhead"><p class="b2-pint">Mise sur la hausse ou la baisse d'un produit. Retire-toi quand tu veux.</p><button class="b2-q" data-a="bet-help" aria-label="Comment marche le pari">?</button></div>
+    <h3 class="b2-msec">Tes paris${l.length ? ` · ${l.length}/${BX.BET.max}` : ""}</h3>
+    ${l.length ? `<div class="b2-book">${l.map(betRow).join("")}</div>` : `<div class="b2-empty b2-pempty">Aucun pari en cours.</div>`}
+    ${sec("Récoltes", BX.RAW)}${BX.unlocked(S, "four") ? sec("Recettes", BX.CRAFT) : ""}${sec("Produits de luxe", BX.AGED)}`;
+}
+function betHelpSheet(){
+  sheetCtx = null;
+  sheet(`<h3>🎯 Le pari</h3><div class="b2-fiche">
+    ${frow("📈", "À la hausse", `Tu gagnes si le cours monte. Ta mise suit le cours ×${BX.BET.lev} : s'il monte de moitié, ta mise double.`)}
+    ${frow("📉", "À la baisse", "Pareil, à l'envers : tu gagnes si le cours baisse.")}
+    ${frow("🚪", "Te retirer", "Quand tu veux. Tu récupères ce que vaut ta mise à ce moment-là.")}
+    ${frow("💥", "Au pire", "Si le cours part trop dans l'autre sens, ta mise tombe à zéro. Tu ne perds jamais plus que ta mise.")}
+    ${frow("🪙", "La taxe", `3 pièces pour 100 misées. ${BX.BET.max} paris en même temps au maximum.`)}
+    </div><button class="b2-btn big" data-a="close-sheet">Compris</button>`);
 }
 function betSheet(k, d){
   const t = now(); S.bets = S.bets || [];
@@ -2319,9 +2346,10 @@ function marketListHTML(){
   const sec = (title, list) => list.length ? `<h3 class="b2-msec">${title}</h3><div class="b2-mlist">${list.map(row).join("")}</div>` : "";
   return `<div class="b2-board"><div class="b2-col" style="padding:6px 16px 28px">
     <div class="b2-mhead"><h2>Le marché</h2><button class="b2-seachip" data-a="season">${seasonLine()}</button></div>
-    ${seen("mk2") ? "" : `<div class="b2-intro"><b>Nouveau marché</b><span>Saisons, nouvelles, emballement… et les paris. Touche le <b>?</b> d'un produit pour tout comprendre. Le village vend maintenant au cours.</span><button data-a="mk2x" aria-label="J'ai compris">×</button></div>`}
-    ${newsBanner()}${betsHTML()}
-    ${sec("Récoltes", BX.RAW)}${BX.unlocked(S, "four") ? sec("Recettes", BX.CRAFT) : ""}${sec("Sous-produits", BX.SUB)}${sec("Produits de luxe", BX.AGED)}
+    ${seen("mk2") ? "" : `<div class="b2-intro"><b>Nouveau marché</b><span>Saisons, nouvelles, emballement… et les paris (onglet 🎯). Touche le <b>?</b> d'un produit pour tout comprendre. Le village vend maintenant au cours.</span><button data-a="mk2x" aria-label="J'ai compris">×</button></div>`}
+    <div class="b2-seg b2-mtabs"><button class="${mkt.tab !== "paris" ? "on" : ""}" data-a="mkt-tab" data-t="market">Marché</button><button class="${mkt.tab === "paris" ? "on" : ""}" data-a="mkt-tab" data-t="paris">🎯 Paris${(S.bets || []).length ? ` · ${S.bets.length}` : ""}</button></div>
+    ${mkt.tab === "paris" ? parisHTML() : `${newsBanner()}
+    ${sec("Récoltes", BX.RAW)}${BX.unlocked(S, "four") ? sec("Recettes", BX.CRAFT) : ""}${sec("Sous-produits", BX.SUB)}${sec("Produits de luxe", BX.AGED)}`}
   </div></div>`;
 }
 function casksHTML(k){
@@ -2349,14 +2377,12 @@ function marketHTML(){
     <button class="b2-btn gold" data-a="buy-res" ${resL < 1 ? "disabled" : ""}>Acheter</button></div>`;
   const hist = W.trades.filter(t => t.product === k).slice(-12).reverse().map(t => `<div class="b2-ord"><span class="who">${esc(t.buyer_id === ME.id ? "Toi" : nameOf(t.buyer_id))} ← ${esc(t.seller_id === ME.id ? "toi" : nameOf(t.seller_id))}<small>${fmtAgo(t.ts)}</small></span><span class="q">${fmtN(t.qty)}</span><span class="pr">${fmtP(+t.price)}</span></div>`).join("");
   return `<div class="b2-board"><div class="b2-col" style="padding:4px 16px 24px">
-    <div class="b2-mtop"><button class="b2-back" data-a="mkt-back" aria-label="Retour au marché">‹</button><span class="ic">${P[k].e}</span><b>${esc(P[k].label)}</b></div>
+    <div class="b2-mtop"><button class="b2-back" data-a="mkt-back" aria-label="Retour au marché">‹</button><span class="ic">${P[k].e}</span><b>${esc(P[k].label)}</b><button class="b2-q top" data-a="mfiche" data-k="${k}" aria-label="Ce qui fait bouger le prix">?</button></div>
     <div class="b2-quote"><div><div style="font:800 13px var(--round);color:var(--chalk2)">Le village rachète</div><span class="big">${COIN}${fmtP(BX.vPrice(k, now()))}</span><span class="ch">${chg(vChg(k))} <small style="opacity:.6">1 h</small></span></div>
       <div class="lim">${P[k].aged ? "" : P[k].sub ? `Marchand <b>${fmtP(P[k].floor * BAL.colpMult)}</b><br>` : `Le village vend <b>${fmtP(BX.vAsk(k, now()))}</b><br>`}${qv.p != null ? `Entre joueurs (24 h) <b>${fmtP(qv.p)}</b><br>` : ""}Tu en as <b>${fmtN(S.stock[k])}</b></div></div>
     <div class="b2-seg">${["1h", "24h", "7j"].map(p => `<button class="${mkt.period === p ? "on" : ""}" data-a="mkt-p" data-p="${p}">${p === "1h" ? "1 h" : p === "24h" ? "24 h" : "7 j"}</button>`).join("")}</div>
     <div class="b2-chart">${chartSVG(k, mkt.period)}</div>
     <div class="b2-two"><button class="b2-btn" data-a="list" data-k="${k}" ${S.stock[k] < 1 ? "disabled" : ""}>Mettre en vente</button><button class="b2-btn gold" data-a="sell" data-k="${k}" ${S.stock[k] < 1 ? "disabled" : ""}>Vendre au village</button></div>
-    ${forcesHTML(k)}
-    ${betsHTML(k)}
     ${P[k].aged ? casksHTML(k) : ""}
     <h3 class="b2-h3">Offres des joueurs</h3>
     <div class="b2-book">${rows || `<div class="b2-empty">Personne n'en vend pour l'instant.${k === S.spec || k === BX.SUBOF[S.spec] ? " Tu es le seul à en produire : à toi de fixer ton prix." : ""}</div>`}${res}</div>
@@ -2839,6 +2865,8 @@ function onClick(e){
     case "season": seasonSheet(); return;
     case "mk2x": markSeen("mk2"); draw(); return;
     case "bet": betSheet(b.dataset.k, +b.dataset.d); return;
+    case "bet-help": betHelpSheet(); return;
+    case "mkt-tab": mkt.tab = b.dataset.t; draw(); return;
     case "bet-close": { const v = BX.closeBet(S, b.dataset.id, now()); if (v == null) return; dirty = true; save(true); sound("coin"); toast(`Tu te retires : +${COIN}${fmtN(v)}`, "gold"); draw(); return; }
     case "quick-sell": {
       const k = S.cur, q = Math.floor(S.stock[k] || 0);
