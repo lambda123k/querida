@@ -280,6 +280,15 @@ const CHARS = {
   epiciere:   { name:"L'épicière",     e:"👵", wants:["confiture","fruits","miel"] },
   charpentier:{ name:"Le charpentier", e:"👷", wants:["bois"] },
   maire:      { name:"Le maire",       e:"🎩", wants:[] },
+  // visiteurs des demandes surprises (ils débarquent entre deux créneaux)
+  colporteur: { name:"Le colporteur",  e:"🧳", wants:[], lines:["Il passe en coup de vent et repart ce soir", "Il a une charrette vide et des poches pleines", "Il revend tout en ville, il lui en faut vite"] },
+  chatelaine: { name:"La châtelaine",  e:"👑", wants:[], lines:["Elle donne un bal ce soir au château", "Ses invités de marque arrivent, rien n'est prêt", "Elle ne mange que ce qu'il y a de meilleur"] },
+  noce:       { name:"La noce",        e:"💒", wants:[], lines:["Un mariage au village : il manque de tout !", "Cent invités et un buffet presque vide", "La mariée a tout prévu… sauf ça"] },
+  cirque:     { name:"Le cirque",      e:"🎪", wants:[], lines:["Le cirque s'installe sur la place", "Les éléphants ont faim, le chapiteau aussi", "Grande représentation ce soir"] },
+  capitaine:  { name:"Le capitaine",   e:"⚓", wants:[], lines:["Son bateau lève l'ancre bientôt", "Il remplit la cale pour une longue traversée", "L'équipage réclame des provisions"] },
+  forgeron:   { name:"Le forgeron",    e:"🔨", wants:[], lines:["Sa forge tourne à plein régime", "Une grosse commande d'outils l'attend", "Il travaille toute la nuit, il faut le nourrir"] },
+  voisine:    { name:"La fermière d'à côté", e:"👩‍🌾", wants:[], lines:["Sa récolte a raté, elle cherche qui la dépanne", "Ses bêtes sont malades, elle rachète tout", "Elle a promis une livraison qu'elle ne peut pas tenir"] },
+  meunier:    { name:"Le meunier",     e:"🧑‍🌾", wants:[], lines:["Son moulin tourne à vide", "La rivière est haute, le moulin veut du grain", "Il a promis de la farine à tout le canton"] },
 };
 const charFor = (k, r) => { const c = Object.keys(CHARS).filter(id => CHARS[id].wants.includes(k)); return c[Math.floor(r() * c.length)] || "epiciere"; };
 function genOrders(s, slot, playerId, groupProd){
@@ -545,7 +554,8 @@ function fixState(s){
   s.stats = Object.assign({ produced:0, invested:0, baked:0, orders:0, sold:0, bought:0, earned:0, villageSold:0 }, s.stats || {});
   s.seen = s.seen || {}; s.oven = s.oven || { lvl:0, slots:[] }; s.orders = s.orders || { slot:0, list:[], prog:{} };
   s.reserve = s.reserve || { slot:0, used:{} }; s.vsold = s.vsold || {};
-  if (!s.ord2){ s.ord2 = 1; s.orders = { slot:0, list:[], prog:{} }; }   // commandes du village en course (11 nov. 2026)
+  if (!s.ord2){ s.ord2 = 1; s.orders = { slot:0, list:[], prog:{} }; }
+  s.ord3 = 1;                                                            // demandes surprises (11 nov. 2026)   // commandes du village en course (11 nov. 2026)
   s.claims = (s.claims || []).map(c => ({ id: c.id, slot: c.slot })); s.wonIds = s.wonIds || [];
   // une seule exploitation en plus : on garde la plus développée
   const extra = Object.keys(s.farms).filter(k => k !== s.spec);
@@ -1008,6 +1018,11 @@ const STYLE = `
 .b2-order .hd .sp{flex:1;min-width:0}
 .b2-order .who{font:400 italic 19px/1.05 var(--disp)}
 .b2-order .want{font:800 14px var(--round);color:var(--ink)}
+.b2-order .line{font:600 italic 12.5px/1.25 var(--round);color:var(--ink2);margin:1px 0 2px}
+.b2-order.surp{background:#FFF7D6;box-shadow:0 0 0 2px #F2B33D,0 3px 0 rgba(124,74,36,.35),0 8px 18px rgba(59,31,23,.15);padding-top:22px}
+.b2-order.surp.new{animation:b2-surp .5s ease-out}
+.b2-order.surp.gros{background:#FDEBDD;box-shadow:0 0 0 2px #E0703A,0 3px 0 rgba(124,74,36,.35),0 8px 18px rgba(59,31,23,.15)}
+@keyframes b2-surp{0%{transform:scale(.85) rotate(-3deg);opacity:0}70%{transform:scale(1.03)}100%{transform:none;opacity:1}}
 .b2-order .prime{text-align:right;font:900 16px var(--round);color:var(--up2);font-variant-numeric:tabular-nums;white-space:nowrap}
 .b2-order .prime small{display:block;font:700 11px var(--round);color:var(--ink2)}
 .b2-order .pb{height:10px;border-radius:999px;background:rgba(59,31,23,.12);margin:10px 0 8px;overflow:hidden}
@@ -1364,6 +1379,7 @@ function loop(){
     if (n % 20 === 0 && (!ORD || ORD.slot < curSlot())) loadOrders();
     if (n % 80 === 40 && S.claims.length) S.claims.forEach(c => claimOrder(c));
     live();
+    if (n % 4 === 0) checkSurprises();
     n++;
     if (n % 4 === 0) rankTick();
     if (n % 4 === 0 && !sheetOpen){ const sig = unlockSig(); if (sig !== lastSig){ lastSig = sig; draw(); } }
@@ -1442,13 +1458,14 @@ function draw(){
   if (!wrapEl || !S) return;
   const main = wrapEl.querySelector("#b2-main");
   const keep = main.dataset.v === view ? main.scrollTop : 0;
+  if (view === "village") surpDot = false;
   const html = view === "farm" ? farmHTML() : view === "barn" ? barnHTML() : view === "market" ? marketHTML() : villageHTML();
   main.innerHTML = html; main.dataset.v = view; main.scrollTop = keep;
   wrapEl.querySelector("#b2-dock").innerHTML = view === "farm" ? dockHTML() : "";
   wrapEl.querySelector("#b2-main").classList.toggle("dockpad", view === "farm");
   wrapEl.querySelector("#b2-tabs").innerHTML = `<div class="b2-col">${TABS.map(t => {
     const lock = t.need && !BX.unlocked(S, t.need);
-    const dot = !lock && t.need && !seen("tab_" + t.id);
+    const dot = !lock && t.need && (!seen("tab_" + t.id) || (t.id === "village" && surpDot && view !== "village"));
     return `<button class="b2-tab ${view === t.id ? "on" : ""} ${lock ? "locked" : ""}" data-a="tab" data-v="${t.id}"><span class="i">${lock ? "🔒" : t.i}</span>${t.label}${dot ? `<span class="dot"></span>` : ""}</button>`;
   }).join("")}</div>`;
   geo = null; if (view === "farm") requestAnimationFrame(measure);
@@ -1802,14 +1819,14 @@ function marketHTML(){
 function villageHTML(){
   syncOrders();
   const ready = ORD && S.orders.slot === ORD.slot;
-  const notes = !ready ? `<div class="b2-paper" style="text-align:center;color:var(--ink2);font:700 14px var(--round)">Le village prépare ses commandes…</div>` : S.orders.list.map(o => {
+  const notes = !ready ? `<div class="b2-paper" style="text-align:center;color:var(--ink2);font:700 14px var(--round)">Le village prépare ses commandes…</div>` : visibleOrders().map(o => {
     const got = S.orders.prog[o.id] || 0, c = BX.CHARS[o.who] || BX.CHARS.epiciere, have = Math.floor(S.stock[o.k]);
     const w = winnerOf(o.id), mine = !!(w && w.id === ME.id), pend = !w && got >= o.qty, done = !!w || pend;
     const canBake = P[o.k].rec && S.oven.lvl && BX.canBake(S, o.k) >= 1;
     const action = done ? "" : have >= 1 ? `<button class="b2-btn" data-a="deliver" data-id="${o.id}">Livrer ${fmtN(Math.min(have, o.qty - got))}</button>`
       : canBake ? `<button class="b2-btn gold" data-a="bake" data-k="${o.k}">Au four</button>`
       : `<button class="b2-btn red" data-a="goto-mkt" data-k="${o.k}">Acheter</button>`;
-    return `<div class="b2-order ${done ? "done" : ""} ${o.big ? "big" : ""}">${o.big ? `<span class="b2-bigtag">Grande commande · tout le village</span>` : ""}<div class="hd"><span class="face">${c.e}</span><div class="sp"><div class="who">${c.name}</div><div class="want">veut ${fmtN(o.qty)} ${P[o.k].e} ${esc(P[o.k].label)}</div></div>
+    return `<div class="b2-order ${done ? "done" : ""} ${o.big ? "big" : ""} ${o.surprise ? "surp " + (o.kind === "gros" ? "gros" : "vite") + (now() - outAt(o) < 4000 ? " new" : "") : ""}">${o.big ? `<span class="b2-bigtag">Grande commande · tout le village</span>` : o.surprise ? `<span class="b2-bigtag">${o.kind === "gros" ? "💰 Surprise · gros coup" : "⚡ Surprise · ça presse"}</span>` : ""}<div class="hd"><span class="face">${c.e}</span><div class="sp"><div class="who">${c.name}</div>${o.surprise && c.lines ? `<div class="line">${esc(c.lines[(+o.line || 0) % c.lines.length])}</div>` : ""}<div class="want">veut ${fmtN(o.qty)} ${P[o.k].e} ${esc(P[o.k].label)}</div></div>
       <div class="prime ${w && !mine ? "lost" : ""}">${w ? (mine ? "🏆 À toi" : "🏆 " + esc(w.name)) : `+${COIN}${fmtN(o.bonus)}`}<small>${w ? (mine ? `+${fmtN(o.bonus)} gagnés` : "a eu la prime") : "pour le 1er qui finit"}</small></div></div>
       <div class="pb"><i style="width:${Math.min(100, got / o.qty * 100)}%"></i></div>
       <div class="ft"><span>${fmtN(got)} / ${fmtN(o.qty)} livrés</span><span class="sp"></span>${w ? "" : `<span>Tu en as ${fmtN(have)}</span>`}${action}</div>${w ? `<span class="stamp ${mine ? "" : "lost"}">${mine ? "Premier !" : "Trop tard"}</span>` : pend ? `<span class="stamp">…</span>` : ""}</div>`;
@@ -1833,6 +1850,31 @@ function villageHTML(){
 let ORD = null;
 const curSlot = () => Math.floor(now() / BAL.slotMs);
 const winnerOf = id => ORD && S && S.orders.slot === ORD.slot ? (ORD.winners || {})[id] : null;
+// demandes surprises : cachées jusqu'à leur moment d'apparition (secondes après le début du créneau)
+const outAt = o => (ORD ? ORD.slot : curSlot()) * BAL.slotMs + (+o.at || 0) * 1000;
+const isOut = o => !!o && (!o.surprise || now() >= outAt(o));
+function visibleOrders(){
+  const l = (S.orders.list || []).filter(isOut);
+  const sp = l.filter(o => o.surprise).sort((a, b) => b.at - a.at);
+  return sp.concat(l.filter(o => !o.surprise));
+}
+const announced = new Set(); let surpDot = false;
+function checkSurprises(){
+  if (!ORD || !S || S.orders.slot !== ORD.slot) return;
+  for (const o of ORD.list || []){
+    if (!o.surprise || announced.has(o.id) || !isOut(o)) continue;
+    announced.add(o.id);
+    if ((ORD.winners || {})[o.id]) continue;
+    const fresh = now() - outAt(o) < 90000;          // à l'ouverture du jeu, pas de bandeau pour une vieille surprise
+    surpDot = view !== "village";
+    if (fresh){
+      const c = BX.CHARS[o.who] || BX.CHARS.colporteur;
+      toast(`${c.e} <b>${esc(c.name)}</b> débarque : ${fmtN(o.qty)} ${P[o.k].e} ${esc(P[o.k].label)} · +${COIN}${fmtN(o.bonus)} au premier !`, "gold");
+      sound("done"); buzz(40);
+    }
+    if (wrapEl && !sheetOpen) draw();
+  }
+}
 const bigNow = () => { const o = ORD && (ORD.list || []).find(x => x.big); return o ? o.k : null; };
 function syncOrders(){
   if (!ORD || !S) return;
@@ -2229,6 +2271,7 @@ function onClick(e){
       return;
     }
     case "deliver": {
+      if (!isOut((S.orders.list || []).find(x => x.id === b.dataset.id))) return;
       const w = winnerOf(b.dataset.id);
       if (w){ toast(`Trop tard : ${esc(w.name)} a déjà eu la prime`, "err"); draw(); return; }
       const r = BX.deliver(S, b.dataset.id); if (!r) return; dirty = true;
