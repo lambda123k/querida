@@ -1,5 +1,5 @@
 -- =====================================================================
--- Le Baron — atelier, sous-produits, cellier (préparé le 11 nov. 2026, PAS ENCORE APPLIQUÉ)
+-- Le Baron — atelier, sous-produits, cellier (appliqué le 11 nov. 2026)
 -- · Les sous-produits (paille, plumes, cuir, noyaux, cire, sciure) peuvent être mis en vente entre joueurs.
 -- · Garde-fou : une fois passé à cette version (clé v4 dans la sauvegarde), un téléphone resté sur
 --   l'ancienne version ne peut plus sauvegarder (il perdrait l'atelier, le cellier et les sous-produits).

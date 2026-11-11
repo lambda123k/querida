@@ -116,7 +116,7 @@ const BAL = {
   atelierSecs: [900, 3600, 14400],              // construire / améliorer l'atelier : 15 min, 1 h, 4 h de tes revenus
   atelierMax: 3,
   cellarMax: 6,
-  cellarSecs: L => 1200 * Math.pow(2.2, L),     // construire (L=0) puis améliorer : 20 min de revenus, ×2,2 par niveau
+  cellarCost: L => ({ coins: 4e9 * Math.pow(3, L), wood: 2e7 * Math.pow(3, L) }),   // prix fixe : 4B pour le construire, ×3 par niveau
   cellarBatch: (L, eff) => Math.max(50, eff * 600 * (1 + 0.5 * (L - 1))),   // ~10 min de production par place
   ageMul: h => 1 + 1.5 * (1 - Math.exp(-h / 8)),  // ×1,2 en 1 h · ×1,95 en 8 h · ×2,4 en 24 h
   // cours du village : chaque produit a son cours (le même pour tous), qui monte et descend tout seul
@@ -295,7 +295,7 @@ const costs = {
   farm: s => { const c = BAL.farmCost(Object.keys(s.farms).length); return { coins: nice(c.coins), wood: c.wood }; },
   // atelier et cellier : le prix suit tes revenus (sinon trop facile pour les riches, impossible pour les autres)
   atelier: s => { const sec = BAL.atelierSecs[s.atelier || 0] || 0; return { coins: nice(Math.max(500, prodValue(s) * sec)), wood: nice(Math.max(30, effRate(s, 0) * sec * 0.05)) }; },
-  cellar: s => { const sec = BAL.cellarSecs(s.cellar.lvl); return { coins: nice(Math.max(800, prodValue(s) * sec)), wood: nice(Math.max(40, effRate(s, 0) * sec * 0.05)) }; },
+  cellar: s => BAL.cellarCost(s.cellar.lvl),
 };
 
 /* ---------- Atelier ---------- */
@@ -1881,19 +1881,19 @@ function cellarRow(i, t){
 function atelierHTML(){
   const t = now(), ac = BX.costs.atelier(S);
   const tools = !S.atelier
-    ? `<div class="b2-paper"><div class="b2-oven cold"><div class="art" style="font-size:54px;display:grid;place-items:center">🛠️</div><div><h2 class="b2-h2">L'atelier<small>Fabrique des outils qui font tourner ta ferme plus vite. Ils s'usent et se fabriquent avec les sous-produits des autres fermes.</small></h2>
+    ? `<div class="b2-paper"><div class="b2-oven cold"><div class="art" style="font-size:54px;display:grid;place-items:center">🛠️</div><div><h2 class="b2-h2">L'atelier<small>Des outils qui accélèrent ta ferme. Ils s'usent, et se fabriquent avec les sous-produits des autres.</small></h2>
       <button class="b2-btn gold" data-a="up-atelier" data-cc="${ac.coins}" data-cw="${ac.wood}">Construire ${price(ac)}</button></div></div></div>`
     : `<div class="b2-paper"><div style="display:flex;align-items:center;gap:8px"><h2 class="b2-h2" style="flex:1;margin:0">L'atelier<small>Niveau ${S.atelier} · outils ${BX.TQ.filter(q => q.need <= S.atelier).map(q => q.label.toLowerCase()).join(", ")}</small></h2>
       ${S.atelier < BAL.atelierMax ? `<button class="b2-btn" data-a="up-atelier" data-cc="${ac.coins}" data-cw="${ac.wood}">Niv. ${S.atelier + 1} ${price(ac)}</button>` : ""}</div>
       <div class="b2-slots">${["parcel", "elev", "cart"].map(k => toolRow(k, t)).join("")}</div></div>`;
   const cc = BX.costs.cellar(S), L = S.cellar.lvl;
   const cellar = !L
-    ? `<div class="b2-paper"><div class="b2-oven cold"><div class="art" style="display:grid;place-items:center"><svg viewBox="0 0 60 64" width="58" height="62" aria-hidden="true"><path d="M12 6 Q6 32 12 58 H48 Q54 32 48 6Z" fill="#B87A45" stroke="#6B3E1E" stroke-width="2.5"/><path d="M10 18 H50 M9 46 H51" stroke="#5A5A5A" stroke-width="4"/><path d="M22 6 Q19 32 22 58 M38 6 Q41 32 38 58" stroke="#8C5A30" stroke-width="1.6" fill="none"/><ellipse cx="30" cy="6" rx="18" ry="3.5" fill="#D9A066" stroke="#6B3E1E" stroke-width="2"/><circle cx="30" cy="34" r="3" fill="#6B3E1E"/></svg></div><div><h2 class="b2-h2">Le cellier<small>Fais vieillir ton blé, ton lait, tes fruits ou ton miel : bière, fromage, cidre, hydromel. Plus tu attends, plus ça vaut cher. Vends au bon moment.</small></h2>
+    ? `<div class="b2-paper"><div class="b2-oven cold"><div class="art" style="display:grid;place-items:center"><svg viewBox="0 0 60 64" width="58" height="62" aria-hidden="true"><path d="M12 6 Q6 32 12 58 H48 Q54 32 48 6Z" fill="#B87A45" stroke="#6B3E1E" stroke-width="2.5"/><path d="M10 18 H50 M9 46 H51" stroke="#5A5A5A" stroke-width="4"/><path d="M22 6 Q19 32 22 58 M38 6 Q41 32 38 58" stroke="#8C5A30" stroke-width="1.6" fill="none"/><ellipse cx="30" cy="6" rx="18" ry="3.5" fill="#D9A066" stroke="#6B3E1E" stroke-width="2"/><circle cx="30" cy="34" r="3" fill="#6B3E1E"/></svg></div><div><h2 class="b2-h2">Le cellier<small>Bière, fromage, cidre, hydromel : plus ça vieillit, plus ça vaut cher.</small></h2>
       <button class="b2-btn gold" data-a="up-cellar" data-cc="${cc.coins}" data-cw="${cc.wood}">Construire ${price(cc)}</button></div></div></div>`
     : `<div class="b2-paper"><div style="display:flex;align-items:center;gap:8px"><h2 class="b2-h2" style="flex:1;margin:0">Le cellier<small>Niveau ${L} · ${BX.cellarSlots(S)} place${BX.cellarSlots(S) > 1 ? "s" : ""} · ${fmtN(BX.cellarBatch(S))} max par tonneau</small></h2>
       ${L < BAL.cellarMax ? `<button class="b2-btn" data-a="up-cellar" data-cc="${cc.coins}" data-cw="${cc.wood}">Niv. ${L + 1} ${price(cc)}</button>` : ""}</div>
       <div class="b2-slots">${Array.from({ length: BX.cellarSlots(S) }, (_, i) => cellarRow(i, t)).join("")}</div>
-      <p class="b2-note">Le prix d'un tonneau = cours du village × vieillissement (×1,2 en 1 h, ×2 en 8 h, ×2,4 en 24 h).</p></div>`;
+      <p class="b2-note">Vieillissement : ×1,2 en 1 h · ×2 en 8 h · ×2,4 en 24 h</p></div>`;
   return `<div class="b2-barnin"><div class="b2-col b2-pad">${tools}${cellar}</div></div>`;
 }
 function toolSheet(kind){
