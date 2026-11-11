@@ -17,7 +17,8 @@ language sql stable as $$ select floor(extract(epoch from now()) * 1000 / 120000
 
 create or replace function public._baron2_res_size(p_product text) returns numeric
 language sql stable security definer set search_path = public as $$
-  select greatest(30, ceil(60 * coalesce(sum(greatest((stats->>'prod')::numeric, 0)), 0)
+  -- joueurs actifs × 60 s × production médiane (en unités ; « prod » est en pièces/s, ÷10) : le plus gros ne gonfle pas tout
+  select greatest(30, ceil(count(*) * 60 * coalesce(percentile_cont(0.5) within group (order by greatest((stats->>'prod')::numeric, 0)), 0) / 10
                  / case when p_product in ('ble','oeufs','lait','fruits','miel','bois') then 1 else 3 end))
   from baron2_players where updated_at > now() - interval '24 hours';
 $$;
