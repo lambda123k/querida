@@ -897,6 +897,12 @@ const STYLE = `
 .b2-tab .i{font-size:22px;line-height:1.1;filter:saturate(.85)}
 .b2-tab.on{background:#F3E3C7!important;color:var(--ink)!important;box-shadow:0 3px 0 #C9A57A}
 .b2-tab.locked{opacity:.45}
+.b2-atb{position:relative;width:100%;display:flex;align-items:center;gap:12px;margin:14px 0 0;padding:14px 16px;border-radius:18px;background:linear-gradient(135deg,#8A5A2E,#5E3517)!important;color:#FFF1DA!important;box-shadow:0 4px 0 #3E2210;text-align:left}
+.b2-atb .i{font-size:30px}.b2-atb .sp{flex:1}.b2-atb b{display:block;font:400 24px var(--disp)}.b2-atb small{font:700 12px var(--round);opacity:.85}
+.b2-atb .go{font:800 28px var(--round);opacity:.8}.b2-atb.locked{opacity:.6}
+.b2-atb .dot{position:absolute;top:8px;right:10px;width:12px;height:12px;border-radius:50%;background:var(--red);box-shadow:0 0 0 2px #FFF1DA}
+.b2-atback{margin:0 0 10px}
+.b2-atb + .b2-paper{margin-top:14px}
 .b2-tab.locked .i{filter:grayscale(1)}
 .b2-tab .dot{position:absolute;top:4px;right:calc(50% - 20px);width:10px;height:10px;border-radius:50%;background:var(--red);box-shadow:0 0 0 2px #6E4222}
 
@@ -1699,7 +1705,7 @@ let sheetOpen = false;
 const TABS = [
   { id:"farm",    label:"Ferme",  i:"🌾" },
   { id:"barn",    label:"Grange", i:"🏚️", need:"grange",  why:"La grange s'ouvre dès ta première récolte livrée." },
-  { id:"atelier", label:"Atelier",i:"🛠️", need:"atelier", why:"L'atelier ouvre quand tu débloques ta 3e parcelle." },
+  { id:"atelier", label:"Atelier",i:"🛠️", need:"atelier", hide:true, why:"L'atelier ouvre quand tu débloques ta 3e parcelle." },
   { id:"market",  label:"Marché", i:"📈", need:"marche",  why:"Le marché ouvre quand tu débloques ta 2e parcelle." },
   { id:"village", label:"Village",i:"🏘️", need:"village", why:"Le village ouvre quand tu débloques ta 3e parcelle." },
   { id:"casino",  label:"Casino", i:"🎰", need:"village", why:"Le casino ouvre avec le village, à ta 3e parcelle." },
@@ -1854,10 +1860,10 @@ function draw(){
   main.innerHTML = html; main.dataset.v = view; main.scrollTop = keep;
   wrapEl.querySelector("#b2-dock").innerHTML = view === "farm" ? dockHTML() : "";
   wrapEl.querySelector("#b2-main").classList.toggle("dockpad", view === "farm");
-  wrapEl.querySelector("#b2-tabs").innerHTML = `<div class="b2-col">${TABS.map(t => {
+  wrapEl.querySelector("#b2-tabs").innerHTML = `<div class="b2-col">${TABS.filter(t => !t.hide).map(t => {
     const lock = t.need && !BX.unlocked(S, t.need);
-    const dot = !lock && t.need && (!seen("tab_" + t.id) || (t.id === "village" && surpDot && view !== "village"));
-    return `<button class="b2-tab ${view === t.id ? "on" : ""} ${lock ? "locked" : ""}" data-a="tab" data-v="${t.id}"><span class="i">${lock ? "🔒" : t.i}</span>${t.label}${dot ? `<span class="dot"></span>` : ""}</button>`;
+    const dot = !lock && t.need && (!seen("tab_" + t.id) || (t.id === "barn" && BX.unlocked(S, "atelier") && !seen("tab_atelier")) || (t.id === "village" && surpDot && view !== "village"));
+    return `<button class="b2-tab ${view === t.id || (view === "atelier" && t.id === "barn") ? "on" : ""} ${lock ? "locked" : ""}" data-a="tab" data-v="${t.id}"><span class="i">${lock ? "🔒" : t.i}</span>${t.label}${dot ? `<span class="dot"></span>` : ""}</button>`;
   }).join("")}</div>`;
   geo = null; if (view === "farm") requestAnimationFrame(measure);
   live(true);
@@ -2093,6 +2099,10 @@ function farmTipOld(){
 }
 
 /* ---------- Grange ---------- */
+function atelierBtn(){
+  const lock = !BX.unlocked(S, "atelier"), dot = !lock && !seen("tab_atelier");
+  return `<button class="b2-atb ${lock ? "locked" : ""}" data-a="tab" data-v="atelier"><span class="i">${lock ? "🔒" : "🛠️"}</span><span class="sp"><b>L'atelier</b><small>${lock ? "S'ouvre à ta 3e parcelle" : "Établi, outils et cellier"}</small></span><span class="go">›</span>${dot ? `<span class="dot"></span>` : ""}</button>`;
+}
 function barnHTML(){
   const cap = BX.barnCap(S), used = BX.stockUnits(S), bc = BX.costs.barn(S);
   const tiles = BX.ALL.filter(k => (!P[k].rec || BX.unlocked(S, "four")) && (!P[k].aged || S.cellar.lvl || S.stock[k] >= 1)).map(k => `<button class="b2-tile ${k === S.spec ? "mine" : ""} ${S.stock[k] < 1 ? "zero" : ""}" data-a="prod" data-k="${k}">
@@ -2104,6 +2114,7 @@ function barnHTML(){
       <div class="b2-barnrow" style="display:flex;align-items:center;gap:8px;margin-top:10px"><span class="b2-note" style="margin:0;flex:1 1 120px">Agrandir : ${fmtN(BAL.barnCap(S.barn + 1))} places</span>
       <button class="b2-btn" data-a="up-barn" data-cc="${bc.coins}" data-cw="${bc.wood}">Agrandir ${price(bc)}</button></div>
     </div>
+    ${atelierBtn()}
     <div class="b2-paper"><h2 class="b2-h2">Le stock<small>Touche un produit pour le vendre.</small></h2><div class="b2-stock">${tiles}</div></div>
     ${ovenHTML()}
   </div></div>`;
@@ -2424,7 +2435,7 @@ function atelierHTML(){
       ${L < BAL.cellarMax ? `<button class="b2-btn" data-a="up-cellar" data-cc="${cc.coins}" data-cw="${cc.wood}">Niv. ${L + 1} ${price(cc)}</button>` : ""}</div>
       <div class="b2-slots">${Array.from({ length: BX.cellarSlots(S) }, (_, i) => cellarRow(i, t)).join("")}</div>
       <p class="b2-note">Un produit de luxe vaut toujours plus que sa matière première. Plus c'est long, plus ça vaut.</p></div>`;
-  return `<div class="b2-barnin"><div class="b2-col b2-pad">${etabliHTML(t).replace('class="b2-paper b2-etabli"', `class="b2-paper b2-etabli" data-cid="${etbCid(t)}"`)}${tools}${cellar}</div></div>`;
+  return `<div class="b2-barnin"><div class="b2-col b2-pad"><button class="b2-btn ghost b2-atback" data-a="tab" data-v="barn">‹ Grange</button>${etabliHTML(t).replace('class="b2-paper b2-etabli"', `class="b2-paper b2-etabli" data-cid="${etbCid(t)}"`)}${tools}${cellar}</div></div>`;
 }
 function toolSheet(kind){
   const cur = S.tools && S.tools[kind] && toolLeft(kind, now()) > 0;
