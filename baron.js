@@ -756,7 +756,7 @@ function publicStats(){
     etb: S.etb && S.etb.job && S.etb.job.cid === etbCid(now()) ? S.etb.job.cid : 0, crafted: S.stats.crafted || 0 };
 }
 function applyCredits(list){
-  const msgs = [], bank = [];
+  const msgs = [], bank = [], portFees = [];
   const arr = (list || []).slice().sort((a, b) => a.id - b.id);
   for (const c of arr){
     if (+c.id <= (S.credit_seen || 0)) continue;
@@ -764,9 +764,13 @@ function applyCredits(list){
     S.coins += +c.coins || 0; S.credit_seen = +c.id; dirty = true;
     if (c.product === "casino_win") continue;
     if (c.product === "casino"){ bank.push(c); continue; }
+    if (c.product === "port_back"){ S.stats.earned += +c.coins || 0; toast(`⚓ Ton bateau est rentré : ${fmtN(c.qty)} ${P[c.buyer] ? P[c.buyer].e : ""} vendus +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); continue; }
+    if (c.product === "port_storm"){ toast(`🌊 Tempête ! Ta cargaison de ${fmtN(c.qty)} ${P[c.buyer] ? P[c.buyer].e : ""} a coulé.`, "err"); buzz([60, 40, 60]); continue; }
+    if (c.product === "port_fee"){ portFees.push(c); continue; }
     S.stats.sold += +c.coins || 0; S.stats.earned += +c.coins || 0;
     msgs.push(c);
   }
+  if (portFees.length){ const tot = portFees.reduce((a, c) => a + (+c.coins || 0), 0); toast(`⚓ Commission du port : +${COIN}${fmtN(tot)}`, "gold"); }
   if (bank.length){
     const tot = bank.reduce((a, c) => a + (+c.coins || 0), 0), who = bank[bank.length - 1].buyer || "Un joueur";
     toast(tot >= 0 ? `🎰 Casino : ${bank.length === 1 ? esc(who) + " a perdu" : "les joueurs ont perdu"}, ta banque encaisse +${COIN}${fmtN(tot)}` : `🎰 Casino : ${bank.length === 1 ? esc(who) + " a gagné" : "les joueurs ont gagné"}, ta banque paie −${COIN}${fmtN(-tot)}`, tot >= 0 ? "gold" : "");
@@ -841,7 +845,7 @@ async function loadWorld(force){
     const r = await rpc("baron2_world", {});
     BX.setMarket({ press: r.press || {}, med: r.med });
     W = { res: r.reserve || null, players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
-    await loadOrders(true); await loadEtb(); loadCasino();
+    await loadOrders(true); await loadEtb(); loadCasino(); loadPort();
     if (wrapEl && (view === "market" || view === "village" || view === "atelier") && !gestOpen && !sheetOpen) draw();
   }catch(e){}
 }
@@ -1708,6 +1712,7 @@ const TABS = [
   { id:"atelier", label:"Atelier",i:"🛠️", need:"atelier", hide:true, why:"L'atelier ouvre quand tu débloques ta 3e parcelle." },
   { id:"market",  label:"Marché", i:"📈", need:"marche",  why:"Le marché ouvre quand tu débloques ta 2e parcelle." },
   { id:"village", label:"Village",i:"🏘️", need:"village", why:"Le village ouvre quand tu débloques ta 3e parcelle." },
+  { id:"port",    label:"Port",   i:"⚓", need:"village", hide:true, why:"Le port ouvre avec le village, à ta 3e parcelle." },
   { id:"casino",  label:"Casino", i:"🎰", need:"village", why:"Le casino ouvre avec le village, à ta 3e parcelle." },
 ];
 function openBaron(){
@@ -1774,6 +1779,8 @@ function loop(){
     if (n % 4 === 0) checkSurprises();
     if (n % 20 === 10) betCheck();
     if (view === "atelier") etbTick(now());
+    if (view === "port") ptTick();
+    if (n % 40 === 12 && (view === "port" || view === "village")) loadPort();
     if (n % 16 === 8 && view === "casino" && !CZ.spinning) loadCasino();
     if (n % 80 === 20 && view === "atelier") loadEtb().then(() => { if (view === "atelier" && !sheetOpen && !gestOpen) draw(); });
     n++;
@@ -1856,14 +1863,14 @@ function draw(){
   const keep = main.dataset.v === view ? main.scrollTop : 0;
   if (view === "village") surpDot = false;
   if (view === "casino" && CZ.spinning && wrapEl.querySelector(".cz-wh.spin")) return;
-  const html = view === "farm" ? farmHTML() : view === "barn" ? barnHTML() : view === "atelier" ? atelierHTML() : view === "market" ? marketHTML() : view === "casino" ? casinoHTML() : villageHTML();
+  const html = view === "farm" ? farmHTML() : view === "barn" ? barnHTML() : view === "atelier" ? atelierHTML() : view === "market" ? marketHTML() : view === "casino" ? casinoHTML() : view === "port" ? portHTML() : villageHTML();
   main.innerHTML = html; main.dataset.v = view; main.scrollTop = keep;
   wrapEl.querySelector("#b2-dock").innerHTML = view === "farm" ? dockHTML() : "";
   wrapEl.querySelector("#b2-main").classList.toggle("dockpad", view === "farm");
   wrapEl.querySelector("#b2-tabs").innerHTML = `<div class="b2-col">${TABS.filter(t => !t.hide).map(t => {
     const lock = t.need && !BX.unlocked(S, t.need);
     const dot = !lock && t.need && (!seen("tab_" + t.id) || (t.id === "barn" && BX.unlocked(S, "atelier") && !seen("tab_atelier")) || (t.id === "village" && surpDot && view !== "village"));
-    return `<button class="b2-tab ${view === t.id || (view === "atelier" && t.id === "barn") ? "on" : ""} ${lock ? "locked" : ""}" data-a="tab" data-v="${t.id}"><span class="i">${lock ? "🔒" : t.i}</span>${t.label}${dot ? `<span class="dot"></span>` : ""}</button>`;
+    return `<button class="b2-tab ${view === t.id || (view === "atelier" && t.id === "barn") || (view === "port" && t.id === "village") ? "on" : ""} ${lock ? "locked" : ""}" data-a="tab" data-v="${t.id}"><span class="i">${lock ? "🔒" : t.i}</span>${t.label}${dot ? `<span class="dot"></span>` : ""}</button>`;
   }).join("")}</div>`;
   geo = null; if (view === "farm") requestAnimationFrame(measure);
   live(true);
@@ -2732,7 +2739,7 @@ function villageHTML(){
   const players = ranking();
   const top = players[0];
   const best = (key, label, i, unit) => { const p = players.slice().sort((a, b) => (+b.stats?.[key] || 0) - (+a.stats?.[key] || 0))[0]; return p && +p.stats?.[key] > 0 ? `<div class="b2-ttl"><span class="i">${i}</span><b>${label}</b><span>${esc(p.id === ME.id ? "Toi" : p.name)}</span></div>` : `<div class="b2-ttl"><span class="i" style="filter:grayscale(1)">${i}</span><b>${label}</b><span style="color:var(--ink3)">Personne encore</span></div>`; };
-  return `<div class="b2-vil"><div class="b2-col b2-pad">
+  return `<div class="b2-vil"><div class="b2-col b2-pad">${portBtn()}
     <div class="b2-paper" style="background:#FFF4E0"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><h2 class="b2-h2" style="margin:0">Commandes du village<small>Les mêmes pour tout le village. La prime va au premier qui termine : les autres sont seulement payés au prix de base.</small></h2><span class="b2-clock">⏳ <span data-live="clock">${fmtT(((ORD ? ORD.slot : curSlot()) + 1) * BAL.slotMs - now())}</span></span></div></div>
     ${ORD && P[ORD.next_big] ? `<div class="b2-ann"><span>📣 Prochaine grande commande : <b>${P[ORD.next_big].e} ${esc(P[ORD.next_big].label)}</b><small>Fais ton stock avant les autres !</small></span></div>` : ""}
     <div class="b2-notes">${notes}</div>
@@ -2962,6 +2969,186 @@ const CZ_STYLE = `
 `;
 try{ const cst = document.createElement("style"); cst.id = "cz-style"; cst.textContent = CZ_STYLE; document.head.appendChild(cst); }catch(e){}
 
+/* =================== Le Port (12 nov. 2026) ===================
+   Un joueur possède le port : il l'ouvre ou le ferme, l'améliore, et prend 10 % sur chaque cargaison.
+   Les autres y envoient leur stock à l'étranger (1,6× le cours du village au départ, sans faire
+   baisser le cours), mais le voyage dure des heures et une tempête peut tout couler. */
+const PT = { info:null, at:0 };
+const PT_MULT = 1.6, PT_FEE = 0.10;
+async function loadPort(){
+  try{ PT.info = await rpc("baron2_port_get", {}); PT.at = now();
+    const mine = ptMine(), was = (() => { try{ return localStorage.getItem("bn2_cap") === "1"; }catch(e){ return false; } })();
+    if (mine !== was){ try{ localStorage.setItem("bn2_cap", mine ? "1" : "0"); }catch(e){} if (mine) toast("⚓ Tu es le nouveau capitaine du port ! Ouvre-le et touche 10 % sur chaque cargaison.", "gold"); } if (view === "port" && !sheetOpen) draw(); }catch(e){}
+}
+const ptOwner = () => PT.info && PT.info.owner ? PT.info.owner : null;
+const ptMine = () => !!(ptOwner() && ptOwner().id === ME.id);
+const ptHold = () => PT.info ? Math.floor(PT.info.cfg.hold * BAL.barnCap(S.barn)) : 0;
+const ptFree = () => PT.info ? Math.max(0, PT.info.cfg.ships - PT.info.sea.length) : 0;
+const ptLeft = sh => new Date(sh.arrive).getTime() - (now() - (PT.skew || 0));
+function ptBoat(sh, i, n){
+  // un bateau : à quai s'il est libre, sinon en mer, d'autant plus loin que le voyage avance
+  const W = 340, y = 46 + i * (150 / Math.max(1, n));
+  if (!sh) return `<g transform="translate(${54 + (i % 2) * 18} ${y})" class="pt-docked">${ptShip("#C9A57A")}</g>`;
+  const d0 = new Date(sh.depart).getTime(), d1 = new Date(sh.arrive).getTime(), f = Math.min(1, Math.max(0, (now() - d0) / (d1 - d0)));
+  const x = 110 + f * (W - 150), mine = sh.pid === ME.id;
+  return `<g transform="translate(${x.toFixed(1)} ${y})" class="pt-sail" data-ship="${sh.id}">${ptShip(mine ? "#F2B33D" : "#FFF4E0")}<text x="14" y="30" class="pt-lbl">${esc(mine ? "Toi" : sh.name)}</text></g>`;
+}
+function ptShip(sail){
+  return `<path d="M0 14 H30 L25 22 H5 Z" fill="#7C4A24"/><rect x="14" y="-6" width="2" height="20" fill="#5E3517"/><path d="M16 -6 L28 10 H16 Z" fill="${sail}"/><path d="M14 -2 L5 10 H14 Z" fill="${sail}" opacity=".85"/>`;
+}
+function ptScene(){
+  const info = PT.info, n = info ? info.cfg.ships : 2, sea = info ? info.sea : [];
+  const boats = Array.from({ length: n }, (_, i) => ptBoat(sea[i], i, n)).join("");
+  return `<svg viewBox="0 0 360 220" class="pt-scene" aria-hidden="true">
+    <defs><linearGradient id="ptsea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7EC8E3"/><stop offset="1" stop-color="#2E7FA8"/></linearGradient></defs>
+    <rect width="360" height="220" fill="url(#ptsea)"/>
+    ${[30, 80, 130, 180].map((y, i) => `<path d="M${i % 2 ? 120 : 160} ${y} q10 -5 20 0 t20 0" class="pt-wave"/>`).join("")}
+    <path d="M300 0 Q290 60 330 110 Q360 150 360 220 V0Z" fill="#E9D3A0"/><path d="M318 40 l10 -18 l10 18z M330 70 l9 -16 l9 16z" fill="#4E8B4A"/>
+    <text x="322" y="204" class="pt-far">Étranger</text>
+    <rect x="0" y="0" width="58" height="220" fill="#B07A4A"/>${Array.from({ length: 8 }, (_, i) => `<rect x="0" y="${i * 28}" width="58" height="2" fill="#8A5A2E"/>`).join("")}
+    <rect x="44" y="0" width="6" height="220" fill="#7C4A24"/>
+    ${boats}</svg>`;
+}
+function portHTML(){
+  const info = PT.info, own = ptOwner(), mine = ptMine(), open = !!(info && info.open);
+  if (!info) return `<div class="pt"><div class="b2-col b2-pad"><p class="cz-empty">Le port se réveille…</p></div></div>`;
+  const cfg = info.cfg, my = info.sea.filter(s => s.pid === ME.id), free = ptFree();
+  const cap = own ? `<span>Le capitaine : <b>${esc(mine ? "toi" : own.name)}</b></span>` : `<span>Le port n'a pas encore de capitaine.</span>`;
+  const stats = `<div class="pt-stats"><span><b>${cfg.ships}</b>bateaux</span><span><b>${String(cfg.hours).replace(".", ",")} h</b>de voyage</span><span><b>${Math.round(cfg.storm * 100)} %</b>de tempête</span><span><b>×${String(PT_MULT).replace(".", ",")}</b>le cours</span></div>`;
+  let panel = "";
+  if (mine) panel = `<div class="b2-paper pt-own"><h2 class="b2-h2">Ton port<small>Tu prends 10 % sur chaque cargaison qui arrive à bon port. Les tiennes ne paient rien.</small></h2>
+      <div class="cz-sum" style="color:var(--ink)"><span>Commissions sur 24 h</span><b>+${COIN}${fmtN(+info.fees)}</b></div>
+      <div class="b2-two"><button class="b2-btn ${open ? "red" : "gold"}" data-a="pt-toggle">${open ? "Fermer le port" : "Ouvrir le port"}</button>
+      ${cfg.next ? `<button class="b2-btn" data-a="pt-up" data-cc="${cfg.next}">Niveau ${info.lvl + 1} ${price({ coins: cfg.next, wood: 0 })}</button>` : `<button class="b2-btn" disabled>Niveau max</button>`}</div>
+      ${cfg.next ? `<p class="b2-note">Niveau ${info.lvl + 1} : un bateau de plus, voyages plus courts, moins de tempêtes, cales plus grandes.</p>` : ""}
+      <div class="pt-heir"><span>Ton héritier<b>${info.heir ? esc(info.heir.name) : "Personne"}</b></span><button class="b2-btn ghost" data-a="pt-who" data-m="heir">${info.heir ? "Changer" : "Choisir"}</button></div>
+      <p class="b2-note">Si tu ne joues pas pendant 24 h d'affilée, le port passe à ton héritier${info.heir ? "" : " (sans héritier : au dernier du classement)"}.</p>
+      <button class="b2-btn ghost pt-give" data-a="pt-who" data-m="give">Céder le port maintenant</button></div>`;
+  const send = !own ? "" : !open ? `<div class="pt-shut">🔒 Le port est fermé${mine ? "" : `<small>Seul ${esc(own.name)} peut l'ouvrir.</small>`}</div>`
+    : `<button class="b2-btn big gold" data-a="pt-send" ${free ? "" : "disabled"}>${free ? `⛵ Envoyer une cargaison` : "Tous les bateaux sont en mer"}</button>
+       <p class="b2-note" style="text-align:center">${free ? `${free} bateau${free > 1 ? "x" : ""} libre${free > 1 ? "s" : ""} · ta cale : ${fmtN(ptHold())} unités` : `Le prochain rentre dans ${fmtT(Math.min(...info.sea.map(ptLeft)))}`}</p>`;
+  const myRows = my.map(s => `<div class="pt-row"><span class="pt-ic">${P[s.product] ? P[s.product].e : "📦"}</span><span class="sp">${fmtN(s.qty)} ${esc(P[s.product] ? P[s.product].label.toLowerCase() : s.product)}<small>Retour prévu : ${COIN}${fmtN(s.value)}</small></span><b data-pt-left="${s.id}">${fmtT(ptLeft(s))}</b></div>`).join("");
+  const log = info.log.length ? info.log.map(s => `<div class="pt-row"><span class="pt-ic">${s.storm ? "🌊" : "⚓"}</span><span class="sp">${esc(s.pid === ME.id ? "Toi" : s.name)} · ${fmtN(s.qty)} ${P[s.product] ? P[s.product].e : ""}<small>${fmtAgo(new Date(s.at).getTime())}</small></span><b class="${s.storm ? "dn" : "up"}">${s.storm ? "Coulé" : "+" + COIN + fmtN(s.value)}</b></div>`).join("") : `<p class="cz-empty">Aucun bateau n'est encore rentré.</p>`;
+  return `<div class="pt"><div class="b2-col b2-pad">
+    <div class="cz-hd"><span class="cz-st ${open ? "on" : ""}">${open ? "Ouvert" : "Fermé"}</span></div>
+    <h2 class="pt-ttl">Le Port</h2><div class="pt-cap">⚓ ${cap}</div>
+    ${info.prev && own && now() - new Date(info.since).getTime() < 864e5 ? `<div class="pt-news">Le port est passé de <b>${esc(info.prev.id === ME.id ? "toi" : info.prev.name)}</b> à <b>${esc(mine ? "toi" : own.name)}</b> ${fmtAgo(new Date(info.since).getTime())}.</div>` : ""}
+    <div class="pt-sw">${ptScene()}</div>${stats}
+    ${send}
+    ${my.length ? `<div class="b2-paper"><h2 class="b2-h2">Tes bateaux en mer</h2>${myRows}</div>` : ""}
+    ${panel}
+    <div class="b2-paper"><h2 class="b2-h2">Derniers retours</h2>${log}</div>
+    <p class="pt-note">L'étranger paie ${String(PT_MULT).replace(".", ",")} fois le cours du village au moment du départ, et ta vente ne fait pas baisser le cours. Le port garde 10 %. Si la tempête frappe, la cargaison est perdue.</p>
+  </div></div>`;
+}
+function ptSendSheet(k){
+  const ks = BX.ALL.filter(x => S.stock[x] >= 1);
+  if (!k){
+    if (!ks.length){ toast("Ta grange est vide."); return; }
+    sheetCtx = null;
+    sheet(`<h3>⛵ Que veux-tu envoyer ?</h3><p>Ta cale contient jusqu'à ${fmtN(ptHold())} unités.</p><div class="b2-stock">${ks.map(x => `<button class="b2-tile" data-a="pt-pick" data-k="${x}"><div class="ic">${P[x].e}</div><b>${fmtN(S.stock[x])}</b><small>${esc(P[x].label)}</small></button>`).join("")}</div>`);
+    return;
+  }
+  const max = Math.min(Math.floor(S.stock[k]), ptHold());
+  sheetCtx = { type:"port", k };
+  sheet(`<h3>${P[k].e} Envoyer à l'étranger</h3><p>Cours du village : <b>${fmtP(BX.vPrice(k, now()))}</b>. L'étranger paie ${String(PT_MULT).replace(".", ",")} fois plus, dans ${String(PT.info.cfg.hours).replace(".", ",")} h. Risque de tempête : ${Math.round(PT.info.cfg.storm * 100)} %.</p>
+    ${qtyBlock(max, max, "q")}<div class="b2-sum" data-sum></div><button class="b2-btn gold big" data-a="confirm">Larguer les amarres</button>`);
+  sheetSum();
+}
+function ptSum(q, k){
+  const v = Math.floor(q * BX.vPrice(k, now()) * PT_MULT), fee = ptMine() ? 0 : Math.floor(v * PT_FEE);
+  return `<span>À l'arrivée${fee ? ` <small>(après 10 % du port)</small>` : ""}</span><span>${COIN}${fmtN(v - fee)}</span>`;
+}
+async function ptSend(k, q){
+  if (q < 1 || q > S.stock[k]) return;
+  const unit = BX.vPrice(k, now());
+  S.stock[k] -= q; dirty = true; closeSheet(); live();
+  try{
+    const r = await queue(() => rpc("baron2_port_send", { p_token: getToken(), p_state: S, p_product: k, p_qty: q, p_unit: unit }));
+    lastSave = now(); PT.info = r; applyCredits(r.credits);
+    sound("up"); buzz([20, 40, 20]); toast(`⛵ Ta cargaison de ${fmtN(q)} ${P[k].e} a pris la mer !`, "gold");
+  }catch(e){
+    S.stock[k] += q;
+    const m = String(e && e.message || "");
+    toast(m.includes("port fermé") ? "Le capitaine vient de fermer le port." : m.includes("plus de bateau") ? "Trop tard : le dernier bateau vient de partir." : m.includes("cale") ? "C'est trop pour la cale du bateau." : errText(e), "err");
+    loadPort();
+  }
+  draw();
+}
+function ptWho(mode){
+  const ps = (W.players || []).filter(p => p.id !== ME.id);
+  if (!ps.length){ toast("Personne d'autre dans le village pour l'instant."); return; }
+  sheetCtx = null;
+  sheet(`<h3>${mode === "heir" ? "⚓ Choisis ton héritier" : "⚓ À qui céder le port ?"}</h3><p>${mode === "heir" ? "Il récupère le port si tu ne joues pas pendant 24 h d'affilée." : "Le port, son niveau et ses bateaux passent tout de suite à ce joueur. Tu ne pourras pas revenir en arrière."}</p>
+    <div class="pt-who">${ps.map(p => `<button class="b2-btn ghost" data-a="pt-pickwho" data-m="${mode}" data-id="${esc(p.id)}">${P[p.specialty] ? P[p.specialty].e : ""} ${esc(p.name)}</button>`).join("")}
+    ${mode === "heir" && PT.info.heir ? `<button class="b2-btn ghost" data-a="pt-pickwho" data-m="heir" data-id="">Aucun héritier</button>` : ""}</div>`);
+}
+async function ptPickWho(mode, id){
+  if (mode === "give" && !wrapEl.querySelector(".pt-who").dataset.sure){ wrapEl.querySelector(".pt-who").dataset.sure = id; const b = wrapEl.querySelector(`[data-a=pt-pickwho][data-id="${CSS.escape(id)}"]`); if (b){ b.classList.remove("ghost"); b.classList.add("red"); b.textContent = "Confirmer : céder à " + b.textContent.trim(); } return; }
+  if (mode === "give" && wrapEl.querySelector(".pt-who").dataset.sure !== id){ wrapEl.querySelector(".pt-who").dataset.sure = ""; ptPickWho(mode, id); return; }
+  try{
+    PT.info = await rpc(mode === "heir" ? "baron2_port_heir" : "baron2_port_give", mode === "heir" ? { p_token: getToken(), p_heir: id || null } : { p_token: getToken(), p_to: id });
+    closeSheet(); sound("up");
+    toast(mode === "heir" ? (PT.info.heir ? `Ton héritier : ${esc(PT.info.heir.name)}` : "Plus d'héritier.") : `⚓ Le port est maintenant à ${esc(PT.info.owner.name)}.`);
+  }catch(e){ toast(errText(e), "err"); }
+  draw();
+}
+async function ptToggle(){
+  try{ PT.info = await rpc("baron2_port_set", { p_token: getToken(), p_open: !PT.info.open }); sound("up"); toast(PT.info.open ? "⚓ Le port est ouvert !" : "Le port est fermé."); }
+  catch(e){ toast(errText(e), "err"); }
+  draw();
+}
+async function ptUp(){
+  const c = PT.info && PT.info.cfg.next; if (!c) return;
+  if (S.coins < c){ toast("Pas assez de pièces."); return; }
+  S.coins -= c; dirty = true; live();
+  try{ const r = await queue(() => rpc("baron2_port_up", { p_token: getToken(), p_state: S })); lastSave = now(); PT.info = r; applyCredits(r.credits); sound("up"); toast(`⚓ Ton port passe au niveau ${r.lvl} !`, "gold"); }
+  catch(e){ S.coins += c; toast(errText(e), "err"); }
+  draw();
+}
+function portBtn(){
+  const info = PT.info, own = ptOwner(), open = !!(info && info.open), sea = info ? info.sea.length : 0;
+  return `<button class="pt-card" data-a="tab" data-v="port"><span class="i">⚓</span><span class="sp"><b>Le Port</b><small>${own ? (ptMine() ? "Ton port" : "Capitaine : " + esc(own.name)) : "Vendre à l'étranger"}${sea ? ` · ${sea} en mer` : ""}</small></span><span class="cz-st ${open ? "on" : ""}">${open ? "Ouvert" : "Fermé"}</span></button>`;
+}
+function ptTick(){
+  if (!PT.info) return;
+  wrapEl.querySelectorAll("[data-pt-left]").forEach(el => { const s = PT.info.sea.find(x => String(x.id) === el.dataset.ptLeft); if (s) el.textContent = fmtT(ptLeft(s)); });
+  if (PT.info.sea.some(s => ptLeft(s) < -3000) && now() - PT.at > 8000) loadPort();
+}
+const PT_STYLE = `
+.pt{background:linear-gradient(#CFEAF5,#F3E3C7 340px);min-height:100%}
+.pt-ttl{font:400 38px/1 var(--disp);text-align:center;margin:10px 0 4px;color:#1E4E66}
+.pt-cap{text-align:center;font:700 14px var(--round);color:#2C5468}
+.pt-sw{margin:12px 0 8px;border-radius:18px;overflow:hidden;box-shadow:0 4px 0 #6F99AE,0 10px 20px rgba(30,78,102,.2)}
+.pt-scene{display:block;width:100%}
+.pt-wave{fill:none;stroke:rgba(255,255,255,.55);stroke-width:2;stroke-linecap:round}
+.pt-far{font:800 11px var(--round);fill:#7C4A24;text-anchor:middle}
+.pt-lbl{font:800 9px var(--round);fill:#fff;text-anchor:middle;paint-order:stroke;stroke:#1E4E66;stroke-width:2.5px}
+.pt-sail{animation:pt-bob 2.4s ease-in-out infinite}
+@keyframes pt-bob{50%{translate:0 2px}}
+.pt-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0 0 14px}
+.pt-stats span{background:#fff;border-radius:12px;padding:8px 4px;text-align:center;font:700 11px var(--round);color:var(--ink2);box-shadow:0 2px 0 rgba(124,74,36,.2)}
+.pt-stats b{display:block;font:800 16px var(--round);color:#1E4E66}
+.pt-shut{background:#3B1F17;color:#FFE6B8;padding:14px;border-radius:16px;font:800 16px var(--round);text-align:center;margin-bottom:14px}
+.pt-shut small{display:block;font:600 12px var(--round);opacity:.8;margin-top:3px}
+.pt .b2-paper{margin-top:14px}
+.pt-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid rgba(124,74,36,.12)}
+.pt-row:first-of-type{border-top:0}
+.pt-ic{font-size:24px;width:30px;text-align:center}
+.pt-row .sp{flex:1;font:700 14px var(--round);color:var(--ink)}.pt-row small{display:block;font:600 12px var(--round);color:var(--ink2)}
+.pt-row b{font:800 14px var(--round);white-space:nowrap;color:var(--ink)}
+.pt .up{color:#2F9E57!important}.pt .dn{color:#C8312A!important}
+.pt-note{font:600 12px/1.45 var(--round);color:var(--ink2);margin:14px 4px 0;text-align:center}
+.pt-news{background:#1E4E66;color:#F2FAFF;border-radius:14px;padding:10px 14px;margin:10px 0 0;text-align:center;font:600 13px var(--round)}
+.pt-heir{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(124,74,36,.15)}
+.pt-heir span{font:600 12px var(--round);color:var(--ink2)}.pt-heir b{display:block;font:800 16px var(--round);color:var(--ink)}
+.pt-give{width:100%;margin-top:4px}
+.pt-who{display:grid;gap:8px}
+.pt-card{width:100%;display:flex;align-items:center;gap:12px;margin:0 0 14px;padding:14px 16px;border-radius:18px;background:linear-gradient(135deg,#2E7FA8,#1E4E66)!important;color:#F2FAFF!important;box-shadow:0 4px 0 #13384A;text-align:left}
+.pt-card .i{font-size:30px}.pt-card .sp{flex:1}.pt-card b{display:block;font:400 24px var(--disp)}.pt-card small{font:700 12px var(--round);opacity:.85}
+`;
+try{ const pst = document.createElement("style"); pst.textContent = PT_STYLE; document.head.appendChild(pst); }catch(e){}
+
 /* ---------- Commandes en course : les mêmes pour tous, la prime au premier ---------- */
 let ORD = null;
 const curSlot = () => Math.floor(now() / BAL.slotMs);
@@ -3134,6 +3321,7 @@ function sheetSum(){
     if (ex) ex.innerHTML = `Si le cours passe à ${fmtP(pu)} → ta mise vaut <b>${fmtN(val(pu))}</b>. S'il passe à ${fmtP(pd)} → <b>${fmtN(val(pd))}</b>. À ${fmtP(p0 * (1 - d / L))}, elle tombe à zéro.`;
     const b = wrapEl.querySelector("[data-a=confirm]"); if (b) b.disabled = q < 1 || q + fee > S.coins; }
   if (c.type === "buy" || c.type === "colp"){ s.innerHTML = `<span>Tu paies</span><span>${COIN}${fmtN(q * c.price)}</span>`; const b = wrapEl.querySelector("[data-a=confirm]"); if (b) b.disabled = q < 1 || q * c.price > S.coins; }
+  if (c.type === "port"){ s.innerHTML = ptSum(q, c.k); }
   if (c.type === "bake"){ s.innerHTML = `<span>Cuisson</span><span>${fmtT(BX.ovenDur(S, c.k))}</span>`; }
 }
 function sellSheet(k){
@@ -3201,6 +3389,7 @@ async function confirm(){
   const c = sheetCtx; if (!c) return;
   const q = qval("q"); if (q < 1) return;
   const btn = wrapEl.querySelector("[data-a=confirm]"); if (btn) btn.disabled = true;
+  if (c.type === "port"){ ptSend(c.k, q); return; }
   if (c.type === "bet"){
     const b = BX.openBet(S, c.k, c.d, q, now());
     if (!b){ toast("Ce pari n'est pas possible.", "err"); closeSheet(); return; }
@@ -3287,6 +3476,7 @@ function onClick(e){
       view = tb.id; markSeen("tab_" + tb.id); closeSheet(); wrapEl.querySelector("#b2-main").scrollTop = 0; draw();
       if (view === "market" || view === "village") loadWorld(true);
       if (view === "casino"){ CZ.res = null; loadCasino(); }
+      if (view === "port") loadPort();
       return;
     }
     case "casino": view = "casino"; CZ.res = null; closeSheet(); wrapEl.querySelector("#b2-main").scrollTop = 0; draw(); loadCasino(); return;
@@ -3300,6 +3490,12 @@ function onClick(e){
     }
     case "cz-spin": czSpin(); return;
     case "cz-toggle": czToggle(); return;
+    case "pt-send": ptSendSheet(); return;
+    case "pt-pick": ptSendSheet(b.dataset.k); return;
+    case "pt-toggle": ptToggle(); return;
+    case "pt-up": ptUp(); return;
+    case "pt-who": ptWho(b.dataset.m); return;
+    case "pt-pickwho": ptPickWho(b.dataset.m, b.dataset.id); return;
     case "rank": if (!W.at){ loadWorld(true).then(() => S && rankSheet()); return; } rankSheet(); loadWorld(); return;
     case "tipx": markSeen("tip_" + b.dataset.id); draw(); return;
     case "mult": mult = b.dataset.m === "max" ? "max" : +b.dataset.m; draw(); return;
