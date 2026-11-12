@@ -3245,7 +3245,7 @@ function fakeBug(){
     <button class="fb-b red" data-fb="go">Réinitialiser ma ferme</button><button class="fb-b" data-fb="no">Plus tard</button>`;
   const step2 = `<div class="fb-ic">!</div><h3>Confirmer la réinitialisation</h3>
     <p>Ta ferme, ton stock, tes pièces et tes améliorations seront <b>définitivement supprimés</b>. Cette action est irréversible.</p>
-    <button class="fb-b red" data-fb="yes">Oui, supprimer ma ferme</button><button class="fb-b" data-fb="no">Annuler</button>`;
+    <button class="fb-b red" data-fb="yes">Oui, supprimer ma ferme</button><button class="fb-b" data-fb="no">Plus tard</button>`;
   ov.innerHTML = `<div class="fb-card">${step1}</div>`;
   document.body.appendChild(ov);
   const card = ov.querySelector(".fb-card");
