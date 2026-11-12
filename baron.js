@@ -3164,7 +3164,7 @@ try{ const pst = document.createElement("style"); pst.textContent = PT_STYLE; do
 
 /* =================== La Loterie du village (12 nov. 2026) ===================
    Le patron (le premier qui s'est « sacrifié » devant le faux bug) garde 10 % de chaque ticket.
-   Un ticket = 2 numéros de 1 à 15, 10 tickets max par tirage. Tirage tous les soirs à 21 h :
+   Un ticket = 2 numéros de 1 à 8 (1 chance sur 28), 10 tickets max par tirage. Tirage tous les soirs à 21 h :
    sans gagnant, la cagnotte grossit. */
 const LT = { info:null, at:0, pick:[], busy:false, prankShown:false };
 async function loadLotto(){
@@ -3192,7 +3192,7 @@ function lottoHTML(){
   if (!L || !L.owner) return `<div class="lt"><div class="b2-col b2-pad"><p class="cz-empty">La loterie n'a pas encore de patron.</p></div></div>`;
   const mine = ltMine(), left = new Date(L.draw_at).getTime() - now(), tk = L.mine || [], full = tk.length >= 10;
   const last = L.last ? `<div class="b2-paper lt-last"><h2 class="b2-h2">Dernier tirage</h2><div class="lt-row">${ltBall(L.last.a, "gold")}${ltBall(L.last.b, "gold")}<span class="sp">${L.last.winners.length ? `<b>${L.last.winners.map(w => esc(w.id === ME.id ? "Toi" : w.name)).join(", ")}</b> ${L.last.winners.length > 1 ? "se partagent" : "remporte"} ${COIN}${fmtN(L.last.jackpot)} !` : `Personne n'a trouvé. La cagnotte de ${COIN}${fmtN(L.last.jackpot)} est restée en jeu.`}<small>${L.last.tickets} ticket${L.last.tickets > 1 ? "s" : ""} joué${L.last.tickets > 1 ? "s" : ""}</small></span></div></div>` : "";
-  const grid = Array.from({ length: 15 }, (_, i) => i + 1).map(n => `<button class="lt-n ${LT.pick.includes(n) ? "on" : ""}" data-a="lt-num" data-n="${n}">${n}</button>`).join("");
+  const grid = Array.from({ length: 8 }, (_, i) => i + 1).map(n => `<button class="lt-n ${LT.pick.includes(n) ? "on" : ""}" data-a="lt-num" data-n="${n}">${n}</button>`).join("");
   const panel = mine ? `<div class="b2-paper"><h2 class="b2-h2">Ta loterie<small>Tu gardes 10 % de chaque ticket acheté par les autres.</small></h2>
       <div class="cz-sum" style="color:var(--ink)"><span>Gagné sur 24 h</span><b class="up">+${COIN}${fmtN(+L.fees)}</b></div>
       <div class="pt-heir"><span>Ton héritier<b>${L.heir ? esc(L.heir.name) : "Personne"}</b></span><button class="b2-btn ghost" data-a="pt-who" data-m="heir" data-k="lt">${L.heir ? "Changer" : "Choisir"}</button></div>
@@ -3203,7 +3203,7 @@ function lottoHTML(){
       <div class="lt-jl">Cagnotte</div><div class="lt-jp">${COIN}${fmtN(+L.jackpot)}</div>
       <div class="lt-cd">Tirage ce soir à 21 h · <b data-live="lt-cd">${fmtT(left)}</b></div>
       <div class="lt-meta">${L.count} ticket${L.count > 1 ? "s" : ""} en jeu · patron : ${esc(mine ? "toi" : L.owner.name)}</div></div>
-    <div class="b2-paper"><h2 class="b2-h2">Ton ticket<small>Choisis 2 numéros. Trouve les 2 du tirage et la cagnotte est à toi.</small></h2>
+    <div class="b2-paper"><h2 class="b2-h2">Ton ticket<small>Choisis 2 numéros entre 1 et 8. Trouve les 2 du tirage et la cagnotte est à toi (1 chance sur 28).</small></h2>
       <div class="lt-grid">${grid}</div>
       <div class="b2-two" style="margin-top:12px"><button class="b2-btn ghost" data-a="lt-rand" ${full ? "disabled" : ""}>Au hasard</button>
       <button class="b2-btn gold" data-a="lt-buy" ${LT.pick.length === 2 && !full && !LT.busy ? "" : "disabled"}>${full ? "10 tickets max" : `Jouer · ${COIN}${fmtN(+L.ticket)}`}</button></div>
@@ -3217,7 +3217,7 @@ function ltNum(n){
   if (i >= 0) LT.pick.splice(i, 1); else { if (LT.pick.length >= 2) LT.pick.shift(); LT.pick.push(n); }
   sound("tap"); buzz(6); draw();
 }
-function ltRand(){ const a = 1 + Math.floor(Math.random() * 15); let b = 1 + Math.floor(Math.random() * 14); if (b >= a) b++; LT.pick = [a, b]; sound("tap"); draw(); }
+function ltRand(){ const a = 1 + Math.floor(Math.random() * 8); let b = 1 + Math.floor(Math.random() * 7); if (b >= a) b++; LT.pick = [a, b]; sound("tap"); draw(); }
 async function ltBuy(){
   const L = LT.info; if (!L || LT.pick.length !== 2 || LT.busy) return;
   const c = +L.ticket; if (S.coins < c){ toast("Pas assez de pièces pour un ticket."); return; }
@@ -3288,7 +3288,7 @@ const LT_STYLE = `
 .lt-jp{font:800 44px/1.05 var(--round);color:#FFD970;text-shadow:0 3px 0 rgba(0,0,0,.25);display:flex;justify-content:center;align-items:center;gap:6px}
 .lt-jp .b2-coin,.lt-jp img{width:34px;height:34px}
 .lt-cd{font:700 14px var(--round);margin-top:8px}.lt-meta{font:600 12px var(--round);opacity:.75;margin-top:4px}
-.lt-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.lt-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;max-width:300px;margin:0 auto}
 .lt-n{aspect-ratio:1;border-radius:50%!important;background:#fff!important;border:2px solid #E6CFA8!important;font:800 18px var(--round)!important;color:var(--ink)!important;box-shadow:0 3px 0 #D9BE92;transition:transform .12s}
 .lt-n.on{background:#C8312A!important;border-color:#8E1F1A!important;color:#fff!important;transform:translateY(-3px);box-shadow:0 5px 0 #5E1410}
 .lt-mine{margin-top:14px;font:700 12px var(--round);color:var(--ink2)}

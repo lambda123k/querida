@@ -1,7 +1,7 @@
 -- =====================================================================
 -- Le Baron · la Loterie du village (12 nov. 2026)
 -- Le patron est le premier qui « se sacrifie » devant un faux message d'erreur (un piège : rien
--- n'est supprimé). Il garde 10 % de chaque ticket vendu. Chaque ticket = 2 numéros de 1 à 15.
+-- n'est supprimé). Il garde 10 % de chaque ticket vendu. Chaque ticket = 2 numéros de 1 à 8 (1 chance sur 28).
 -- Tirage tous les soirs à 21 h (heure de Paris) ; s'il n'y a pas de gagnant, la cagnotte grossit.
 -- Changement de patron comme le Port : héritier choisi, et passage après 24 h sans jouer.
 -- =====================================================================
@@ -43,7 +43,7 @@ declare L baron2_lotto; x int; y int; n int; w jsonb; per numeric; nxt text;
 begin
   select * into L from baron2_lotto where id = 1 for update;
   while L.draw_at <= now() loop
-    x := 1 + floor(random() * 15)::int; y := 1 + floor(random() * 14)::int; if y >= x then y := y + 1; end if;
+    x := 1 + floor(random() * 8)::int; y := 1 + floor(random() * 7)::int; if y >= x then y := y + 1; end if;
     if x > y then n := x; x := y; y := n; end if;
     select count(*) into n from baron2_lotto_tickets where draw_at = L.draw_at;
     select coalesce(jsonb_agg(jsonb_build_object('id', player_id, 'name', name)), '[]') into w from baron2_lotto_tickets where draw_at = L.draw_at and a = x and b = y;
@@ -128,7 +128,7 @@ begin
   select name into nm from baron2_players where id = v;
   for pk in select * from jsonb_array_elements(p_picks) loop
     x := (pk->>0)::int; y := (pk->>1)::int;
-    if x is null or y is null or x = y or least(x, y) < 1 or greatest(x, y) > 15 then raise exception 'ticket invalide'; end if;
+    if x is null or y is null or x = y or least(x, y) < 1 or greatest(x, y) > 8 then raise exception 'ticket invalide'; end if;
     insert into baron2_lotto_tickets(draw_at, player_id, name, a, b) values (L.draw_at, v, nm, least(x, y), greatest(x, y));
   end loop;
   update baron2_lotto set jackpot = jackpot + floor(n * L.ticket * 0.9) where id = 1;
