@@ -2994,26 +2994,26 @@ const ptFree = () => PT.info ? Math.max(0, PT.info.cfg.ships - PT.info.sea.lengt
 const ptLeft = sh => new Date(sh.arrive).getTime() - (now() - (PT.skew || 0));
 function ptBoat(sh, i, n){
   // un bateau : à quai s'il est libre, sinon en mer, d'autant plus loin que le voyage avance
-  const W = 340, y = 46 + i * (150 / Math.max(1, n));
-  if (!sh) return `<g transform="translate(${54 + (i % 2) * 18} ${y})" class="pt-docked">${ptShip("#C9A57A")}</g>`;
+  const W = 340, y = 22 + i * 26;
+  if (!sh) return `<g transform="translate(${60 + (i % 2) * 14} ${y})" class="pt-docked">${ptShip("#C9A57A")}</g>`;
   const d0 = new Date(sh.depart).getTime(), d1 = new Date(sh.arrive).getTime(), f = Math.min(1, Math.max(0, (now() - d0) / (d1 - d0)));
-  const x = 110 + f * (W - 150), mine = sh.pid === ME.id;
-  return `<g transform="translate(${x.toFixed(1)} ${y})" class="pt-sail" data-ship="${sh.id}">${ptShip(mine ? "#F2B33D" : "#FFF4E0")}<text x="14" y="30" class="pt-lbl">${esc(mine ? "Toi" : sh.name)}</text></g>`;
+  const x = 100 + f * (W - 190), mine = sh.pid === ME.id;
+  return `<g transform="translate(${x.toFixed(1)} ${y})" class="pt-sail" data-ship="${sh.id}">${ptShip(mine ? "#F2B33D" : "#FFF4E0")}<text x="34" y="14" class="pt-lbl">${esc(mine ? "Toi" : sh.name)}</text></g>`;
 }
 function ptShip(sail){
   return `<path d="M0 14 H30 L25 22 H5 Z" fill="#7C4A24"/><rect x="14" y="-6" width="2" height="20" fill="#5E3517"/><path d="M16 -6 L28 10 H16 Z" fill="${sail}"/><path d="M14 -2 L5 10 H14 Z" fill="${sail}" opacity=".85"/>`;
 }
 function ptScene(){
   const info = PT.info, n = info ? info.cfg.ships : 2, sea = info ? info.sea : [];
-  const boats = Array.from({ length: n }, (_, i) => ptBoat(sea[i], i, n)).join("");
-  return `<svg viewBox="0 0 360 220" class="pt-scene" aria-hidden="true">
+  const boats = Array.from({ length: n }, (_, i) => ptBoat(sea[i], i, n)).join(""), H = Math.max(220, 30 + n * 26);
+  return `<svg viewBox="0 0 360 ${H}" class="pt-scene" aria-hidden="true">
     <defs><linearGradient id="ptsea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7EC8E3"/><stop offset="1" stop-color="#2E7FA8"/></linearGradient></defs>
-    <rect width="360" height="220" fill="url(#ptsea)"/>
+    <rect width="360" height="${H}" fill="url(#ptsea)"/>
     ${[30, 80, 130, 180].map((y, i) => `<path d="M${i % 2 ? 120 : 160} ${y} q10 -5 20 0 t20 0" class="pt-wave"/>`).join("")}
-    <path d="M300 0 Q290 60 330 110 Q360 150 360 220 V0Z" fill="#E9D3A0"/><path d="M318 40 l10 -18 l10 18z M330 70 l9 -16 l9 16z" fill="#4E8B4A"/>
-    <text x="322" y="204" class="pt-far">Étranger</text>
-    <rect x="0" y="0" width="58" height="220" fill="#B07A4A"/>${Array.from({ length: 8 }, (_, i) => `<rect x="0" y="${i * 28}" width="58" height="2" fill="#8A5A2E"/>`).join("")}
-    <rect x="44" y="0" width="6" height="220" fill="#7C4A24"/>
+    <path d="M300 0 Q290 ${H * .27} 330 ${H / 2} Q360 ${H * .68} 360 ${H} V0Z" fill="#E9D3A0"/><path d="M318 40 l10 -18 l10 18z M330 70 l9 -16 l9 16z" fill="#4E8B4A"/>
+    <text x="322" y="${H - 16}" class="pt-far">Étranger</text>
+    <rect x="0" y="0" width="58" height="${H}" fill="#B07A4A"/>${Array.from({ length: Math.ceil(H / 28) }, (_, i) => `<rect x="0" y="${i * 28}" width="58" height="2" fill="#8A5A2E"/>`).join("")}
+    <rect x="44" y="0" width="6" height="${H}" fill="#7C4A24"/>
     ${boats}</svg>`;
 }
 function portHTML(){
@@ -3039,7 +3039,7 @@ function portHTML(){
   return `<div class="pt"><div class="b2-col b2-pad">
     <div class="cz-hd"><span class="cz-st ${open ? "on" : ""}">${open ? "Ouvert" : "Fermé"}</span></div>
     <h2 class="pt-ttl">Le Port</h2><div class="pt-cap">⚓ ${cap}</div>
-    ${info.prev && own && now() - new Date(info.since).getTime() < 864e5 ? `<div class="pt-news">Le port est passé de <b>${esc(info.prev.id === ME.id ? "toi" : info.prev.name)}</b> à <b>${esc(mine ? "toi" : own.name)}</b> ${fmtAgo(new Date(info.since).getTime())}.</div>` : ""}
+    ${info.prev && own && info.prev.id !== own.id && now() - new Date(info.since).getTime() < 864e5 ? `<div class="pt-news">Le port est passé de <b>${esc(info.prev.id === ME.id ? "toi" : info.prev.name)}</b> à <b>${esc(mine ? "toi" : own.name)}</b> ${fmtAgo(new Date(info.since).getTime())}.</div>` : ""}
     <div class="pt-sw">${ptScene()}</div>${stats}
     ${send}
     ${my.length ? `<div class="b2-paper"><h2 class="b2-h2">Tes bateaux en mer</h2>${myRows}</div>` : ""}
@@ -3136,7 +3136,7 @@ const PT_STYLE = `
 .pt-scene{display:block;width:100%}
 .pt-wave{fill:none;stroke:rgba(255,255,255,.55);stroke-width:2;stroke-linecap:round}
 .pt-far{font:800 11px var(--round);fill:#7C4A24;text-anchor:middle}
-.pt-lbl{font:800 9px var(--round);fill:#fff;text-anchor:middle;paint-order:stroke;stroke:#1E4E66;stroke-width:2.5px}
+.pt-lbl{font:800 10px var(--round);fill:#fff;text-anchor:start;paint-order:stroke;stroke:#1E4E66;stroke-width:2.5px}
 .pt-sail{animation:pt-bob 2.4s ease-in-out infinite}
 @keyframes pt-bob{50%{translate:0 2px}}
 .pt-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0 0 14px}

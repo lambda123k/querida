@@ -60,11 +60,11 @@ alter table public.baron2_ships enable row level security;
 create or replace function public._baron2_port_cfg(l int) returns jsonb
 language sql immutable as $$
   select (array[
-    '{"ships":2,"hours":4,  "storm":0.15,"hold":0.10,"next":30e9}',
-    '{"ships":3,"hours":3.5,"storm":0.12,"hold":0.14,"next":90e9}',
-    '{"ships":4,"hours":3,  "storm":0.10,"hold":0.18,"next":250e9}',
-    '{"ships":5,"hours":2.5,"storm":0.07,"hold":0.24,"next":600e9}',
-    '{"ships":6,"hours":2,  "storm":0.05,"hold":0.30,"next":null}'
+    '{"ships":10,"hours":1,   "storm":0.15,"hold":0.10,"next":30e9}',
+    '{"ships":11,"hours":0.9, "storm":0.12,"hold":0.14,"next":90e9}',
+    '{"ships":12,"hours":0.8, "storm":0.10,"hold":0.18,"next":250e9}',
+    '{"ships":13,"hours":0.7, "storm":0.07,"hold":0.24,"next":600e9}',
+    '{"ships":14,"hours":0.6, "storm":0.05,"hold":0.30,"next":null}'
   ])[greatest(1, least(5, l))]::jsonb;
 $$;
 
