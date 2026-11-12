@@ -893,8 +893,8 @@ const STYLE = `
 /* barre d'onglets (planche de bois) */
 .b2-tabs{position:relative;z-index:5;background:linear-gradient(#7C4A24,#5E3517);box-shadow:0 -2px 0 #9A6334 inset,0 -6px 14px rgba(0,0,0,.15);padding:6px 6px calc(env(safe-area-inset-bottom,0px) + 6px)}
 .b2-tabs .b2-col{display:flex;gap:4px}
-.b2-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;padding:6px 2px 5px;border-radius:12px;color:#F5DFC2!important;font:700 12px var(--round)!important;position:relative}
-.b2-tab .i{font-size:23px;line-height:1.1;filter:saturate(.85)}
+.b2-tab{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:1px;padding:6px 1px 5px;border-radius:12px;color:#F5DFC2!important;font:700 11.5px var(--round)!important;position:relative}
+.b2-tab .i{font-size:22px;line-height:1.1;filter:saturate(.85)}
 .b2-tab.on{background:#F3E3C7!important;color:var(--ink)!important;box-shadow:0 3px 0 #C9A57A}
 .b2-tab.locked{opacity:.45}
 .b2-tab.locked .i{filter:grayscale(1)}
@@ -1702,6 +1702,7 @@ const TABS = [
   { id:"atelier", label:"Atelier",i:"🛠️", need:"atelier", why:"L'atelier ouvre quand tu débloques ta 3e parcelle." },
   { id:"market",  label:"Marché", i:"📈", need:"marche",  why:"Le marché ouvre quand tu débloques ta 2e parcelle." },
   { id:"village", label:"Village",i:"🏘️", need:"village", why:"Le village ouvre quand tu débloques ta 3e parcelle." },
+  { id:"casino",  label:"Casino", i:"🎰", need:"village", why:"Le casino ouvre avec le village, à ta 3e parcelle." },
 ];
 function openBaron(){
   closeBaron(true);
@@ -1767,7 +1768,7 @@ function loop(){
     if (n % 4 === 0) checkSurprises();
     if (n % 20 === 10) betCheck();
     if (view === "atelier") etbTick(now());
-    if (n % 16 === 8 && (view === "casino" || view === "village") && !CZ.spinning) loadCasino();
+    if (n % 16 === 8 && view === "casino" && !CZ.spinning) loadCasino();
     if (n % 80 === 20 && view === "atelier") loadEtb().then(() => { if (view === "atelier" && !sheetOpen && !gestOpen) draw(); });
     n++;
     if (n % 4 === 0) rankTick();
@@ -1856,7 +1857,7 @@ function draw(){
   wrapEl.querySelector("#b2-tabs").innerHTML = `<div class="b2-col">${TABS.map(t => {
     const lock = t.need && !BX.unlocked(S, t.need);
     const dot = !lock && t.need && (!seen("tab_" + t.id) || (t.id === "village" && surpDot && view !== "village"));
-    return `<button class="b2-tab ${view === t.id || (view === "casino" && t.id === "village") ? "on" : ""} ${lock ? "locked" : ""}" data-a="tab" data-v="${t.id}"><span class="i">${lock ? "🔒" : t.i}</span>${t.label}${dot ? `<span class="dot"></span>` : ""}</button>`;
+    return `<button class="b2-tab ${view === t.id ? "on" : ""} ${lock ? "locked" : ""}" data-a="tab" data-v="${t.id}"><span class="i">${lock ? "🔒" : t.i}</span>${t.label}${dot ? `<span class="dot"></span>` : ""}</button>`;
   }).join("")}</div>`;
   geo = null; if (view === "farm") requestAnimationFrame(measure);
   live(true);
@@ -2725,7 +2726,6 @@ function villageHTML(){
     ${ORD && P[ORD.next_big] ? `<div class="b2-ann"><span>📣 Prochaine grande commande : <b>${P[ORD.next_big].e} ${esc(P[ORD.next_big].label)}</b><small>Fais ton stock avant les autres !</small></span></div>` : ""}
     <div class="b2-notes">${notes}</div>
     ${top ? `<div class="b2-baron"><span class="crown">${CROWN}</span><div class="sp"><small>Le Baron du moment</small><b>${esc(top.id === ME.id ? "C'est toi !" : top.name)}</b><span class="f">${COIN}${fmtN(top.stats?.fortune || 0)} · ${P[top.specialty]?.e || ""} ${esc(P[top.specialty]?.label || "")}</span></div></div>` : ""}
-    ${casinoCard()}
     <div class="b2-paper b2-rank"><h2 class="b2-h2">Classement<small>Fortune : argent, stock et la moitié de ce que tu as construit.</small></h2>
       ${players.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}${p.stats?.pio ? " 🎖️" : ""}<small>${esc(P[p.specialty]?.label || "")}${p.stats?.farms && p.stats.farms.length > 1 ? " + " + p.stats.farms.filter(x => x !== p.specialty).map(x => P[x]?.e).join("") : ""} · ${fmtN(p.stats?.prod || 0, 1)} pièces/s</small></span><span class="f">${COIN}${fmtN(p.stats?.fortune || 0)}</span></div>`).join("")}
     </div>
@@ -2819,7 +2819,7 @@ function casinoHTML(){
       <div class="cz-acts"><button class="b2-btn ghost" data-a="cz-clear" ${stake ? "" : "disabled"}>Effacer</button><button class="b2-btn ghost" data-a="cz-again" ${CZ.last && !stake ? "" : "disabled"}>Rejouer</button></div>
       <button class="b2-btn big gold cz-go" data-a="cz-spin" ${stake && open && !CZ.spinning ? "" : "disabled"}>${stake ? `Lancer · ${COIN}${fmtN(stake)}` : "Pose tes jetons"}</button></div>`;
   return `<div class="cz"><div class="b2-col b2-pad">
-    <div class="cz-hd"><button class="b2-btn ghost cz-back" data-a="tab" data-v="village">‹ Village</button><span class="cz-st ${open ? "on" : ""}">${open ? "Ouvert" : "Fermé"}</span></div>
+    <div class="cz-hd"><span class="cz-st ${open ? "on" : ""}">${open ? "Ouvert" : "Fermé"}</span></div>
     <h2 class="cz-ttl">Casino du Baron</h2>
     <div class="cz-banker">${CROWN}<span>La banque : <b>${bar ? esc(me ? "toi" : bar.name) : "…"}</b></span></div>
     <div class="cz-wh">${czWheelSVG()}${res}</div>
@@ -2892,7 +2892,7 @@ function casinoCard(){
 }
 const CZ_STYLE = `
 .cz{background:radial-gradient(120% 70% at 50% 0,#1B7A4E,#0E4B30 60%,#0A3826);min-height:100%;color:#F5ECD6}
-.cz-hd{display:flex;align-items:center;justify-content:space-between}
+.cz-hd{display:flex;align-items:center;justify-content:center}
 .cz .b2-btn.ghost{background:rgba(255,255,255,.12)!important;color:#F5ECD6!important}
 .cz-st{font:800 12px var(--round);padding:4px 10px;border-radius:99px;background:rgba(0,0,0,.3);color:#E9C9B5;letter-spacing:.02em}
 .cz-st.on{background:#F2B33D;color:#4A2C00}
@@ -3275,6 +3275,7 @@ function onClick(e){
       if (tb.id === "market") mkt.open = false;
       view = tb.id; markSeen("tab_" + tb.id); closeSheet(); wrapEl.querySelector("#b2-main").scrollTop = 0; draw();
       if (view === "market" || view === "village") loadWorld(true);
+      if (view === "casino"){ CZ.res = null; loadCasino(); }
       return;
     }
     case "casino": view = "casino"; CZ.res = null; closeSheet(); wrapEl.querySelector("#b2-main").scrollTop = 0; draw(); loadCasino(); return;
