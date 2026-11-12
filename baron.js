@@ -770,7 +770,7 @@ function applyCredits(list){
     if (c.product === "lotto_fee"){ portFees.push(Object.assign({}, c, { lt: 1 })); continue; }
     if (c.product === "fly_win"){ S.stats.earned += +c.coins || 0; continue; }
     if (c.product === "fly_fee"){ portFees.push(Object.assign({}, c, { fl: 1 })); continue; }
-    if (c.product === "charge"){ toast(`🧾 Charges ${c.buyer === "Casino" ? "du casino" : c.buyer === "Port" ? "du port" : c.buyer === "Loterie" ? "de la loterie" : "de l'Envol"} : −${COIN}${fmtN(-c.coins)}, versées à la cagnotte de la Loterie`); continue; }
+    if (c.product === "charge"){ toast(`🧾 Charges ${c.buyer === "Casino" ? "du casino" : c.buyer === "Port" ? "du port" : c.buyer === "Loterie" ? "de la loterie" : "de l'aérodrome"} : −${COIN}${fmtN(-c.coins)}, versées à la cagnotte de la Loterie`); continue; }
     if (c.product === "lotto_win"){ S.stats.earned += +c.coins || 0; toast(`🎟️ JACKPOT ! Ton ticket ${esc(c.buyer)} est sorti : +${COIN}${fmtN(c.coins)}`, "gold"); sound("up"); buzz([60, 40, 60, 40, 120]); continue; }
     S.stats.sold += +c.coins || 0; S.stats.earned += +c.coins || 0;
     msgs.push(c);
@@ -1789,8 +1789,8 @@ function loop(){
     if (n % 20 === 10) betCheck();
     if (view === "atelier") etbTick(now());
     if (view === "port") ptTick();
-    if (view === "lotto") ltTick();
-    if (n % 40 === 30 && (view === "lotto" || view === "village")) loadLotto();
+    if (view === "lotto" || (view === "casino" && CZ.game === "lotto")) ltTick();
+    if (n % 40 === 30 && (view === "lotto" || view === "casino")) loadLotto();
     if (n % 40 === 12 && (view === "port" || view === "village")) loadPort();
     if (n % 16 === 8 && view === "casino" && !CZ.spinning) loadCasino();
     if (n % 80 === 20 && view === "atelier") loadEtb().then(() => { if (view === "atelier" && !sheetOpen && !gestOpen) draw(); });
@@ -2750,7 +2750,7 @@ function villageHTML(){
   const players = ranking();
   const top = players[0];
   const best = (key, label, i, unit) => { const p = players.slice().sort((a, b) => (+b.stats?.[key] || 0) - (+a.stats?.[key] || 0))[0]; return p && +p.stats?.[key] > 0 ? `<div class="b2-ttl"><span class="i">${i}</span><b>${label}</b><span>${esc(p.id === ME.id ? "Toi" : p.name)}</span></div>` : `<div class="b2-ttl"><span class="i" style="filter:grayscale(1)">${i}</span><b>${label}</b><span style="color:var(--ink3)">Personne encore</span></div>`; };
-  return `<div class="b2-vil"><div class="b2-col b2-pad">${portBtn()}${lottoBtn()}
+  return `<div class="b2-vil"><div class="b2-col b2-pad">${portBtn()}
     <div class="b2-paper" style="background:#FFF4E0"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><h2 class="b2-h2" style="margin:0">Commandes du village<small>Les mêmes pour tout le village. La prime va au premier qui termine : les autres sont seulement payés au prix de base.</small></h2><span class="b2-clock">⏳ <span data-live="clock">${fmtT(((ORD ? ORD.slot : curSlot()) + 1) * BAL.slotMs - now())}</span></span></div></div>
     ${ORD && P[ORD.next_big] ? `<div class="b2-ann"><span>📣 Prochaine grande commande : <b>${P[ORD.next_big].e} ${esc(P[ORD.next_big].label)}</b><small>Fais ton stock avant les autres !</small></span></div>` : ""}
     <div class="b2-notes">${notes}</div>
@@ -2768,7 +2768,7 @@ function villageHTML(){
 const CZ_ORDER = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
 const CZ_RED = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
 const czCol = n => n === 0 ? "g" : CZ_RED.has(n) ? "r" : "k";
-const CZ = { game:"roulette", info:null, at:0, bets:{}, last:null, chip:1, spinning:false, hold:false, wheel:0, ball:0, res:null, seen:0 };
+const CZ = { game:"lobby", info:null, at:0, bets:{}, last:null, chip:1, spinning:false, hold:false, wheel:0, ball:0, res:null, seen:0 };
 const CZ_LABEL = { rouge:"Rouge", noir:"Noir", pair:"Pair", impair:"Impair", manque:"1 à 18", passe:"19 à 36", d1:"1 à 12", d2:"13 à 24", d3:"25 à 36", c1:"Colonne", c2:"Colonne", c3:"Colonne" };
 async function loadCasino(){
   try{
@@ -2847,10 +2847,12 @@ function casinoHTML(){
       ${czTable()}
       <div class="cz-acts"><button class="b2-btn ghost" data-a="cz-clear" ${stake ? "" : "disabled"}>Effacer</button><button class="b2-btn ghost" data-a="cz-again" ${CZ.last && !stake ? "" : "disabled"}>Rejouer</button></div>
       <button class="b2-btn big gold cz-go" data-a="cz-spin" ${stake && open && !CZ.spinning ? "" : "disabled"}>${stake ? `Lancer · ${COIN}${fmtN(stake)}` : "Pose tes jetons"}</button></div>`;
-  const games = `<div class="cz-games"><button class="${CZ.game === "roulette" ? "on" : ""}" data-a="cz-game" data-g="roulette">🎡 Roulette</button><button class="${CZ.game === "envol" ? "on" : ""}" data-a="cz-game" data-g="envol">✈️ L'Envol</button></div>`;
-  if (CZ.game === "envol") return `<div class="cz"><div class="b2-col b2-pad"><h2 class="cz-ttl">Casino du Baron</h2>${games}${envolHTML()}</div></div>`;
+  const back = t => `<div class="cz-top"><button class="b2-btn ghost cz-back" data-a="cz-game" data-g="lobby">‹ Casino</button><span>${t}</span></div>`;
+  if (CZ.game === "lobby") return czLobby();
+  if (CZ.game === "lotto") return `<div class="cz cz-lt"><div class="b2-col b2-pad" style="padding-bottom:0">${back("🎟️ La Loterie")}</div>${lottoHTML()}</div>`;
+  if (CZ.game === "envol") return `<div class="cz"><div class="b2-col b2-pad">${back("✈️ L'Aérodrome")}${envolHTML()}</div></div>`;
   return `<div class="cz"><div class="b2-col b2-pad">
-    <h2 class="cz-ttl">Casino du Baron</h2>${games}
+    ${back("🎡 La Roulette")}
     <div class="cz-hd"><span class="cz-st ${open ? "on" : ""}">${open ? "Roulette ouverte" : "Roulette fermée"}</span></div>
     <div class="cz-banker">${CROWN}<span>La banque : <b>${bar ? esc(me ? "toi" : bar.name) : "…"}</b></span></div>
     <div class="cz-wh">${czWheelSVG()}${res}</div>
@@ -2858,6 +2860,17 @@ function casinoHTML(){
     ${body}
     <div class="cz-feed"><h3>Derniers tours</h3>${czFeed()}</div>
     <p class="cz-note">Roulette européenne : un numéro paie 35 fois la mise, une douzaine ou une colonne 2 fois, rouge, noir, pair, impair, 1-18 et 19-36 paient 1 fois. Le 0 fait tout perdre, sauf si tu as misé dessus.</p>
+  </div></div>`;
+}
+function czLobby(){
+  const ci = CZ.info, bar = czBaron(), open = !!(ci && ci.open), F = FL.info, L = LT.info;
+  const fh = F && F.hist.length ? F.hist.slice(0, 5).map(h => `<span class="fl-h ${flCol(+h.c)}">${flFmt(+h.c)}</span>`).join("") : "";
+  const card = (g, ic, name, line, side, cls) => `<button class="cz-room ${cls}" data-a="cz-game" data-g="${g}"><span class="ic">${ic}</span><span class="sp"><b>${name}</b><small>${line}</small></span>${side}</button>`;
+  return `<div class="cz"><div class="b2-col b2-pad">
+    <h2 class="cz-ttl">Casino du Baron</h2><p class="cz-lead">Choisis ta table.</p>
+    ${card("roulette", "🎡", "La Roulette", bar ? (czIamBaron() ? "Tu tiens la banque" : "Banque : " + esc(bar.name)) : "Roulette européenne", `<span class="cz-st ${open ? "on" : ""}">${open ? "Ouverte" : "Fermée"}</span>`, "r")}
+    ${card("envol", "✈️", "L'Aérodrome", F && F.owner ? `Patron : ${esc(F.owner.id === ME.id ? "toi" : F.owner.name)}${fh ? `<span class="cz-mini">${fh}</span>` : ""}` : "Encaisse avant le crash", `<span class="go">›</span>`, "a")}
+    ${card("lotto", "🎟️", "La Loterie", L && L.owner ? `Cagnotte ${COIN}${fmtN(+L.jackpot)} · tirage à ${ltHour(L.draw_at)}` : "Bientôt…", `<span class="go">›</span>`, "l")}
   </div></div>`;
 }
 function czBet(k){
@@ -3089,10 +3102,10 @@ async function ptSend(k, q){
   draw();
 }
 function ptWho(mode, kind){
-  const lt = kind === "lt", fl = kind === "fl", ps = (W.players || []).filter(p => p.id !== ME.id), cur = lt ? LT.info : fl ? FL.info : PT.info, ic = lt ? "🎟️" : fl ? "✈️" : "⚓", what = lt ? "la loterie" : fl ? "l'Envol" : "le port";
+  const lt = kind === "lt", fl = kind === "fl", ps = (W.players || []).filter(p => p.id !== ME.id), cur = lt ? LT.info : fl ? FL.info : PT.info, ic = lt ? "🎟️" : fl ? "✈️" : "⚓", what = lt ? "la loterie" : fl ? "l'aérodrome" : "le port";
   if (!ps.length){ toast("Personne d'autre dans le village pour l'instant."); return; }
   sheetCtx = null;
-  sheet(`<h3>${mode === "heir" ? `${ic} Choisis ton héritier` : `${ic} À qui céder ${what} ?`}</h3><p>${mode === "heir" ? `Il récupère ${what} si tu ne joues pas pendant 24 h d'affilée.` : `${lt ? "La loterie et ses 10 %" : fl ? "L'Envol et sa boîte noire" : "Le port, son niveau et ses bateaux"} passent tout de suite à ce joueur. Tu ne pourras pas revenir en arrière.`}</p>
+  sheet(`<h3>${mode === "heir" ? `${ic} Choisis ton héritier` : `${ic} À qui céder ${what} ?`}</h3><p>${mode === "heir" ? `Il récupère ${what} si tu ne joues pas pendant 24 h d'affilée.` : `${lt ? "La loterie et ses 10 %" : fl ? "L'aérodrome et sa boîte noire" : "Le port, son niveau et ses bateaux"} passent tout de suite à ce joueur. Tu ne pourras pas revenir en arrière.`}</p>
     <div class="pt-who">${ps.map(p => `<button class="b2-btn ghost" data-a="pt-pickwho" data-m="${mode}" data-k="${kind || "pt"}" data-id="${esc(p.id)}">${P[p.specialty] ? P[p.specialty].e : ""} ${esc(p.name)}</button>`).join("")}
     ${mode === "heir" && cur.heir ? `<button class="b2-btn ghost" data-a="pt-pickwho" data-m="heir" data-k="${kind || "pt"}" data-id="">Aucun héritier</button>` : ""}</div>`);
 }
@@ -3108,7 +3121,7 @@ async function ptPickWho(mode, id, kind){
     const r = await rpc(fn, mode === "heir" ? { p_token: getToken(), p_heir: id || null } : { p_token: getToken(), p_to: id });
     if (lt) LT.info = r; else if (fl) FL.info = r; else PT.info = r;
     closeSheet(); sound("up");
-    toast(mode === "heir" ? (r.heir ? `Ton héritier : ${esc(r.heir.name)}` : "Plus d'héritier.") : `${lt ? "🎟️ La loterie" : fl ? "✈️ L'Envol" : "⚓ Le port"} est maintenant à ${esc(r.owner.name)}.`);
+    toast(mode === "heir" ? (r.heir ? `Ton héritier : ${esc(r.heir.name)}` : "Plus d'héritier.") : `${lt ? "🎟️ La loterie" : fl ? "✈️ L'aérodrome" : "⚓ Le port"} est maintenant à ${esc(r.owner.name)}.`);
   }catch(e){ toast(errText(e), "err"); }
   draw();
 }
@@ -3178,7 +3191,7 @@ async function loadLotto(){
     const r = await rpc("baron2_lotto_get", { p_token: getToken() }); LT.info = r; LT.at = now();
     ltReveal();
     if (r.prank && !LT.prankShown){ LT.prankShown = true; setTimeout(() => { if (wrapEl && LT.info && LT.info.prank) fakeBug(); }, 3500); }
-    if (view === "lotto" && !sheetOpen) draw();
+    if ((view === "lotto" || (view === "casino" && (CZ.game === "lotto" || CZ.game === "lobby"))) && !sheetOpen && !FL.f) draw();
   }catch(e){}
 }
 const ltMine = () => !!(LT.info && LT.info.owner && LT.info.owner.id === ME.id);
@@ -3277,7 +3290,7 @@ function fakeBug(){
       }
       return;
     }
-    if (a === "see"){ ov.remove(); view = "lotto"; draw(); }
+    if (a === "see"){ ov.remove(); view = "casino"; CZ.game = "lotto"; draw(); }
   });
 }
 function ltTick(){
@@ -3329,7 +3342,7 @@ try{ const lst = document.createElement("style"); lst.textContent = LT_STYLE; do
    (10 % des mises perdues) et ne peut pas jouer. */
 const FL = { info:null, at:0, chip:1, stake:0, f:null, raf:0, poll:0, res:null };
 async function loadFly(){
-  try{ FL.info = await rpc("baron2_fly_get", { p_token: getToken() }); FL.at = now(); if (view === "casino" && CZ.game === "envol" && !FL.f && !sheetOpen && !CZ.spinning) draw(); }catch(e){}
+  try{ FL.info = await rpc("baron2_fly_get", { p_token: getToken() }); FL.at = now(); if (view === "casino" && (CZ.game === "envol" || CZ.game === "lobby") && !FL.f && !sheetOpen && !CZ.spinning) draw(); }catch(e){}
 }
 const flMine = () => !!(FL.info && FL.info.owner && FL.info.owner.id === ME.id);
 const flM = t => Math.max(1, Math.floor(Math.exp(0.15 * Math.max(0, t) / 1000) * 100) / 100);
@@ -3350,11 +3363,11 @@ function envolHTML(){
     </svg><div class="fl-big" data-fl-big>${big}</div><div class="fl-sub" data-fl-sub>${sub}</div></div>`;
   let ctrl;
   if (!I) ctrl = `<p class="cz-empty">La piste se prépare…</p>`;
-  else if (!own) ctrl = `<p class="cz-empty">L'Envol n'a pas encore de patron.</p>`;
-  else if (mine) ctrl = `<div class="cz-bank"><h3>Tu es le patron de l'Envol</h3><p>À chaque crash, la boîte noire te rapporte 10 % de la mise perdue. Les gains des joueurs sont payés par le village : tu ne perds jamais. Tu ne peux pas jouer.</p>
+  else if (!own) ctrl = `<p class="cz-empty">L'Aérodrome n'a pas encore de patron.</p>`;
+  else if (mine) ctrl = `<div class="cz-bank"><h3>Tu es le patron de l'Aérodrome</h3><p>À chaque crash, la boîte noire te rapporte 10 % de la mise perdue. Les gains des joueurs sont payés par le village : tu ne perds jamais. Tu ne peux pas jouer.</p>
       <div class="cz-sum"><span>Boîte noire sur 24 h</span><b class="up">+${COIN}${fmtN(+I.fees)}</b></div>
       <div class="pt-heir" style="border-color:rgba(255,255,255,.15)"><span style="color:#E8DCC4">Ton héritier<b style="color:#FFE6B8">${I.heir ? esc(I.heir.name) : "Personne"}</b></span><button class="b2-btn ghost" data-a="pt-who" data-m="heir" data-k="fl">${I.heir ? "Changer" : "Choisir"}</button></div>
-      <button class="b2-btn ghost pt-give" data-a="pt-who" data-m="give" data-k="fl">Céder l'Envol</button>${chargeNote()}</div>`;
+      <button class="b2-btn ghost pt-give" data-a="pt-who" data-m="give" data-k="fl">Céder l'aérodrome</button>${chargeNote()}</div>`;
   else {
     const sv = flStakeVal();
     ctrl = `<div class="cz-chips">${czChips().map((v, i) => `<button class="cz-tok t${i} ${FL.chip === i ? "on" : ""}" data-a="fl-chip" data-i="${i}" ${f ? "disabled" : ""}>${fmtN(v)}</button>`).join("")}<button class="cz-tok all ${FL.chip === 4 ? "on" : ""}" data-a="fl-chip" data-i="4" ${f ? "disabled" : ""}>Tapis</button></div>
@@ -3384,7 +3397,7 @@ async function flStart(){
   S.coins -= st; dirty = true; live(); FL.res = null;
   let r;
   try{ r = await queue(() => rpc("baron2_fly_start", { p_token: getToken(), p_state: S, p_stake: st })); lastSave = now(); }
-  catch(e){ S.coins += st; const m = String(e && e.message || ""); toast(m.includes("patron") ? "Tu es le patron de l'Envol : tu ne peux pas jouer." : m.includes("déjà") ? "Ton avion est déjà en vol." : errText(e), "err"); draw(); return; }
+  catch(e){ S.coins += st; const m = String(e && e.message || ""); toast(m.includes("patron") ? "Tu es le patron de l'Aérodrome : tu ne peux pas jouer." : m.includes("déjà") ? "Ton avion est déjà en vol." : errText(e), "err"); draw(); return; }
   const off = now() - Date.parse(r.now);
   FL.f = { id: r.id, stake: st, t0: Date.parse(r.start) + off };
   sound("up"); buzz(20); draw();
@@ -3416,6 +3429,17 @@ function flEnd(r){
 }
 function chargeNote(){ return `<p class="b2-note fl-charge">🧾 Charges : chaque matin à 8 h, tu paies 20 % de ce que ton lieu t'a rapporté sur 24 h (au moins 0,5 % de ta fortune). Elles vont dans la cagnotte de la Loterie.</p>`; }
 const FL_STYLE = `
+.cz-top{display:flex;align-items:center;gap:10px;margin-bottom:6px}.cz-top span{font:400 26px var(--disp);color:#FFE6B8}
+.cz-lead{text-align:center;font:700 14px var(--round);opacity:.8;margin:2px 0 16px}
+.cz-room{width:100%;display:flex;align-items:center;gap:14px;margin-bottom:14px;padding:18px 16px;border-radius:20px;text-align:left;color:#FFF1DA!important;box-shadow:0 5px 0 rgba(0,0,0,.35)}
+.cz-room.r{background:linear-gradient(135deg,#1F8A4C,#0E4B30)!important;border:2px solid #D9B46A!important}
+.cz-room.a{background:linear-gradient(135deg,#2A3F7A,#0E1B3D)!important;border:2px solid #7FA6E8!important}
+.cz-room.l{background:linear-gradient(135deg,#C8312A,#8E1F1A)!important;border:2px solid #F2B33D!important}
+.cz-room .ic{font-size:40px}.cz-room .sp{flex:1;min-width:0}.cz-room b{display:block;font:400 28px/1.1 var(--disp)}.cz-room small{display:block;font:700 13px var(--round);opacity:.9;margin-top:3px}
+.cz-room .go{font:800 30px var(--round);opacity:.8}
+.cz-mini{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.cz-lt .lt .b2-btn.ghost{background:#F0E2CB!important;color:var(--ink)!important}
+.cz-lt{background:linear-gradient(#0E4B30,#0E4B30 70px,#FBE7C2 70px)}.cz-lt .lt{background:transparent}
 .cz-games{display:flex;gap:6px;background:rgba(0,0,0,.25);padding:4px;border-radius:14px;margin:10px auto 6px;max-width:300px}
 .cz-games button{flex:1;padding:9px 6px;border-radius:10px!important;font:800 14px var(--round)!important;color:#F5ECD6!important;background:transparent!important}
 .cz-games button.on{background:#F2B33D!important;color:#4A2C00!important}
@@ -3761,7 +3785,7 @@ function onClick(e){
       if (tb.id === "market") mkt.open = false;
       view = tb.id; markSeen("tab_" + tb.id); closeSheet(); wrapEl.querySelector("#b2-main").scrollTop = 0; draw();
       if (view === "market" || view === "village") loadWorld(true);
-      if (view === "casino"){ CZ.res = null; loadCasino(); loadFly(); }
+      if (view === "casino"){ CZ.res = null; if (!FL.f) CZ.game = "lobby"; loadCasino(); loadFly(); loadLotto(); }
       if (view === "port") loadPort();
       if (view === "lotto"){ LT.pick = []; loadLotto(); }
       return;
@@ -3776,7 +3800,8 @@ function onClick(e){
       CZ.bets = Object.assign({}, CZ.last); CZ.res = null; draw(); return;
     }
     case "cz-spin": czSpin(); return;
-    case "cz-game": if (FL.f) return; CZ.game = b.dataset.g; sound("tap"); draw(); if (CZ.game === "envol") loadFly(); return;
+    case "cz-game": if (FL.f) return; CZ.game = b.dataset.g; CZ.res = null; LT.pick = []; sound("tap"); wrapEl.querySelector("#b2-main").scrollTop = 0; draw();
+      if (CZ.game === "envol") loadFly(); if (CZ.game === "lotto") loadLotto(); if (CZ.game === "roulette" || CZ.game === "lobby") loadCasino(); return;
     case "fl-chip": FL.chip = +b.dataset.i; FL.res = null; sound("tap"); draw(); return;
     case "fl-start": flStart(); return;
     case "fl-cash": flCash(); return;
