@@ -756,13 +756,23 @@ function publicStats(){
     etb: S.etb && S.etb.job && S.etb.job.cid === etbCid(now()) ? S.etb.job.cid : 0, crafted: S.stats.crafted || 0 };
 }
 function applyCredits(list){
-  const msgs = [];
-  (list || []).slice().sort((a, b) => a.id - b.id).forEach(c => {
-    if (+c.id <= (S.credit_seen || 0)) return;
-    S.coins += +c.coins || 0; S.stats.sold += +c.coins || 0; S.stats.earned += +c.coins || 0;
-    S.credit_seen = +c.id; dirty = true;
+  const msgs = [], bank = [];
+  const arr = (list || []).slice().sort((a, b) => a.id - b.id);
+  for (const c of arr){
+    if (+c.id <= (S.credit_seen || 0)) continue;
+    if (c.product === "casino_win" && CZ.hold) break;          // le gain arrive quand la bille s'arrête
+    S.coins += +c.coins || 0; S.credit_seen = +c.id; dirty = true;
+    if (c.product === "casino_win") continue;
+    if (c.product === "casino"){ bank.push(c); continue; }
+    S.stats.sold += +c.coins || 0; S.stats.earned += +c.coins || 0;
     msgs.push(c);
-  });
+  }
+  if (bank.length){
+    const tot = bank.reduce((a, c) => a + (+c.coins || 0), 0), who = bank[bank.length - 1].buyer || "Un joueur";
+    toast(tot >= 0 ? `🎰 Casino : ${bank.length === 1 ? esc(who) + " a perdu" : "les joueurs ont perdu"}, ta banque encaisse +${COIN}${fmtN(tot)}` : `🎰 Casino : ${bank.length === 1 ? esc(who) + " a gagné" : "les joueurs ont gagné"}, ta banque paie −${COIN}${fmtN(-tot)}`, tot >= 0 ? "gold" : "");
+    sound(tot >= 0 ? "coin" : "tap");
+    if (view === "casino") loadCasino();
+  }
   if (msgs.length){
     const tot = msgs.reduce((a, c) => a + (+c.coins || 0), 0);
     const c = msgs[msgs.length - 1];
@@ -831,7 +841,7 @@ async function loadWorld(force){
     const r = await rpc("baron2_world", {});
     BX.setMarket({ press: r.press || {}, med: r.med });
     W = { res: r.reserve || null, players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
-    await loadOrders(true); await loadEtb();
+    await loadOrders(true); await loadEtb(); loadCasino();
     if (wrapEl && (view === "market" || view === "village" || view === "atelier") && !gestOpen && !sheetOpen) draw();
   }catch(e){}
 }
@@ -1757,6 +1767,7 @@ function loop(){
     if (n % 4 === 0) checkSurprises();
     if (n % 20 === 10) betCheck();
     if (view === "atelier") etbTick(now());
+    if (n % 16 === 8 && (view === "casino" || view === "village") && !CZ.spinning) loadCasino();
     if (n % 80 === 20 && view === "atelier") loadEtb().then(() => { if (view === "atelier" && !sheetOpen && !gestOpen) draw(); });
     n++;
     if (n % 4 === 0) rankTick();
@@ -1837,14 +1848,15 @@ function draw(){
   const main = wrapEl.querySelector("#b2-main");
   const keep = main.dataset.v === view ? main.scrollTop : 0;
   if (view === "village") surpDot = false;
-  const html = view === "farm" ? farmHTML() : view === "barn" ? barnHTML() : view === "atelier" ? atelierHTML() : view === "market" ? marketHTML() : villageHTML();
+  if (view === "casino" && CZ.spinning && wrapEl.querySelector(".cz-wh.spin")) return;
+  const html = view === "farm" ? farmHTML() : view === "barn" ? barnHTML() : view === "atelier" ? atelierHTML() : view === "market" ? marketHTML() : view === "casino" ? casinoHTML() : villageHTML();
   main.innerHTML = html; main.dataset.v = view; main.scrollTop = keep;
   wrapEl.querySelector("#b2-dock").innerHTML = view === "farm" ? dockHTML() : "";
   wrapEl.querySelector("#b2-main").classList.toggle("dockpad", view === "farm");
   wrapEl.querySelector("#b2-tabs").innerHTML = `<div class="b2-col">${TABS.map(t => {
     const lock = t.need && !BX.unlocked(S, t.need);
     const dot = !lock && t.need && (!seen("tab_" + t.id) || (t.id === "village" && surpDot && view !== "village"));
-    return `<button class="b2-tab ${view === t.id ? "on" : ""} ${lock ? "locked" : ""}" data-a="tab" data-v="${t.id}"><span class="i">${lock ? "🔒" : t.i}</span>${t.label}${dot ? `<span class="dot"></span>` : ""}</button>`;
+    return `<button class="b2-tab ${view === t.id || (view === "casino" && t.id === "village") ? "on" : ""} ${lock ? "locked" : ""}" data-a="tab" data-v="${t.id}"><span class="i">${lock ? "🔒" : t.i}</span>${t.label}${dot ? `<span class="dot"></span>` : ""}</button>`;
   }).join("")}</div>`;
   geo = null; if (view === "farm") requestAnimationFrame(measure);
   live(true);
@@ -2713,12 +2725,231 @@ function villageHTML(){
     ${ORD && P[ORD.next_big] ? `<div class="b2-ann"><span>📣 Prochaine grande commande : <b>${P[ORD.next_big].e} ${esc(P[ORD.next_big].label)}</b><small>Fais ton stock avant les autres !</small></span></div>` : ""}
     <div class="b2-notes">${notes}</div>
     ${top ? `<div class="b2-baron"><span class="crown">${CROWN}</span><div class="sp"><small>Le Baron du moment</small><b>${esc(top.id === ME.id ? "C'est toi !" : top.name)}</b><span class="f">${COIN}${fmtN(top.stats?.fortune || 0)} · ${P[top.specialty]?.e || ""} ${esc(P[top.specialty]?.label || "")}</span></div></div>` : ""}
+    ${casinoCard()}
     <div class="b2-paper b2-rank"><h2 class="b2-h2">Classement<small>Fortune : argent, stock et la moitié de ce que tu as construit.</small></h2>
       ${players.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}${p.stats?.pio ? " 🎖️" : ""}<small>${esc(P[p.specialty]?.label || "")}${p.stats?.farms && p.stats.farms.length > 1 ? " + " + p.stats.farms.filter(x => x !== p.specialty).map(x => P[x]?.e).join("") : ""} · ${fmtN(p.stats?.prod || 0, 1)} pièces/s</small></span><span class="f">${COIN}${fmtN(p.stats?.fortune || 0)}</span></div>`).join("")}
     </div>
     <div class="b2-titles">${best("prod", "Gros producteur", "🏭")}${best("traded", "Meilleur trader", "📈")}${best("baked", "Pâtissier", "🧁")}${best("orders", "Ami du village", "📦")}</div>
   </div></div>`;
 }
+
+/* =================== Le Casino du Baron (12 nov. 2026) ===================
+   Roulette européenne. Le Baron du moment tient la banque (il ouvre ou ferme, ne joue pas,
+   encaisse les pertes et paie les gains, quitte à passer en négatif). Tirage fait par le serveur. */
+const CZ_ORDER = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
+const CZ_RED = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+const czCol = n => n === 0 ? "g" : CZ_RED.has(n) ? "r" : "k";
+const CZ = { info:null, at:0, bets:{}, last:null, chip:1, spinning:false, hold:false, wheel:0, ball:0, res:null, seen:0 };
+const CZ_LABEL = { rouge:"Rouge", noir:"Noir", pair:"Pair", impair:"Impair", manque:"1 à 18", passe:"19 à 36", d1:"1 à 12", d2:"13 à 24", d3:"25 à 36", c1:"Colonne", c2:"Colonne", c3:"Colonne" };
+async function loadCasino(){
+  try{
+    const r = await rpc("baron2_casino_get", {}); CZ.info = r; CZ.at = now();
+    if (view === "casino" && !CZ.spinning && !sheetOpen) draw();
+  }catch(e){}
+}
+const czBaron = () => CZ.info && CZ.info.baron ? CZ.info.baron : null;
+const czIamBaron = () => !!(czBaron() && czBaron().id === ME.id);
+const czStake = () => Object.values(CZ.bets).reduce((a, b) => a + b, 0);
+function czChips(){
+  const c = Math.max(0, S.coins);
+  const down = x => { if (x < 10) return Math.max(1, Math.floor(x)); const p = Math.pow(10, Math.floor(Math.log10(x))), m = x / p; return (m >= 5 ? 5 : m >= 2 ? 2 : 1) * p; };
+  if (c < 100) return [1, 5, 10, 25];
+  return [down(c * .01), down(c * .05), down(c * .2), down(c * .5)];
+}
+function czWheelSVG(){
+  const a = 360 / 37, R = 100, r1 = 66;
+  const pt = (ang, rad) => { const t = (ang - 90) * Math.PI / 180; return [(rad * Math.cos(t)).toFixed(2), (rad * Math.sin(t)).toFixed(2)]; };
+  const secs = CZ_ORDER.map((n, i) => {
+    const s = i * a - a / 2, e = s + a, [x1, y1] = pt(s, R), [x2, y2] = pt(e, R), [x3, y3] = pt(e, r1), [x4, y4] = pt(s, r1), [tx, ty] = pt(i * a, 86);
+    return `<path d="M${x1} ${y1}A${R} ${R} 0 0 1 ${x2} ${y2}L${x3} ${y3}A${r1} ${r1} 0 0 0 ${x4} ${y4}Z" class="cz-${czCol(n)}"/><text x="${tx}" y="${ty}" transform="rotate(${(i * a).toFixed(2)} ${tx} ${ty})">${n}</text>`;
+  }).join("");
+  return `<svg viewBox="-118 -118 236 236" class="cz-svg" aria-hidden="true">
+    <circle r="116" class="cz-rim"/><circle r="104" class="cz-track"/>
+    <g class="cz-wheel" style="transform:rotate(${CZ.wheel}deg)">${secs}
+      <circle r="${r1}" class="cz-cone"/><circle r="40" class="cz-cone2"/>
+      ${[0,1,2,3].map(i => `<rect x="-3" y="-38" width="6" height="76" rx="3" class="cz-spoke" transform="rotate(${i * 45})"/>`).join("")}<circle r="9" class="cz-hub"/></g>
+    <g class="cz-ballg" style="transform:rotate(${CZ.ball}deg)"><g class="cz-balli ${CZ.spinning ? "out" : ""}"><circle cy="-76" r="5.2" class="cz-ball"/></g></g>
+    <path d="M0 -112 L-6 -122 L6 -122Z" class="cz-mark"/></svg>`;
+}
+function czCell(k, label, cls){
+  const m = CZ.bets[k], win = CZ.res && czWins(k, CZ.res.n);
+  return `<button class="cz-c ${cls || ""} ${win ? "win" : ""}" data-a="cz-bet" data-k="${k}">${label}${m ? `<span class="cz-chip">${fmtN(m)}</span>` : ""}</button>`;
+}
+function czWins(k, n){
+  if (k[0] === "n" && k !== "noir") return +k.slice(1) === n;
+  if (n === 0) return false;
+  switch (k){
+    case "rouge": return CZ_RED.has(n); case "noir": return !CZ_RED.has(n);
+    case "pair": return n % 2 === 0; case "impair": return n % 2 === 1;
+    case "manque": return n <= 18; case "passe": return n >= 19;
+    case "d1": case "d2": case "d3": return Math.floor((n - 1) / 12) + 1 === +k[1];
+    case "c1": case "c2": case "c3": return ((n - 1) % 3) + 1 === +k[1];
+  }
+  return false;
+}
+function czTable(){
+  let g = `<div class="cz-tab">`;
+  g += `<div style="grid-area:1/3/2/6">${czCell("n0", "0", "z")}</div>`;
+  const side = [["manque", "1-18"], ["pair", "Pair"], ["rouge", `<i class="cz-dia r"></i>`], ["noir", `<i class="cz-dia k"></i>`], ["impair", "Impair"], ["passe", "19-36"]];
+  side.forEach(([k, l], i) => g += `<div style="grid-area:${2 + i * 2}/1/${4 + i * 2}/2">${czCell(k, l, "o")}</div>`);
+  [1, 2, 3].forEach(d => g += `<div style="grid-area:${2 + (d - 1) * 4}/2/${6 + (d - 1) * 4}/3">${czCell("d" + d, `<span class="v">${["1-12", "13-24", "25-36"][d - 1]}</span>`, "o")}</div>`);
+  for (let n = 1; n <= 36; n++){ const row = Math.ceil(n / 3) + 1, col = ((n - 1) % 3) + 3; g += `<div style="grid-area:${row}/${col}/${row + 1}/${col + 1}">${czCell("n" + n, n, czCol(n))}</div>`; }
+  [1, 2, 3].forEach(c => g += `<div style="grid-area:14/${c + 2}/15/${c + 3}">${czCell("c" + c, "2 à 1", "o")}</div>`);
+  return g + `</div>`;
+}
+function czFeed(){
+  const sp = (CZ.info && CZ.info.spins) || [];
+  if (!sp.length) return `<p class="cz-empty">Personne n'a encore joué.</p>`;
+  return sp.slice(0, 12).map(s => { const net = +s.win - +s.stake; return `<div class="cz-row"><span class="cz-ball2 ${czCol(+s.n)}">${s.n}</span><span class="sp">${esc(s.pid === ME.id ? "Toi" : s.name)}<small>a misé ${fmtN(s.stake)} · ${fmtAgo(new Date(s.at).getTime())}</small></span><b class="${net > 0 ? "up" : "dn"}">${net > 0 ? "+" : "−"}${COIN}${fmtN(Math.abs(net))}</b></div>`; }).join("");
+}
+function casinoHTML(){
+  const info = CZ.info, bar = czBaron(), open = !!(info && info.open), me = czIamBaron();
+  const lastN = ((info && info.spins) || []).slice(0, 10).map(s => `<span class="cz-ball2 ${czCol(+s.n)}">${s.n}</span>`).join("");
+  const res = CZ.res && !CZ.spinning ? `<div class="cz-res ${CZ.res.win > 0 ? "w" : ""}"><span class="cz-big ${czCol(CZ.res.n)}">${CZ.res.n}</span><b>${CZ.res.win > 0 ? `+${COIN}${fmtN(CZ.res.win)}` : `Perdu ${COIN}${fmtN(CZ.res.stake)}`}</b></div>` : "";
+  const chips = czChips(), stake = czStake();
+  let body;
+  if (!info) body = `<p class="cz-empty">Le croupier arrive…</p>`;
+  else if (me) body = `<div class="cz-bank"><h3>Tu tiens la banque</h3><p>Tant que tu es le Baron, ce que les joueurs perdent est à toi et c'est toi qui paies leurs gains, même si tu passes en négatif. Tu ne peux pas jouer.</p>
+      <div class="cz-sum"><span>Banque sur 24 h</span><b class="${+info.bank >= 0 ? "up" : "dn"}">${+info.bank >= 0 ? "+" : "−"}${COIN}${fmtN(Math.abs(+info.bank))}</b></div>
+      <button class="b2-btn big ${open ? "red" : "gold"}" data-a="cz-toggle">${open ? "Fermer le casino" : "Ouvrir le casino"}</button></div>`;
+  else body = `<div class="cz-play ${open ? "" : "shut"}">
+      ${open ? "" : `<div class="cz-closed">🔒 Le casino est fermé<small>Seul le Baron peut l'ouvrir.</small></div>`}
+      <div class="cz-chips">${chips.map((v, i) => `<button class="cz-tok t${i} ${CZ.chip === i ? "on" : ""}" data-a="cz-chip" data-i="${i}">${fmtN(v)}</button>`).join("")}<button class="cz-tok all ${CZ.chip === 4 ? "on" : ""}" data-a="cz-chip" data-i="4">Tapis</button></div>
+      ${czTable()}
+      <div class="cz-acts"><button class="b2-btn ghost" data-a="cz-clear" ${stake ? "" : "disabled"}>Effacer</button><button class="b2-btn ghost" data-a="cz-again" ${CZ.last && !stake ? "" : "disabled"}>Rejouer</button></div>
+      <button class="b2-btn big gold cz-go" data-a="cz-spin" ${stake && open && !CZ.spinning ? "" : "disabled"}>${stake ? `Lancer · ${COIN}${fmtN(stake)}` : "Pose tes jetons"}</button></div>`;
+  return `<div class="cz"><div class="b2-col b2-pad">
+    <div class="cz-hd"><button class="b2-btn ghost cz-back" data-a="tab" data-v="village">‹ Village</button><span class="cz-st ${open ? "on" : ""}">${open ? "Ouvert" : "Fermé"}</span></div>
+    <h2 class="cz-ttl">Casino du Baron</h2>
+    <div class="cz-banker">${CROWN}<span>La banque : <b>${bar ? esc(me ? "toi" : bar.name) : "…"}</b></span></div>
+    <div class="cz-wh">${czWheelSVG()}${res}</div>
+    <div class="cz-last">${lastN}</div>
+    ${body}
+    <div class="cz-feed"><h3>Derniers tours</h3>${czFeed()}</div>
+    <p class="cz-note">Roulette européenne : un numéro paie 35 fois la mise, une douzaine ou une colonne 2 fois, rouge, noir, pair, impair, 1-18 et 19-36 paient 1 fois. Le 0 fait tout perdre, sauf si tu as misé dessus.</p>
+  </div></div>`;
+}
+function czBet(k){
+  if (CZ.spinning) return;
+  if (!CZ.info || !CZ.info.open){ toast("Le casino est fermé."); return; }
+  if (CZ.res){ CZ.res = null; }
+  const left = Math.floor(S.coins - czStake());
+  if (left < 1){ toast("Tu as déjà tout misé."); return; }
+  const v = CZ.chip === 4 ? left : Math.min(left, czChips()[CZ.chip]);
+  CZ.bets[k] = (CZ.bets[k] || 0) + v; sound("tap"); buzz(8); draw();
+}
+async function czSpin(){
+  if (CZ.spinning) return;
+  const bets = Object.entries(CZ.bets).filter(([, m]) => m >= 1).map(([k, m]) => ({ k, m: Math.floor(m) }));
+  const stake = bets.reduce((a, b) => a + b.m, 0);
+  if (!stake) return;
+  if (stake > S.coins){ toast("Tu n'as plus assez de pièces pour cette mise."); CZ.bets = {}; draw(); return; }
+  CZ.spinning = true; CZ.hold = true; CZ.res = null;
+  S.coins -= stake; dirty = true; live();
+  let r;
+  try{ r = await queue(() => rpc("baron2_casino_spin", { p_token: getToken(), p_state: S, p_bets: bets })); lastSave = now(); }
+  catch(e){
+    S.coins += stake; CZ.spinning = false; CZ.hold = false;
+    const m = String(e && e.message || "");
+    toast(m.includes("casino fermé") ? "Le Baron vient de fermer le casino." : m.includes("tu es le baron") ? "Tu es devenu le Baron : tu tiens la banque, tu ne peux plus jouer." : errText(e));
+    loadCasino(); draw(); return;
+  }
+  CZ.last = Object.assign({}, CZ.bets);
+  const n = +r.n, idx = CZ_ORDER.indexOf(n), a = 360 / 37;
+  draw();
+  try{ wrapEl.querySelector("#b2-main").scrollTo({ top: 0, behavior: "smooth" }); }catch(e){}
+  // la roue tourne, la bille part dans l'autre sens et finit en haut, sur le bon numéro
+  const target = -idx * a, cur = ((CZ.wheel % 360) + 360) % 360;
+  CZ.wheel += 360 * 4 + (((target - cur) % 360) + 360) % 360;
+  CZ.ball -= 360 * 7 + (((CZ.ball % 360) + 360) % 360);
+  const wrap = wrapEl.querySelector(".cz-wh");
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (!wrap) return;
+    wrap.querySelector(".cz-wheel").style.transform = `rotate(${CZ.wheel}deg)`;
+    wrap.querySelector(".cz-ballg").style.transform = `rotate(${CZ.ball}deg)`;
+    wrap.classList.add("spin");
+    setTimeout(() => wrap.querySelector(".cz-balli")?.classList.remove("out"), 3600);
+  }));
+  sound("tap");
+  setTimeout(() => {
+    CZ.spinning = false; CZ.hold = false;
+    CZ.res = { n, win: +r.win, stake: +r.stake }; CZ.bets = {};
+    applyCredits(r.credits);
+    if (+r.win > 0){ sound("coin"); buzz([30, 50, 30]); } else buzz(40);
+    if (wrapEl && view === "casino") draw();
+    loadCasino(); loadWorld(true);
+  }, 5200);
+}
+async function czToggle(){
+  if (!CZ.info) return;
+  try{ CZ.info = await rpc("baron2_casino_set", { p_token: getToken(), p_open: !CZ.info.open }); sound("up"); toast(CZ.info.open ? "🎰 Le casino est ouvert : à toi la banque !" : "Le casino est fermé."); }
+  catch(e){ toast(String(e && e.message || "").includes("pas le baron") ? "Tu n'es plus le Baron : la banque est passée à quelqu'un d'autre." : errText(e)); loadCasino(); }
+  draw();
+}
+function casinoCard(){
+  const info = CZ.info, bar = czBaron(), open = !!(info && info.open);
+  return `<button class="cz-card" data-a="casino"><span class="cz-cardw">🎰</span><span class="sp"><b>Casino du Baron</b><small>${bar ? (czIamBaron() ? "Tu tiens la banque" : "Banque : " + esc(bar.name)) : "Roulette"}</small></span><span class="cz-st ${open ? "on" : ""}">${open ? "Ouvert" : "Fermé"}</span></button>`;
+}
+const CZ_STYLE = `
+.cz{background:radial-gradient(120% 70% at 50% 0,#1B7A4E,#0E4B30 60%,#0A3826);min-height:100%;color:#F5ECD6}
+.cz-hd{display:flex;align-items:center;justify-content:space-between}
+.cz .b2-btn.ghost{background:rgba(255,255,255,.12)!important;color:#F5ECD6!important}
+.cz-st{font:800 12px var(--round);padding:4px 10px;border-radius:99px;background:rgba(0,0,0,.3);color:#E9C9B5;letter-spacing:.02em}
+.cz-st.on{background:#F2B33D;color:#4A2C00}
+.cz-ttl{font:400 38px/1 var(--disp);text-align:center;margin:10px 0 4px;color:#FFE6B8;text-shadow:0 2px 0 rgba(0,0,0,.25)}
+.cz-banker{display:flex;justify-content:center;align-items:center;gap:6px;font:700 14px var(--round);color:#F5ECD6;opacity:.9}
+.cz-banker svg,.cz-banker img{width:18px;height:18px}
+.cz-wh{position:relative;width:min(78vw,300px);margin:12px auto 6px}
+.cz-svg{width:100%;display:block;filter:drop-shadow(0 8px 14px rgba(0,0,0,.35))}
+.cz-rim{fill:#7C4A24;stroke:#C98A12;stroke-width:3}.cz-track{fill:#3B1F17}
+.cz-r{fill:#C8312A}.cz-k{fill:#1C1C1C}.cz-g{fill:#1F8A4C}
+.cz-svg path{stroke:#D9B46A;stroke-width:.6}
+.cz-svg text{fill:#fff;font:700 8.5px var(--round);text-anchor:middle;dominant-baseline:central}
+.cz-cone{fill:#8A5A2E;stroke:#D9B46A;stroke-width:1}.cz-cone2{fill:#A8743F}.cz-spoke{fill:#E8C26A}.cz-hub{fill:#F2D58A}
+.cz-ball{fill:#fff;stroke:#bbb;stroke-width:.6}.cz-mark{fill:#F2B33D}
+.cz-wheel,.cz-ballg{transform-origin:0 0;transform-box:view-box}
+.cz-wh.spin .cz-wheel{transition:transform 5s cubic-bezier(.12,.62,.18,1)}
+.cz-wh.spin .cz-ballg{transition:transform 4.6s cubic-bezier(.2,.55,.25,1)}
+.cz-balli{transition:transform .6s cubic-bezier(.5,0,.6,1.6)}.cz-balli.out{transform:translateY(-22px)}
+.cz-res{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:4px;background:rgba(10,30,20,.86);padding:10px 16px;border-radius:16px;animation:b2-in .3s ease}
+.cz-res b{font:800 16px var(--round);white-space:nowrap}.cz-res.w b{color:#F2D58A}
+.cz-big{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font:800 22px var(--round);color:#fff}
+.cz-big.r,.cz-ball2.r{background:#C8312A}.cz-big.k,.cz-ball2.k{background:#1C1C1C}.cz-big.g,.cz-ball2.g{background:#1F8A4C}
+.cz-last{display:flex;justify-content:center;gap:5px;flex-wrap:wrap;min-height:26px;margin-bottom:10px}
+.cz-ball2{width:24px;height:24px;border-radius:50%;display:inline-grid;place-items:center;font:800 11px var(--round);color:#fff;border:1.5px solid rgba(255,255,255,.5);flex:none}
+.cz-play{position:relative}
+.cz-play.shut .cz-tab,.cz-play.shut .cz-chips,.cz-play.shut .cz-acts,.cz-play.shut .cz-go{opacity:.3;pointer-events:none}
+.cz-closed{position:absolute;z-index:3;left:50%;top:130px;transform:translateX(-50%);background:#3B1F17;color:#FFE6B8;padding:14px 20px;border-radius:16px;font:800 16px var(--round);text-align:center;box-shadow:0 6px 16px rgba(0,0,0,.4);white-space:nowrap}
+.cz-closed small{display:block;font:600 12px var(--round);opacity:.8;margin-top:3px}
+.cz-chips{display:flex;justify-content:center;gap:7px;margin:4px 0 12px}
+.cz-tok{width:54px;height:54px;border-radius:50%;font:800 11px var(--round)!important;color:#fff!important;border:4px dashed rgba(255,255,255,.75)!important;box-shadow:0 3px 0 rgba(0,0,0,.35);transition:transform .15s}
+.cz-tok.t0{background:#2E6FD8!important}.cz-tok.t1{background:#C8312A!important}.cz-tok.t2{background:#2F9E57!important;border-color:rgba(255,255,255,.6)!important}.cz-tok.t3{background:#1C1C1C!important}.cz-tok.all{background:linear-gradient(135deg,#F2D58A,#C98A12)!important;color:#4A2C00!important}
+.cz-tok.on{transform:translateY(-6px) scale(1.06);box-shadow:0 0 0 3px #FFE6B8,0 6px 10px rgba(0,0,0,.4)}
+.cz-tab{display:grid;grid-template-columns:50px 46px 1fr 1fr 1fr;grid-template-rows:repeat(14,32px);gap:3px;background:#0B4229;padding:6px;border-radius:12px;border:2px solid #D9B46A}
+.cz-tab>div{display:flex}
+.cz-c{position:relative;flex:1;border-radius:6px!important;font:800 14px var(--round)!important;color:#fff!important;border:1px solid rgba(217,180,106,.55)!important;display:flex;align-items:center;justify-content:center}
+.cz-c.r{background:#C8312A!important}.cz-c.k{background:#1C1C1C!important}.cz-c.z{background:#1F8A4C!important}.cz-c.o{background:rgba(255,255,255,.06)!important;font-size:12px!important}
+.cz-c .v{writing-mode:vertical-rl;transform:rotate(180deg)}
+.cz-c:active{filter:brightness(1.3)}
+.cz-c.win{box-shadow:0 0 0 3px #F2D58A,0 0 14px #F2D58A;z-index:2}
+.cz-dia{width:16px;height:16px;transform:rotate(45deg);border-radius:2px;border:1.5px solid #fff}.cz-dia.r{background:#C8312A}.cz-dia.k{background:#1C1C1C}
+.cz-chip{position:absolute;z-index:2;right:-4px;top:-6px;min-width:28px;height:22px;padding:0 4px;border-radius:11px;background:#F2D58A;color:#4A2C00;font:800 10px/22px var(--round);border:2px dashed #fff;box-shadow:0 2px 3px rgba(0,0,0,.4);pointer-events:none}
+.cz-acts{display:flex;gap:8px;margin:12px 0 8px}.cz-acts .b2-btn{flex:1}
+.cz-bank{background:rgba(0,0,0,.25);border-radius:18px;padding:16px;border:1.5px solid rgba(217,180,106,.5)}
+.cz-bank h3{font:400 26px var(--disp);margin:0 0 6px;color:#FFE6B8}.cz-bank p{font:600 14px/1.4 var(--round);margin:0 0 12px;opacity:.9}
+.cz-sum{display:flex;justify-content:space-between;align-items:center;font:700 14px var(--round);margin-bottom:12px}
+.cz .up{color:#7FE3A2}.cz .dn{color:#FF9C88}
+.cz-feed{margin-top:18px;background:rgba(0,0,0,.2);border-radius:16px;padding:12px 14px}
+.cz-feed h3{font:800 13px var(--round);text-transform:uppercase;letter-spacing:.06em;opacity:.7;margin:0 0 8px}
+.cz-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid rgba(255,255,255,.08)}
+.cz-row .sp{flex:1;font:700 14px var(--round)}.cz-row small{display:block;font:600 11px var(--round);opacity:.65}.cz-row b{font:800 14px var(--round);white-space:nowrap}
+.cz-empty{text-align:center;opacity:.7;font:600 14px var(--round);margin:8px 0}
+.cz-note{font:600 12px/1.45 var(--round);opacity:.65;margin:14px 4px 0;text-align:center}
+.cz-card{width:100%;display:flex;align-items:center;gap:12px;margin-top:12px;padding:14px 16px;border-radius:18px;background:linear-gradient(135deg,#1B7A4E,#0E4B30)!important;color:#FFE6B8!important;box-shadow:0 4px 0 #082A1C;text-align:left}
+.cz-card .sp{flex:1}.cz-card b{display:block;font:400 22px var(--disp)}.cz-card small{font:700 12px var(--round);opacity:.85}
+.cz-cardw{font-size:30px}
+`;
+try{ const cst = document.createElement("style"); cst.id = "cz-style"; cst.textContent = CZ_STYLE; document.head.appendChild(cst); }catch(e){}
 
 /* ---------- Commandes en course : les mêmes pour tous, la prime au premier ---------- */
 let ORD = null;
@@ -2805,7 +3036,7 @@ function rankTick(){
   const cr = wrapEl.querySelector(".b2-crown"); if (cr) cr.classList.toggle("top", r === 1);
   if (lastRank !== null && r < lastRank){
     const passed = pl[r]; sound("done"); buzz([20, 40, 20]);
-    toast(r === 1 ? `${CROWN} Tu es le nouveau Baron !` : `Tu passes ${r}e, devant ${esc(passed ? passed.name : "un voisin")} !`, "gold");
+    toast(r === 1 ? `${CROWN} Tu es le nouveau Baron ! Tu tiens la banque du casino.` : `Tu passes ${r}e, devant ${esc(passed ? passed.name : "un voisin")} !`, "gold");
     if (cr){ cr.classList.remove("b2-pop"); void cr.offsetWidth; cr.classList.add("b2-pop"); }
   }
   lastRank = r;
@@ -3046,6 +3277,17 @@ function onClick(e){
       if (view === "market" || view === "village") loadWorld(true);
       return;
     }
+    case "casino": view = "casino"; CZ.res = null; closeSheet(); wrapEl.querySelector("#b2-main").scrollTop = 0; draw(); loadCasino(); return;
+    case "cz-chip": CZ.chip = +b.dataset.i; sound("tap"); draw(); return;
+    case "cz-bet": czBet(b.dataset.k); return;
+    case "cz-clear": CZ.bets = {}; draw(); return;
+    case "cz-again": {
+      const tot = Object.values(CZ.last || {}).reduce((x, y) => x + y, 0);
+      if (tot > S.coins){ toast("Pas assez de pièces pour rejouer la même mise."); return; }
+      CZ.bets = Object.assign({}, CZ.last); CZ.res = null; draw(); return;
+    }
+    case "cz-spin": czSpin(); return;
+    case "cz-toggle": czToggle(); return;
     case "rank": if (!W.at){ loadWorld(true).then(() => S && rankSheet()); return; } rankSheet(); loadWorld(); return;
     case "tipx": markSeen("tip_" + b.dataset.id); draw(); return;
     case "mult": mult = b.dataset.m === "max" ? "max" : +b.dataset.m; draw(); return;
