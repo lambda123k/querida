@@ -136,6 +136,8 @@ begin
   perform _baron2_put(v, p_state);
   select name into nm from baron2_players where id = v;
   insert into baron2_flights(player_id, name, owner_id, stake, crash) values (v, nm, F.owner_id, floor(p_stake), c) returning id, start into fid, st;
+  -- le billet d'embarquement (10 % de la mise, déjà retiré par le client) va au patron
+  insert into baron2_credits(player_id, coins, product, qty, buyer) values (F.owner_id, ceil(floor(p_stake) * 0.10), 'fly_fee', 0, nm);
   return jsonb_build_object('id', fid, 'start', st, 'now', now());
 end $$;
 

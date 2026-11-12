@@ -776,7 +776,8 @@ function applyCredits(list){
     msgs.push(c);
   }
   const pf = portFees.filter(c => !c.lt && !c.fl), lf = portFees.filter(c => c.lt), ff = portFees.filter(c => c.fl);
-  if (ff.length){ const tot = ff.reduce((a, c) => a + (+c.coins || 0), 0); toast(`✈️ Boîte noire : ${ff.length} crash${ff.length > 1 ? "s" : ""}, +${COIN}${fmtN(tot)} pour toi`, "gold"); }
+  if (ff.length){ const tot = ff.reduce((a, c) => a + (+c.coins || 0), 0), nb = ff.filter(c => +c.qty === 0).length, nc = ff.length - nb;
+    toast(`✈️ Aérodrome : ${[nb ? `${nb} billet${nb > 1 ? "s" : ""}` : "", nc ? `${nc} crash${nc > 1 ? "s" : ""}` : ""].filter(Boolean).join(" et ")}, +${COIN}${fmtN(tot)} pour toi`, "gold"); }
   if (pf.length){ const tot = pf.reduce((a, c) => a + (+c.coins || 0), 0); toast(`⚓ Commission du port : +${COIN}${fmtN(tot)}`, "gold"); }
   if (lf.length){ const tot = lf.reduce((a, c) => a + (+c.coins || 0), 0), q = lf.reduce((a, c) => a + (+c.qty || 0), 0); toast(`🎟️ ${q} ticket${q > 1 ? "s" : ""} vendu${q > 1 ? "s" : ""} : +${COIN}${fmtN(tot)} pour ta loterie`, "gold"); }
   if (bank.length){
@@ -3348,7 +3349,8 @@ const flMine = () => !!(FL.info && FL.info.owner && FL.info.owner.id === ME.id);
 const flM = t => Math.max(1, Math.floor(Math.exp(0.15 * Math.max(0, t) / 1000) * 100) / 100);
 const flFmt = m => "×" + m.toFixed(2).replace(".", ",");
 const flCol = c => c < 2 ? "lo" : c < 10 ? "md" : "hi";
-function flStakeVal(){ const c = czChips(); return Math.floor(FL.chip === 4 ? Math.max(0, S.coins) : Math.min(Math.max(0, S.coins), c[FL.chip])); }
+const flFee = st => Math.ceil(st * 0.10);
+function flStakeVal(){ const c = czChips(), max = Math.floor(Math.max(0, S.coins) / 1.1); return Math.floor(FL.chip === 4 ? max : Math.min(max, c[FL.chip])); }
 function envolHTML(){
   const I = FL.info, own = I && I.owner, mine = flMine(), f = FL.f, r = FL.res;
   if (f && !FL.raf) setTimeout(() => { if (FL.f && !FL.raf) FL.raf = requestAnimationFrame(flFrame); });
@@ -3364,19 +3366,19 @@ function envolHTML(){
   let ctrl;
   if (!I) ctrl = `<p class="cz-empty">La piste se prépare…</p>`;
   else if (!own) ctrl = `<p class="cz-empty">L'Aérodrome n'a pas encore de patron.</p>`;
-  else if (mine) ctrl = `<div class="cz-bank"><h3>Tu es le patron de l'Aérodrome</h3><p>À chaque crash, la boîte noire te rapporte 10 % de la mise perdue. Les gains des joueurs sont payés par le village : tu ne perds jamais. Tu ne peux pas jouer.</p>
-      <div class="cz-sum"><span>Boîte noire sur 24 h</span><b class="up">+${COIN}${fmtN(+I.fees)}</b></div>
+  else if (mine) ctrl = `<div class="cz-bank"><h3>Tu es le patron de l'Aérodrome</h3><p>Chaque vol te rapporte son billet d'embarquement (10 % de la mise), et à chaque crash la boîte noire te rapporte 10 % de la mise perdue. Les gains des joueurs sont payés par le village : tu ne perds jamais. Tu ne peux pas jouer.</p>
+      <div class="cz-sum"><span>Billets et boîte noire sur 24 h</span><b class="up">+${COIN}${fmtN(+I.fees)}</b></div>
       <div class="pt-heir" style="border-color:rgba(255,255,255,.15)"><span style="color:#E8DCC4">Ton héritier<b style="color:#FFE6B8">${I.heir ? esc(I.heir.name) : "Personne"}</b></span><button class="b2-btn ghost" data-a="pt-who" data-m="heir" data-k="fl">${I.heir ? "Changer" : "Choisir"}</button></div>
       <button class="b2-btn ghost pt-give" data-a="pt-who" data-m="give" data-k="fl">Céder l'aérodrome</button>${chargeNote()}</div>`;
   else {
     const sv = flStakeVal();
     ctrl = `<div class="cz-chips">${czChips().map((v, i) => `<button class="cz-tok t${i} ${FL.chip === i ? "on" : ""}" data-a="fl-chip" data-i="${i}" ${f ? "disabled" : ""}>${fmtN(v)}</button>`).join("")}<button class="cz-tok all ${FL.chip === 4 ? "on" : ""}" data-a="fl-chip" data-i="4" ${f ? "disabled" : ""}>Tapis</button></div>
       ${f ? `<button class="b2-btn big gold fl-go cash" data-a="fl-cash" data-fl-cash>Encaisser · ${COIN}${fmtN(f.stake * flM(now() - f.t0))}</button>`
-          : `<button class="b2-btn big red fl-go" data-a="fl-start" ${sv >= 1 ? "" : "disabled"}>✈️ Décoller · ${COIN}${fmtN(sv)}</button>`}`;
+          : `<button class="b2-btn big red fl-go" data-a="fl-start" ${sv >= 1 ? "" : "disabled"}>✈️ Décoller · ${COIN}${fmtN(sv)}</button><p class="fl-fee">+ billet d'embarquement ${COIN}${fmtN(flFee(sv))} (10 % de la mise, pour le patron)</p>`}`;
   }
-  return `<div class="cz-banker">✈️<span>Le patron : <b>${own ? esc(mine ? "toi" : own.name) : "…"}</b> · boîte noire 10 %</span></div>
+  return `<div class="cz-banker">✈️<span>Le patron : <b>${own ? esc(mine ? "toi" : own.name) : "…"}</b> · billets + boîte noire</span></div>
     ${scene}<div class="fl-hist">${hist}</div>${ctrl}
-    <p class="cz-note">L'avion peut tomber à tout moment, parfois dès le décollage, parfois très haut. Encaisse quand tu veux : tu gagnes ta mise multipliée par le chiffre affiché. Le village paie les gains, le patron touche 10 % des mises perdues.</p>`;
+    <p class="cz-note">L'avion peut tomber à tout moment, parfois dès le décollage, parfois très haut. Encaisse quand tu veux : tu gagnes ta mise multipliée par le chiffre affiché. Chaque vol coûte un billet de 10 % de la mise. Le village paie les gains, le patron touche les billets et 10 % des mises perdues.</p>`;
 }
 function flFrame(){
   const f = FL.f; if (!f || view !== "casino" || CZ.game !== "envol"){ FL.raf = 0; return; }
@@ -3393,11 +3395,12 @@ function flFrame(){
 async function flStart(){
   if (FL.f) return;
   const st = flStakeVal(); if (st < 1){ toast("Choisis une mise."); return; }
-  if (st > S.coins){ toast("Pas assez de pièces."); return; }
-  S.coins -= st; dirty = true; live(); FL.res = null;
+  const fee = flFee(st);
+  if (st + fee > S.coins){ toast("Pas assez de pièces pour la mise et le billet."); return; }
+  S.coins -= st + fee; dirty = true; live(); FL.res = null;
   let r;
   try{ r = await queue(() => rpc("baron2_fly_start", { p_token: getToken(), p_state: S, p_stake: st })); lastSave = now(); }
-  catch(e){ S.coins += st; const m = String(e && e.message || ""); toast(m.includes("patron") ? "Tu es le patron de l'Aérodrome : tu ne peux pas jouer." : m.includes("déjà") ? "Ton avion est déjà en vol." : errText(e), "err"); draw(); return; }
+  catch(e){ S.coins += st + fee; const m = String(e && e.message || ""); toast(m.includes("patron") ? "Tu es le patron de l'Aérodrome : tu ne peux pas jouer." : m.includes("déjà") ? "Ton avion est déjà en vol." : errText(e), "err"); draw(); return; }
   const off = now() - Date.parse(r.now);
   FL.f = { id: r.id, stake: st, t0: Date.parse(r.start) + off };
   sound("up"); buzz(20); draw();
@@ -3453,7 +3456,7 @@ const FL_STYLE = `
 .fl-hist{display:flex;gap:5px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px;scrollbar-width:none}
 .fl-h{flex:none;padding:4px 8px;border-radius:99px;font:800 11px var(--round);background:rgba(0,0,0,.3)}
 .fl-h.lo{color:#FF9C88}.fl-h.md{color:#9AD7FF}.fl-h.hi{color:#FFD970}
-.fl-go{width:100%}.fl-go.cash{animation:fl-pulse 1s infinite}
+.fl-go{width:100%}.fl-fee{text-align:center;font:700 12px var(--round);opacity:.75;margin:8px 0 0}.fl-go.cash{animation:fl-pulse 1s infinite}
 @keyframes fl-pulse{50%{transform:scale(1.03)}}
 .cz .fl-charge{color:#E8DCC4;opacity:.85;margin-top:12px}
 `;
