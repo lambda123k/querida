@@ -768,11 +768,15 @@ function applyCredits(list){
     if (c.product === "port_storm"){ toast(`🌊 Tempête ! Ta cargaison de ${fmtN(c.qty)} ${P[c.buyer] ? P[c.buyer].e : ""} a coulé.`, "err"); buzz([60, 40, 60]); continue; }
     if (c.product === "port_fee"){ portFees.push(c); continue; }
     if (c.product === "lotto_fee"){ portFees.push(Object.assign({}, c, { lt: 1 })); continue; }
+    if (c.product === "fly_win"){ S.stats.earned += +c.coins || 0; continue; }
+    if (c.product === "fly_fee"){ portFees.push(Object.assign({}, c, { fl: 1 })); continue; }
+    if (c.product === "charge"){ toast(`🧾 Charges ${c.buyer === "Casino" ? "du casino" : c.buyer === "Port" ? "du port" : c.buyer === "Loterie" ? "de la loterie" : "de l'Envol"} : −${COIN}${fmtN(-c.coins)}, versées à la cagnotte de la Loterie`); continue; }
     if (c.product === "lotto_win"){ S.stats.earned += +c.coins || 0; toast(`🎟️ JACKPOT ! Ton ticket ${esc(c.buyer)} est sorti : +${COIN}${fmtN(c.coins)}`, "gold"); sound("up"); buzz([60, 40, 60, 40, 120]); continue; }
     S.stats.sold += +c.coins || 0; S.stats.earned += +c.coins || 0;
     msgs.push(c);
   }
-  const pf = portFees.filter(c => !c.lt), lf = portFees.filter(c => c.lt);
+  const pf = portFees.filter(c => !c.lt && !c.fl), lf = portFees.filter(c => c.lt), ff = portFees.filter(c => c.fl);
+  if (ff.length){ const tot = ff.reduce((a, c) => a + (+c.coins || 0), 0); toast(`✈️ Boîte noire : ${ff.length} crash${ff.length > 1 ? "s" : ""}, +${COIN}${fmtN(tot)} pour toi`, "gold"); }
   if (pf.length){ const tot = pf.reduce((a, c) => a + (+c.coins || 0), 0); toast(`⚓ Commission du port : +${COIN}${fmtN(tot)}`, "gold"); }
   if (lf.length){ const tot = lf.reduce((a, c) => a + (+c.coins || 0), 0), q = lf.reduce((a, c) => a + (+c.qty || 0), 0); toast(`🎟️ ${q} ticket${q > 1 ? "s" : ""} vendu${q > 1 ? "s" : ""} : +${COIN}${fmtN(tot)} pour ta loterie`, "gold"); }
   if (bank.length){
@@ -849,7 +853,7 @@ async function loadWorld(force){
     const r = await rpc("baron2_world", {});
     BX.setMarket({ press: r.press || {}, med: r.med });
     W = { res: r.reserve || null, players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
-    await loadOrders(true); await loadEtb(); loadCasino(); loadPort(); loadLotto();
+    await loadOrders(true); await loadEtb(); loadCasino(); loadPort(); loadLotto(); loadFly();
     if (wrapEl && (view === "market" || view === "village" || view === "atelier") && !gestOpen && !sheetOpen) draw();
   }catch(e){}
 }
@@ -2764,7 +2768,7 @@ function villageHTML(){
 const CZ_ORDER = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
 const CZ_RED = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
 const czCol = n => n === 0 ? "g" : CZ_RED.has(n) ? "r" : "k";
-const CZ = { info:null, at:0, bets:{}, last:null, chip:1, spinning:false, hold:false, wheel:0, ball:0, res:null, seen:0 };
+const CZ = { game:"roulette", info:null, at:0, bets:{}, last:null, chip:1, spinning:false, hold:false, wheel:0, ball:0, res:null, seen:0 };
 const CZ_LABEL = { rouge:"Rouge", noir:"Noir", pair:"Pair", impair:"Impair", manque:"1 à 18", passe:"19 à 36", d1:"1 à 12", d2:"13 à 24", d3:"25 à 36", c1:"Colonne", c2:"Colonne", c3:"Colonne" };
 async function loadCasino(){
   try{
@@ -2836,16 +2840,18 @@ function casinoHTML(){
   if (!info) body = `<p class="cz-empty">Le croupier arrive…</p>`;
   else if (me) body = `<div class="cz-bank"><h3>Tu tiens la banque</h3><p>Tant que tu es le Baron, ce que les joueurs perdent est à toi et c'est toi qui paies leurs gains, même si tu passes en négatif. Tu ne peux pas jouer.</p>
       <div class="cz-sum"><span>Banque sur 24 h</span><b class="${+info.bank >= 0 ? "up" : "dn"}">${+info.bank >= 0 ? "+" : "−"}${COIN}${fmtN(Math.abs(+info.bank))}</b></div>
-      <button class="b2-btn big ${open ? "red" : "gold"}" data-a="cz-toggle">${open ? "Fermer le casino" : "Ouvrir le casino"}</button></div>`;
+      <button class="b2-btn big ${open ? "red" : "gold"}" data-a="cz-toggle">${open ? "Fermer le casino" : "Ouvrir le casino"}</button>${chargeNote()}</div>`;
   else body = `<div class="cz-play ${open ? "" : "shut"}">
       ${open ? "" : `<div class="cz-closed">🔒 Le casino est fermé<small>Seul le Baron peut l'ouvrir.</small></div>`}
       <div class="cz-chips">${chips.map((v, i) => `<button class="cz-tok t${i} ${CZ.chip === i ? "on" : ""}" data-a="cz-chip" data-i="${i}">${fmtN(v)}</button>`).join("")}<button class="cz-tok all ${CZ.chip === 4 ? "on" : ""}" data-a="cz-chip" data-i="4">Tapis</button></div>
       ${czTable()}
       <div class="cz-acts"><button class="b2-btn ghost" data-a="cz-clear" ${stake ? "" : "disabled"}>Effacer</button><button class="b2-btn ghost" data-a="cz-again" ${CZ.last && !stake ? "" : "disabled"}>Rejouer</button></div>
       <button class="b2-btn big gold cz-go" data-a="cz-spin" ${stake && open && !CZ.spinning ? "" : "disabled"}>${stake ? `Lancer · ${COIN}${fmtN(stake)}` : "Pose tes jetons"}</button></div>`;
+  const games = `<div class="cz-games"><button class="${CZ.game === "roulette" ? "on" : ""}" data-a="cz-game" data-g="roulette">🎡 Roulette</button><button class="${CZ.game === "envol" ? "on" : ""}" data-a="cz-game" data-g="envol">✈️ L'Envol</button></div>`;
+  if (CZ.game === "envol") return `<div class="cz"><div class="b2-col b2-pad"><h2 class="cz-ttl">Casino du Baron</h2>${games}${envolHTML()}</div></div>`;
   return `<div class="cz"><div class="b2-col b2-pad">
-    <div class="cz-hd"><span class="cz-st ${open ? "on" : ""}">${open ? "Ouvert" : "Fermé"}</span></div>
-    <h2 class="cz-ttl">Casino du Baron</h2>
+    <h2 class="cz-ttl">Casino du Baron</h2>${games}
+    <div class="cz-hd"><span class="cz-st ${open ? "on" : ""}">${open ? "Roulette ouverte" : "Roulette fermée"}</span></div>
     <div class="cz-banker">${CROWN}<span>La banque : <b>${bar ? esc(me ? "toi" : bar.name) : "…"}</b></span></div>
     <div class="cz-wh">${czWheelSVG()}${res}</div>
     <div class="cz-last">${lastN}</div>
@@ -3030,7 +3036,7 @@ function portHTML(){
       ${cfg.next ? `<p class="b2-note">Niveau ${info.lvl + 1} : un bateau de plus, voyages plus courts, moins de tempêtes, cales plus grandes.</p>` : ""}
       <div class="pt-heir"><span>Ton héritier<b>${info.heir ? esc(info.heir.name) : "Personne"}</b></span><button class="b2-btn ghost" data-a="pt-who" data-m="heir">${info.heir ? "Changer" : "Choisir"}</button></div>
       <p class="b2-note">Si tu ne joues pas pendant 24 h d'affilée, le port passe à ton héritier${info.heir ? "" : " (sans héritier : au dernier du classement)"}.</p>
-      <button class="b2-btn ghost pt-give" data-a="pt-who" data-m="give">Céder le port maintenant</button></div>`;
+      <button class="b2-btn ghost pt-give" data-a="pt-who" data-m="give">Céder le port maintenant</button>${chargeNote()}</div>`;
   const send = !own ? "" : !open ? `<div class="pt-shut">🔒 Le port est fermé${mine ? "" : `<small>Seul ${esc(own.name)} peut l'ouvrir.</small>`}</div>`
     : `<button class="b2-btn big gold" data-a="pt-send" ${free ? "" : "disabled"}>${free ? `⛵ Envoyer une cargaison` : "Tous les bateaux sont en mer"}</button>
        <p class="b2-note" style="text-align:center">${free ? `${free} bateau${free > 1 ? "x" : ""} libre${free > 1 ? "s" : ""} · ta cale : ${fmtN(ptHold())} unités` : `Le prochain rentre dans ${fmtT(Math.min(...info.sea.map(ptLeft)))}`}</p>`;
@@ -3083,26 +3089,26 @@ async function ptSend(k, q){
   draw();
 }
 function ptWho(mode, kind){
-  const lt = kind === "lt", ps = (W.players || []).filter(p => p.id !== ME.id), cur = lt ? LT.info : PT.info, ic = lt ? "🎟️" : "⚓", what = lt ? "la loterie" : "le port";
+  const lt = kind === "lt", fl = kind === "fl", ps = (W.players || []).filter(p => p.id !== ME.id), cur = lt ? LT.info : fl ? FL.info : PT.info, ic = lt ? "🎟️" : fl ? "✈️" : "⚓", what = lt ? "la loterie" : fl ? "l'Envol" : "le port";
   if (!ps.length){ toast("Personne d'autre dans le village pour l'instant."); return; }
   sheetCtx = null;
-  sheet(`<h3>${mode === "heir" ? `${ic} Choisis ton héritier` : `${ic} À qui céder ${what} ?`}</h3><p>${mode === "heir" ? `Il récupère ${what} si tu ne joues pas pendant 24 h d'affilée.` : `${lt ? "La loterie et ses 10 %" : "Le port, son niveau et ses bateaux"} passent tout de suite à ce joueur. Tu ne pourras pas revenir en arrière.`}</p>
-    <div class="pt-who">${ps.map(p => `<button class="b2-btn ghost" data-a="pt-pickwho" data-m="${mode}" data-k="${lt ? "lt" : "pt"}" data-id="${esc(p.id)}">${P[p.specialty] ? P[p.specialty].e : ""} ${esc(p.name)}</button>`).join("")}
-    ${mode === "heir" && cur.heir ? `<button class="b2-btn ghost" data-a="pt-pickwho" data-m="heir" data-k="${lt ? "lt" : "pt"}" data-id="">Aucun héritier</button>` : ""}</div>`);
+  sheet(`<h3>${mode === "heir" ? `${ic} Choisis ton héritier` : `${ic} À qui céder ${what} ?`}</h3><p>${mode === "heir" ? `Il récupère ${what} si tu ne joues pas pendant 24 h d'affilée.` : `${lt ? "La loterie et ses 10 %" : fl ? "L'Envol et sa boîte noire" : "Le port, son niveau et ses bateaux"} passent tout de suite à ce joueur. Tu ne pourras pas revenir en arrière.`}</p>
+    <div class="pt-who">${ps.map(p => `<button class="b2-btn ghost" data-a="pt-pickwho" data-m="${mode}" data-k="${kind || "pt"}" data-id="${esc(p.id)}">${P[p.specialty] ? P[p.specialty].e : ""} ${esc(p.name)}</button>`).join("")}
+    ${mode === "heir" && cur.heir ? `<button class="b2-btn ghost" data-a="pt-pickwho" data-m="heir" data-k="${kind || "pt"}" data-id="">Aucun héritier</button>` : ""}</div>`);
 }
 async function ptPickWho(mode, id, kind){
-  const box = wrapEl.querySelector(".pt-who"), lt = kind === "lt";
+  const box = wrapEl.querySelector(".pt-who"), lt = kind === "lt", fl = kind === "fl";
   if (mode === "give" && box.dataset.sure !== id){
     box.querySelectorAll(".b2-btn.red").forEach(x => { x.classList.remove("red"); x.classList.add("ghost"); x.textContent = x.dataset.lbl || x.textContent; });
     box.dataset.sure = id; const b = box.querySelector(`[data-id="${CSS.escape(id)}"]`);
     if (b){ b.dataset.lbl = b.textContent.trim(); b.classList.remove("ghost"); b.classList.add("red"); b.textContent = "Confirmer : céder à " + b.dataset.lbl; } return;
   }
   try{
-    const fn = (lt ? "baron2_lotto_" : "baron2_port_") + (mode === "heir" ? "heir" : "give");
+    const fn = (lt ? "baron2_lotto_" : fl ? "baron2_fly_" : "baron2_port_") + (mode === "heir" ? "heir" : "give");
     const r = await rpc(fn, mode === "heir" ? { p_token: getToken(), p_heir: id || null } : { p_token: getToken(), p_to: id });
-    if (lt) LT.info = r; else PT.info = r;
+    if (lt) LT.info = r; else if (fl) FL.info = r; else PT.info = r;
     closeSheet(); sound("up");
-    toast(mode === "heir" ? (r.heir ? `Ton héritier : ${esc(r.heir.name)}` : "Plus d'héritier.") : `${lt ? "🎟️ La loterie" : "⚓ Le port"} est maintenant à ${esc(r.owner.name)}.`);
+    toast(mode === "heir" ? (r.heir ? `Ton héritier : ${esc(r.heir.name)}` : "Plus d'héritier.") : `${lt ? "🎟️ La loterie" : fl ? "✈️ L'Envol" : "⚓ Le port"} est maintenant à ${esc(r.owner.name)}.`);
   }catch(e){ toast(errText(e), "err"); }
   draw();
 }
@@ -3198,7 +3204,7 @@ function lottoHTML(){
       <div class="cz-sum" style="color:var(--ink)"><span>Gagné sur 24 h</span><b class="up">+${COIN}${fmtN(+L.fees)}</b></div>
       <div class="pt-heir"><span>Ton héritier<b>${L.heir ? esc(L.heir.name) : "Personne"}</b></span><button class="b2-btn ghost" data-a="pt-who" data-m="heir" data-k="lt">${L.heir ? "Changer" : "Choisir"}</button></div>
       <p class="b2-note">Si tu ne joues pas pendant 24 h d'affilée, la loterie passe à ton héritier${L.heir ? "" : " (sans héritier : au dernier du classement)"}.</p>
-      <button class="b2-btn ghost pt-give" data-a="pt-who" data-m="give" data-k="lt">Céder la loterie</button></div>` : "";
+      <button class="b2-btn ghost pt-give" data-a="pt-who" data-m="give" data-k="lt">Céder la loterie</button>${chargeNote()}</div>` : "";
   return `<div class="lt"><div class="b2-col b2-pad">
     <div class="lt-tk"><div class="lt-hd">Loterie du village</div>
       <div class="lt-jl">Cagnotte</div><div class="lt-jp">${COIN}${fmtN(+L.jackpot)}</div>
@@ -3316,6 +3322,118 @@ const LT_STYLE = `
 .fb-ov.win .fb-card{border:3px solid #F2B33D}
 `;
 try{ const lst = document.createElement("style"); lst.textContent = LT_STYLE; document.head.appendChild(lst); }catch(e){}
+
+/* =================== L'Envol (13 nov. 2026) ===================
+   Chacun son avion : on mise, le multiplicateur grimpe (×e^(0,15 t)), on encaisse avant le crash.
+   Le crash est tiré par le serveur. Le village paie les gains ; le patron touche la boîte noire
+   (10 % des mises perdues) et ne peut pas jouer. */
+const FL = { info:null, at:0, chip:1, stake:0, f:null, raf:0, poll:0, res:null };
+async function loadFly(){
+  try{ FL.info = await rpc("baron2_fly_get", { p_token: getToken() }); FL.at = now(); if (view === "casino" && CZ.game === "envol" && !FL.f && !sheetOpen && !CZ.spinning) draw(); }catch(e){}
+}
+const flMine = () => !!(FL.info && FL.info.owner && FL.info.owner.id === ME.id);
+const flM = t => Math.max(1, Math.floor(Math.exp(0.15 * Math.max(0, t) / 1000) * 100) / 100);
+const flFmt = m => "×" + m.toFixed(2).replace(".", ",");
+const flCol = c => c < 2 ? "lo" : c < 10 ? "md" : "hi";
+function flStakeVal(){ const c = czChips(); return Math.floor(FL.chip === 4 ? Math.max(0, S.coins) : Math.min(Math.max(0, S.coins), c[FL.chip])); }
+function envolHTML(){
+  const I = FL.info, own = I && I.owner, mine = flMine(), f = FL.f, r = FL.res;
+  if (f && !FL.raf) setTimeout(() => { if (FL.f && !FL.raf) FL.raf = requestAnimationFrame(flFrame); });
+  const hist = I ? I.hist.map(h => `<span class="fl-h ${flCol(+h.c)}">${flFmt(+h.c)}</span>`).join("") : "";
+  const big = f ? flFmt(flM(now() - f.t0)) : r ? (r.state === "cashed" ? flFmt(+r.cashed) : flFmt(+r.crash)) : "×1,00";
+  const sub = f ? "En vol…" : r ? (r.state === "cashed" ? `Encaissé : +${COIN}${fmtN(r.win)} · l'avion est tombé à ${flFmt(+r.crash)}` : `💥 Crash ! Tu perds ${COIN}${fmtN(r.stake)}`) : "Mise, décolle, encaisse avant le crash.";
+  const scene = `<div class="fl-sc ${f ? "fly" : ""} ${r && r.state === "crashed" && !f ? "boom" : ""} ${r && r.state === "cashed" && !f ? "won" : ""}">
+    <svg viewBox="0 0 320 180" class="fl-svg" aria-hidden="true"><defs><linearGradient id="flsky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0E1B3D"/><stop offset="1" stop-color="#2A3F7A"/></linearGradient></defs>
+      <rect width="320" height="180" fill="url(#flsky)"/>${[[40, 30], [120, 18], [210, 40], [280, 22], [70, 70], [250, 80], [160, 60]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.2" fill="#fff" opacity=".6"/>`).join("")}
+      <path class="fl-trail" d="M10 170 Q10 170 10 170" fill="none" stroke="#FF5A4E" stroke-width="3" stroke-linecap="round"/>
+      <g class="fl-plane" transform="translate(10 170)"><g transform="rotate(-18)"><path d="M-16 0 L10 -3 Q18 -2 20 0 Q18 2 10 3 Z" fill="#F2F2F2"/><path d="M-2 -2 L-8 -12 L-3 -12 L6 -2 Z M-2 2 L-8 12 L-3 12 L6 2 Z" fill="#E33B30"/><path d="M-16 0 L-20 -7 L-15 -6 L-12 -1 Z" fill="#E33B30"/><circle cx="13" cy="-0.5" r="1.6" fill="#7FC8F8"/></g></g>
+    </svg><div class="fl-big" data-fl-big>${big}</div><div class="fl-sub" data-fl-sub>${sub}</div></div>`;
+  let ctrl;
+  if (!I) ctrl = `<p class="cz-empty">La piste se prépare…</p>`;
+  else if (!own) ctrl = `<p class="cz-empty">L'Envol n'a pas encore de patron.</p>`;
+  else if (mine) ctrl = `<div class="cz-bank"><h3>Tu es le patron de l'Envol</h3><p>À chaque crash, la boîte noire te rapporte 10 % de la mise perdue. Les gains des joueurs sont payés par le village : tu ne perds jamais. Tu ne peux pas jouer.</p>
+      <div class="cz-sum"><span>Boîte noire sur 24 h</span><b class="up">+${COIN}${fmtN(+I.fees)}</b></div>
+      <div class="pt-heir" style="border-color:rgba(255,255,255,.15)"><span style="color:#E8DCC4">Ton héritier<b style="color:#FFE6B8">${I.heir ? esc(I.heir.name) : "Personne"}</b></span><button class="b2-btn ghost" data-a="pt-who" data-m="heir" data-k="fl">${I.heir ? "Changer" : "Choisir"}</button></div>
+      <button class="b2-btn ghost pt-give" data-a="pt-who" data-m="give" data-k="fl">Céder l'Envol</button>${chargeNote()}</div>`;
+  else {
+    const sv = flStakeVal();
+    ctrl = `<div class="cz-chips">${czChips().map((v, i) => `<button class="cz-tok t${i} ${FL.chip === i ? "on" : ""}" data-a="fl-chip" data-i="${i}" ${f ? "disabled" : ""}>${fmtN(v)}</button>`).join("")}<button class="cz-tok all ${FL.chip === 4 ? "on" : ""}" data-a="fl-chip" data-i="4" ${f ? "disabled" : ""}>Tapis</button></div>
+      ${f ? `<button class="b2-btn big gold fl-go cash" data-a="fl-cash" data-fl-cash>Encaisser · ${COIN}${fmtN(f.stake * flM(now() - f.t0))}</button>`
+          : `<button class="b2-btn big red fl-go" data-a="fl-start" ${sv >= 1 ? "" : "disabled"}>✈️ Décoller · ${COIN}${fmtN(sv)}</button>`}`;
+  }
+  return `<div class="cz-banker">✈️<span>Le patron : <b>${own ? esc(mine ? "toi" : own.name) : "…"}</b> · boîte noire 10 %</span></div>
+    ${scene}<div class="fl-hist">${hist}</div>${ctrl}
+    <p class="cz-note">L'avion peut tomber à tout moment, parfois dès le décollage, parfois très haut. Encaisse quand tu veux : tu gagnes ta mise multipliée par le chiffre affiché. Le village paie les gains, le patron touche 10 % des mises perdues.</p>`;
+}
+function flFrame(){
+  const f = FL.f; if (!f || view !== "casino" || CZ.game !== "envol"){ FL.raf = 0; return; }
+  const t = now() - f.t0, m = flM(t), w = wrapEl.querySelector(".fl-sc");
+  if (w){
+    const big = w.querySelector("[data-fl-big]"); if (big) big.textContent = flFmt(m);
+    const k = Math.min(1, t / 20000), x = 10 + 280 * k, y = 170 - 150 * Math.pow(Math.min(1, (m - 1) / 9), 0.6);
+    const pl = w.querySelector(".fl-plane"); if (pl) pl.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
+    const tr = w.querySelector(".fl-trail"); if (tr) tr.setAttribute("d", `M10 170 Q${(10 + x) / 2} 170 ${x.toFixed(1)} ${y.toFixed(1)}`);
+    const cb = wrapEl.querySelector("[data-fl-cash]"); if (cb) cb.textContent = `Encaisser · ${fmtN(f.stake * m)}`;
+  }
+  FL.raf = requestAnimationFrame(flFrame);
+}
+async function flStart(){
+  if (FL.f) return;
+  const st = flStakeVal(); if (st < 1){ toast("Choisis une mise."); return; }
+  if (st > S.coins){ toast("Pas assez de pièces."); return; }
+  S.coins -= st; dirty = true; live(); FL.res = null;
+  let r;
+  try{ r = await queue(() => rpc("baron2_fly_start", { p_token: getToken(), p_state: S, p_stake: st })); lastSave = now(); }
+  catch(e){ S.coins += st; const m = String(e && e.message || ""); toast(m.includes("patron") ? "Tu es le patron de l'Envol : tu ne peux pas jouer." : m.includes("déjà") ? "Ton avion est déjà en vol." : errText(e), "err"); draw(); return; }
+  const off = now() - Date.parse(r.now);
+  FL.f = { id: r.id, stake: st, t0: Date.parse(r.start) + off };
+  sound("up"); buzz(20); draw();
+  if (!FL.raf) FL.raf = requestAnimationFrame(flFrame);
+  clearInterval(FL.poll); FL.poll = setInterval(flPeek, 500);
+}
+async function flPeek(){
+  const f = FL.f; if (!f){ clearInterval(FL.poll); return; }
+  try{
+    const r = await rpc("baron2_fly_peek", { p_token: getToken(), p_id: f.id });
+    if (FL.f !== f || r.state === "flying") return;
+    flEnd(Object.assign({ stake: f.stake }, r));
+  }catch(e){}
+}
+async function flCash(){
+  const f = FL.f; if (!f || f.cashing) return; f.cashing = true;
+  try{
+    const r = await queue(() => rpc("baron2_fly_cash", { p_token: getToken(), p_state: S, p_id: f.id }));
+    lastSave = now(); applyCredits(r.credits);
+    if (FL.f === f) flEnd(Object.assign({ stake: f.stake, win: +r.win || 0 }, r));
+  }catch(e){ f.cashing = false; toast(errText(e), "err"); }
+}
+function flEnd(r){
+  clearInterval(FL.poll); FL.f = null; FL.res = r;
+  if (r.state === "cashed"){ if (!r.win) r.win = Math.floor(r.stake * +r.cashed); sound("coin"); buzz([30, 50, 30]); }
+  else { sound("tap"); buzz([80, 40, 80]); }
+  if (view === "casino") draw();
+  loadFly();
+}
+function chargeNote(){ return `<p class="b2-note fl-charge">🧾 Charges : chaque matin à 8 h, tu paies 20 % de ce que ton lieu t'a rapporté sur 24 h (au moins 0,5 % de ta fortune). Elles vont dans la cagnotte de la Loterie.</p>`; }
+const FL_STYLE = `
+.cz-games{display:flex;gap:6px;background:rgba(0,0,0,.25);padding:4px;border-radius:14px;margin:10px auto 6px;max-width:300px}
+.cz-games button{flex:1;padding:9px 6px;border-radius:10px!important;font:800 14px var(--round)!important;color:#F5ECD6!important;background:transparent!important}
+.cz-games button.on{background:#F2B33D!important;color:#4A2C00!important}
+.fl-sc{position:relative;margin:12px 0 8px;border-radius:18px;overflow:hidden;box-shadow:0 6px 16px rgba(0,0,0,.35)}
+.fl-svg{display:block;width:100%}
+.fl-big{position:absolute;left:0;right:0;top:34%;text-align:center;font:800 46px var(--round);color:#fff;text-shadow:0 3px 10px rgba(0,0,0,.4);pointer-events:none}
+.fl-sub{position:absolute;left:8px;right:8px;bottom:10px;text-align:center;font:700 13px var(--round);color:#DCE6FF;pointer-events:none}
+.fl-sc.boom .fl-big{color:#FF6B5E}.fl-sc.boom .fl-plane{opacity:0}.fl-sc.boom{animation:fl-shake .4s}
+.fl-sc.won .fl-big{color:#7FE3A2}
+@keyframes fl-shake{25%{transform:translateX(-6px)}50%{transform:translateX(5px)}75%{transform:translateX(-3px)}}
+.fl-hist{display:flex;gap:5px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px;scrollbar-width:none}
+.fl-h{flex:none;padding:4px 8px;border-radius:99px;font:800 11px var(--round);background:rgba(0,0,0,.3)}
+.fl-h.lo{color:#FF9C88}.fl-h.md{color:#9AD7FF}.fl-h.hi{color:#FFD970}
+.fl-go{width:100%}.fl-go.cash{animation:fl-pulse 1s infinite}
+@keyframes fl-pulse{50%{transform:scale(1.03)}}
+.cz .fl-charge{color:#E8DCC4;opacity:.85;margin-top:12px}
+`;
+try{ const fst = document.createElement("style"); fst.textContent = FL_STYLE; document.head.appendChild(fst); }catch(e){}
 
 /* ---------- Commandes en course : les mêmes pour tous, la prime au premier ---------- */
 let ORD = null;
@@ -3643,7 +3761,7 @@ function onClick(e){
       if (tb.id === "market") mkt.open = false;
       view = tb.id; markSeen("tab_" + tb.id); closeSheet(); wrapEl.querySelector("#b2-main").scrollTop = 0; draw();
       if (view === "market" || view === "village") loadWorld(true);
-      if (view === "casino"){ CZ.res = null; loadCasino(); }
+      if (view === "casino"){ CZ.res = null; loadCasino(); loadFly(); }
       if (view === "port") loadPort();
       if (view === "lotto"){ LT.pick = []; loadLotto(); }
       return;
@@ -3658,6 +3776,10 @@ function onClick(e){
       CZ.bets = Object.assign({}, CZ.last); CZ.res = null; draw(); return;
     }
     case "cz-spin": czSpin(); return;
+    case "cz-game": if (FL.f) return; CZ.game = b.dataset.g; sound("tap"); draw(); if (CZ.game === "envol") loadFly(); return;
+    case "fl-chip": FL.chip = +b.dataset.i; FL.res = null; sound("tap"); draw(); return;
+    case "fl-start": flStart(); return;
+    case "fl-cash": flCash(); return;
     case "cz-toggle": czToggle(); return;
     case "pt-send": ptSendSheet(); return;
     case "pt-pick": ptSendSheet(b.dataset.k); return;
