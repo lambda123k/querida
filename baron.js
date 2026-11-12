@@ -3164,7 +3164,7 @@ try{ const pst = document.createElement("style"); pst.textContent = PT_STYLE; do
 
 /* =================== La Loterie du village (12 nov. 2026) ===================
    Le patron (le premier qui s'est « sacrifié » devant le faux bug) garde 10 % de chaque ticket.
-   Un ticket = 2 numéros de 1 à 8 (1 chance sur 28), 10 tickets max par tirage. Tirage tous les soirs à 21 h :
+   Un ticket = 2 numéros de 1 à 8 (1 chance sur 28), 10 tickets max par tirage. Tirage toutes les 2 h (heures paires) :
    sans gagnant, la cagnotte grossit. */
 const LT = { info:null, at:0, pick:[], busy:false, prankShown:false };
 async function loadLotto(){
@@ -3186,6 +3186,7 @@ function ltReveal(){
   if (!seenId) setTimeout(() => toast(`🎟️ Le bug ? C'était un piège ! ${esc(o.name)} s'est sacrifié pour le village et devient le patron de la Loterie.`, "gold"), 1200);
   else setTimeout(() => toast(`🎟️ La Loterie a un nouveau patron : ${esc(o.name)}.`, "gold"), 1200);
 }
+const ltHour = t => { const d = new Date(t); return d.getHours() + " h" + (d.getMinutes() ? String(d.getMinutes()).padStart(2, "0") : ""); };
 function ltBall(n, cls){ return `<span class="lt-b ${cls || ""}">${n}</span>`; }
 function lottoHTML(){
   const L = LT.info;
@@ -3201,15 +3202,15 @@ function lottoHTML(){
   return `<div class="lt"><div class="b2-col b2-pad">
     <div class="lt-tk"><div class="lt-hd">Loterie du village</div>
       <div class="lt-jl">Cagnotte</div><div class="lt-jp">${COIN}${fmtN(+L.jackpot)}</div>
-      <div class="lt-cd">Tirage ce soir à 21 h · <b data-live="lt-cd">${fmtT(left)}</b></div>
+      <div class="lt-cd">Prochain tirage à ${ltHour(L.draw_at)} · <b data-live="lt-cd">${fmtT(left)}</b></div>
       <div class="lt-meta">${L.count} ticket${L.count > 1 ? "s" : ""} en jeu · patron : ${esc(mine ? "toi" : L.owner.name)}</div></div>
     <div class="b2-paper"><h2 class="b2-h2">Ton ticket<small>Choisis 2 numéros entre 1 et 8. Trouve les 2 du tirage et la cagnotte est à toi (1 chance sur 28).</small></h2>
       <div class="lt-grid">${grid}</div>
       <div class="b2-two" style="margin-top:12px"><button class="b2-btn ghost" data-a="lt-rand" ${full ? "disabled" : ""}>Au hasard</button>
       <button class="b2-btn gold" data-a="lt-buy" ${LT.pick.length === 2 && !full && !LT.busy ? "" : "disabled"}>${full ? "10 tickets max" : `Jouer · ${COIN}${fmtN(+L.ticket)}`}</button></div>
-      ${tk.length ? `<div class="lt-mine"><span>Tes tickets ce soir (${tk.length}/10)</span><div>${tk.map(([a, b]) => `<i>${a} · ${b}</i>`).join("")}</div></div>` : ""}</div>
+      ${tk.length ? `<div class="lt-mine"><span>Tes tickets pour ce tirage (${tk.length}/10)</span><div>${tk.map(([a, b]) => `<i>${a} · ${b}</i>`).join("")}</div></div>` : ""}</div>
     ${last}${panel}
-    <p class="pt-note">Le ticket coûte ${COIN}${fmtN(+L.ticket)} : 90 % vont dans la cagnotte, 10 % au patron. S'il y a plusieurs gagnants, ils se partagent la cagnotte. Sans gagnant, elle grossit jusqu'au lendemain.</p>
+    <p class="pt-note">Le ticket coûte ${COIN}${fmtN(+L.ticket)} : 90 % vont dans la cagnotte, 10 % au patron. S'il y a plusieurs gagnants, ils se partagent la cagnotte. Sans gagnant, elle grossit jusqu'au tirage suivant, 2 h plus tard.</p>
   </div></div>`;
 }
 function ltNum(n){
@@ -3226,12 +3227,12 @@ async function ltBuy(){
     const r = await queue(() => rpc("baron2_lotto_buy", { p_token: getToken(), p_state: S, p_picks: [LT.pick] }));
     lastSave = now(); LT.info = r; applyCredits(r.credits);
     sound("coin"); toast(`🎟️ Ticket ${LT.pick[0]} · ${LT.pick[1]} joué. Bonne chance !`); LT.pick = [];
-  }catch(e){ S.coins += c; const m = String(e && e.message || ""); toast(m.includes("dix") ? "Tu as déjà 10 tickets pour ce soir." : errText(e), "err"); }
+  }catch(e){ S.coins += c; const m = String(e && e.message || ""); toast(m.includes("dix") ? "Tu as déjà 10 tickets pour ce tirage." : errText(e), "err"); }
   LT.busy = false; draw();
 }
 function lottoBtn(){
   const L = LT.info; if (!L || !L.owner) return "";
-  return `<button class="lt-card" data-a="tab" data-v="lotto"><span class="i">🎟️</span><span class="sp"><b>La Loterie</b><small>Cagnotte ${COIN}${fmtN(+L.jackpot)} · tirage à 21 h</small></span><span class="go">›</span></button>`;
+  return `<button class="lt-card" data-a="tab" data-v="lotto"><span class="i">🎟️</span><span class="sp"><b>La Loterie</b><small>Cagnotte ${COIN}${fmtN(+L.jackpot)} · tirage à ${ltHour(L.draw_at)}</small></span><span class="go">›</span></button>`;
 }
 /* ---------- le faux bug : volontairement hors du style du jeu, pour faire « vrai » ---------- */
 function fakeBug(){
@@ -3263,7 +3264,7 @@ function fakeBug(){
       if (r && r.won){
         try{ localStorage.setItem("bn2_lotto_owner", ME.id); }catch(err){}
         ov.classList.add("win");
-        card.innerHTML = `<div class="fb-win">🎟️</div><h3>Rien n'a été supprimé 😄</h3><p>C'était un test de courage. Tu as été le seul à te sacrifier pour le village…</p><p><b>Tu deviens le patron de la Loterie du village !</b> Tu touches 10 % de chaque ticket acheté par les autres. Tirage tous les soirs à 21 h.</p><button class="fb-b gold" data-fb="see">Voir ma loterie</button>`;
+        card.innerHTML = `<div class="fb-win">🎟️</div><h3>Rien n'a été supprimé 😄</h3><p>C'était un test de courage. Tu as été le seul à te sacrifier pour le village…</p><p><b>Tu deviens le patron de la Loterie du village !</b> Tu touches 10 % de chaque ticket acheté par les autres. Un tirage toutes les 2 heures.</p><button class="fb-b gold" data-fb="see">Voir ma loterie</button>`;
         sound("up"); buzz([40, 60, 40, 60, 80]);
       } else {
         card.innerHTML = `<h3>Espace libéré</h3><p>Un autre joueur vient déjà de libérer de l'espace. Ta ferme n'a pas été touchée. Merci !</p><button class="fb-b" data-fb="no">Fermer</button>`;

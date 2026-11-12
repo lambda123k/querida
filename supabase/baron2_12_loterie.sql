@@ -2,7 +2,7 @@
 -- Le Baron · la Loterie du village (12 nov. 2026)
 -- Le patron est le premier qui « se sacrifie » devant un faux message d'erreur (un piège : rien
 -- n'est supprimé). Il garde 10 % de chaque ticket vendu. Chaque ticket = 2 numéros de 1 à 8 (1 chance sur 28).
--- Tirage tous les soirs à 21 h (heure de Paris) ; s'il n'y a pas de gagnant, la cagnotte grossit.
+-- Tirage toutes les 2 h (heures paires, heure de Paris) ; s'il n'y a pas de gagnant, la cagnotte grossit.
 -- Changement de patron comme le Port : héritier choisi, et passage après 24 h sans jouer.
 -- =====================================================================
 
@@ -54,7 +54,7 @@ begin
         select player_id, per, 'lotto_win', 1, x || '-' || y from baron2_lotto_tickets where draw_at = L.draw_at and a = x and b = y;
       L.jackpot := L.seed;
     end if;
-    L.draw_at := L.draw_at + interval '1 day';
+    L.draw_at := L.draw_at + interval '2 hours';
   end loop;
   -- patron absent depuis 24 h : la loterie passe à son héritier, sinon au dernier du classement qui joue
   if L.owner_id is not null and (select updated_at from baron2_players where id = L.owner_id) <= now() - interval '24 hours' then
