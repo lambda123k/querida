@@ -767,10 +767,14 @@ function applyCredits(list){
     if (c.product === "port_back"){ S.stats.earned += +c.coins || 0; toast(`⚓ Ton bateau est rentré : ${fmtN(c.qty)} ${P[c.buyer] ? P[c.buyer].e : ""} vendus +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); continue; }
     if (c.product === "port_storm"){ toast(`🌊 Tempête ! Ta cargaison de ${fmtN(c.qty)} ${P[c.buyer] ? P[c.buyer].e : ""} a coulé.`, "err"); buzz([60, 40, 60]); continue; }
     if (c.product === "port_fee"){ portFees.push(c); continue; }
+    if (c.product === "lotto_fee"){ portFees.push(Object.assign({}, c, { lt: 1 })); continue; }
+    if (c.product === "lotto_win"){ S.stats.earned += +c.coins || 0; toast(`🎟️ JACKPOT ! Ton ticket ${esc(c.buyer)} est sorti : +${COIN}${fmtN(c.coins)}`, "gold"); sound("up"); buzz([60, 40, 60, 40, 120]); continue; }
     S.stats.sold += +c.coins || 0; S.stats.earned += +c.coins || 0;
     msgs.push(c);
   }
-  if (portFees.length){ const tot = portFees.reduce((a, c) => a + (+c.coins || 0), 0); toast(`⚓ Commission du port : +${COIN}${fmtN(tot)}`, "gold"); }
+  const pf = portFees.filter(c => !c.lt), lf = portFees.filter(c => c.lt);
+  if (pf.length){ const tot = pf.reduce((a, c) => a + (+c.coins || 0), 0); toast(`⚓ Commission du port : +${COIN}${fmtN(tot)}`, "gold"); }
+  if (lf.length){ const tot = lf.reduce((a, c) => a + (+c.coins || 0), 0), q = lf.reduce((a, c) => a + (+c.qty || 0), 0); toast(`🎟️ ${q} ticket${q > 1 ? "s" : ""} vendu${q > 1 ? "s" : ""} : +${COIN}${fmtN(tot)} pour ta loterie`, "gold"); }
   if (bank.length){
     const tot = bank.reduce((a, c) => a + (+c.coins || 0), 0), who = bank[bank.length - 1].buyer || "Un joueur";
     toast(tot >= 0 ? `🎰 Casino : ${bank.length === 1 ? esc(who) + " a perdu" : "les joueurs ont perdu"}, ta banque encaisse +${COIN}${fmtN(tot)}` : `🎰 Casino : ${bank.length === 1 ? esc(who) + " a gagné" : "les joueurs ont gagné"}, ta banque paie −${COIN}${fmtN(-tot)}`, tot >= 0 ? "gold" : "");
@@ -845,7 +849,7 @@ async function loadWorld(force){
     const r = await rpc("baron2_world", {});
     BX.setMarket({ press: r.press || {}, med: r.med });
     W = { res: r.reserve || null, players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
-    await loadOrders(true); await loadEtb(); loadCasino(); loadPort();
+    await loadOrders(true); await loadEtb(); loadCasino(); loadPort(); loadLotto();
     if (wrapEl && (view === "market" || view === "village" || view === "atelier") && !gestOpen && !sheetOpen) draw();
   }catch(e){}
 }
@@ -1713,6 +1717,7 @@ const TABS = [
   { id:"market",  label:"Marché", i:"📈", need:"marche",  why:"Le marché ouvre quand tu débloques ta 2e parcelle." },
   { id:"village", label:"Village",i:"🏘️", need:"village", why:"Le village ouvre quand tu débloques ta 3e parcelle." },
   { id:"port",    label:"Port",   i:"⚓", need:"village", hide:true, why:"Le port ouvre avec le village, à ta 3e parcelle." },
+  { id:"lotto",   label:"Loterie",i:"🎟️", need:"village", hide:true, why:"La loterie ouvre avec le village, à ta 3e parcelle." },
   { id:"casino",  label:"Casino", i:"🎰", need:"village", why:"Le casino ouvre avec le village, à ta 3e parcelle." },
 ];
 function openBaron(){
@@ -1780,6 +1785,8 @@ function loop(){
     if (n % 20 === 10) betCheck();
     if (view === "atelier") etbTick(now());
     if (view === "port") ptTick();
+    if (view === "lotto") ltTick();
+    if (n % 40 === 30 && (view === "lotto" || view === "village")) loadLotto();
     if (n % 40 === 12 && (view === "port" || view === "village")) loadPort();
     if (n % 16 === 8 && view === "casino" && !CZ.spinning) loadCasino();
     if (n % 80 === 20 && view === "atelier") loadEtb().then(() => { if (view === "atelier" && !sheetOpen && !gestOpen) draw(); });
@@ -1863,14 +1870,14 @@ function draw(){
   const keep = main.dataset.v === view ? main.scrollTop : 0;
   if (view === "village") surpDot = false;
   if (view === "casino" && CZ.spinning && wrapEl.querySelector(".cz-wh.spin")) return;
-  const html = view === "farm" ? farmHTML() : view === "barn" ? barnHTML() : view === "atelier" ? atelierHTML() : view === "market" ? marketHTML() : view === "casino" ? casinoHTML() : view === "port" ? portHTML() : villageHTML();
+  const html = view === "farm" ? farmHTML() : view === "barn" ? barnHTML() : view === "atelier" ? atelierHTML() : view === "market" ? marketHTML() : view === "casino" ? casinoHTML() : view === "port" ? portHTML() : view === "lotto" ? lottoHTML() : villageHTML();
   main.innerHTML = html; main.dataset.v = view; main.scrollTop = keep;
   wrapEl.querySelector("#b2-dock").innerHTML = view === "farm" ? dockHTML() : "";
   wrapEl.querySelector("#b2-main").classList.toggle("dockpad", view === "farm");
   wrapEl.querySelector("#b2-tabs").innerHTML = `<div class="b2-col">${TABS.filter(t => !t.hide).map(t => {
     const lock = t.need && !BX.unlocked(S, t.need);
     const dot = !lock && t.need && (!seen("tab_" + t.id) || (t.id === "barn" && BX.unlocked(S, "atelier") && !seen("tab_atelier")) || (t.id === "village" && surpDot && view !== "village"));
-    return `<button class="b2-tab ${view === t.id || (view === "atelier" && t.id === "barn") || (view === "port" && t.id === "village") ? "on" : ""} ${lock ? "locked" : ""}" data-a="tab" data-v="${t.id}"><span class="i">${lock ? "🔒" : t.i}</span>${t.label}${dot ? `<span class="dot"></span>` : ""}</button>`;
+    return `<button class="b2-tab ${view === t.id || (view === "atelier" && t.id === "barn") || ((view === "port" || view === "lotto") && t.id === "village") ? "on" : ""} ${lock ? "locked" : ""}" data-a="tab" data-v="${t.id}"><span class="i">${lock ? "🔒" : t.i}</span>${t.label}${dot ? `<span class="dot"></span>` : ""}</button>`;
   }).join("")}</div>`;
   geo = null; if (view === "farm") requestAnimationFrame(measure);
   live(true);
@@ -2739,7 +2746,7 @@ function villageHTML(){
   const players = ranking();
   const top = players[0];
   const best = (key, label, i, unit) => { const p = players.slice().sort((a, b) => (+b.stats?.[key] || 0) - (+a.stats?.[key] || 0))[0]; return p && +p.stats?.[key] > 0 ? `<div class="b2-ttl"><span class="i">${i}</span><b>${label}</b><span>${esc(p.id === ME.id ? "Toi" : p.name)}</span></div>` : `<div class="b2-ttl"><span class="i" style="filter:grayscale(1)">${i}</span><b>${label}</b><span style="color:var(--ink3)">Personne encore</span></div>`; };
-  return `<div class="b2-vil"><div class="b2-col b2-pad">${portBtn()}
+  return `<div class="b2-vil"><div class="b2-col b2-pad">${portBtn()}${lottoBtn()}
     <div class="b2-paper" style="background:#FFF4E0"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><h2 class="b2-h2" style="margin:0">Commandes du village<small>Les mêmes pour tout le village. La prime va au premier qui termine : les autres sont seulement payés au prix de base.</small></h2><span class="b2-clock">⏳ <span data-live="clock">${fmtT(((ORD ? ORD.slot : curSlot()) + 1) * BAL.slotMs - now())}</span></span></div></div>
     ${ORD && P[ORD.next_big] ? `<div class="b2-ann"><span>📣 Prochaine grande commande : <b>${P[ORD.next_big].e} ${esc(P[ORD.next_big].label)}</b><small>Fais ton stock avant les autres !</small></span></div>` : ""}
     <div class="b2-notes">${notes}</div>
@@ -3075,21 +3082,27 @@ async function ptSend(k, q){
   }
   draw();
 }
-function ptWho(mode){
-  const ps = (W.players || []).filter(p => p.id !== ME.id);
+function ptWho(mode, kind){
+  const lt = kind === "lt", ps = (W.players || []).filter(p => p.id !== ME.id), cur = lt ? LT.info : PT.info, ic = lt ? "🎟️" : "⚓", what = lt ? "la loterie" : "le port";
   if (!ps.length){ toast("Personne d'autre dans le village pour l'instant."); return; }
   sheetCtx = null;
-  sheet(`<h3>${mode === "heir" ? "⚓ Choisis ton héritier" : "⚓ À qui céder le port ?"}</h3><p>${mode === "heir" ? "Il récupère le port si tu ne joues pas pendant 24 h d'affilée." : "Le port, son niveau et ses bateaux passent tout de suite à ce joueur. Tu ne pourras pas revenir en arrière."}</p>
-    <div class="pt-who">${ps.map(p => `<button class="b2-btn ghost" data-a="pt-pickwho" data-m="${mode}" data-id="${esc(p.id)}">${P[p.specialty] ? P[p.specialty].e : ""} ${esc(p.name)}</button>`).join("")}
-    ${mode === "heir" && PT.info.heir ? `<button class="b2-btn ghost" data-a="pt-pickwho" data-m="heir" data-id="">Aucun héritier</button>` : ""}</div>`);
+  sheet(`<h3>${mode === "heir" ? `${ic} Choisis ton héritier` : `${ic} À qui céder ${what} ?`}</h3><p>${mode === "heir" ? `Il récupère ${what} si tu ne joues pas pendant 24 h d'affilée.` : `${lt ? "La loterie et ses 10 %" : "Le port, son niveau et ses bateaux"} passent tout de suite à ce joueur. Tu ne pourras pas revenir en arrière.`}</p>
+    <div class="pt-who">${ps.map(p => `<button class="b2-btn ghost" data-a="pt-pickwho" data-m="${mode}" data-k="${lt ? "lt" : "pt"}" data-id="${esc(p.id)}">${P[p.specialty] ? P[p.specialty].e : ""} ${esc(p.name)}</button>`).join("")}
+    ${mode === "heir" && cur.heir ? `<button class="b2-btn ghost" data-a="pt-pickwho" data-m="heir" data-k="${lt ? "lt" : "pt"}" data-id="">Aucun héritier</button>` : ""}</div>`);
 }
-async function ptPickWho(mode, id){
-  if (mode === "give" && !wrapEl.querySelector(".pt-who").dataset.sure){ wrapEl.querySelector(".pt-who").dataset.sure = id; const b = wrapEl.querySelector(`[data-a=pt-pickwho][data-id="${CSS.escape(id)}"]`); if (b){ b.classList.remove("ghost"); b.classList.add("red"); b.textContent = "Confirmer : céder à " + b.textContent.trim(); } return; }
-  if (mode === "give" && wrapEl.querySelector(".pt-who").dataset.sure !== id){ wrapEl.querySelector(".pt-who").dataset.sure = ""; ptPickWho(mode, id); return; }
+async function ptPickWho(mode, id, kind){
+  const box = wrapEl.querySelector(".pt-who"), lt = kind === "lt";
+  if (mode === "give" && box.dataset.sure !== id){
+    box.querySelectorAll(".b2-btn.red").forEach(x => { x.classList.remove("red"); x.classList.add("ghost"); x.textContent = x.dataset.lbl || x.textContent; });
+    box.dataset.sure = id; const b = box.querySelector(`[data-id="${CSS.escape(id)}"]`);
+    if (b){ b.dataset.lbl = b.textContent.trim(); b.classList.remove("ghost"); b.classList.add("red"); b.textContent = "Confirmer : céder à " + b.dataset.lbl; } return;
+  }
   try{
-    PT.info = await rpc(mode === "heir" ? "baron2_port_heir" : "baron2_port_give", mode === "heir" ? { p_token: getToken(), p_heir: id || null } : { p_token: getToken(), p_to: id });
+    const fn = (lt ? "baron2_lotto_" : "baron2_port_") + (mode === "heir" ? "heir" : "give");
+    const r = await rpc(fn, mode === "heir" ? { p_token: getToken(), p_heir: id || null } : { p_token: getToken(), p_to: id });
+    if (lt) LT.info = r; else PT.info = r;
     closeSheet(); sound("up");
-    toast(mode === "heir" ? (PT.info.heir ? `Ton héritier : ${esc(PT.info.heir.name)}` : "Plus d'héritier.") : `⚓ Le port est maintenant à ${esc(PT.info.owner.name)}.`);
+    toast(mode === "heir" ? (r.heir ? `Ton héritier : ${esc(r.heir.name)}` : "Plus d'héritier.") : `${lt ? "🎟️ La loterie" : "⚓ Le port"} est maintenant à ${esc(r.owner.name)}.`);
   }catch(e){ toast(errText(e), "err"); }
   draw();
 }
@@ -3148,6 +3161,160 @@ const PT_STYLE = `
 .pt-card .i{font-size:30px}.pt-card .sp{flex:1}.pt-card b{display:block;font:400 24px var(--disp)}.pt-card small{font:700 12px var(--round);opacity:.85}
 `;
 try{ const pst = document.createElement("style"); pst.textContent = PT_STYLE; document.head.appendChild(pst); }catch(e){}
+
+/* =================== La Loterie du village (12 nov. 2026) ===================
+   Le patron (le premier qui s'est « sacrifié » devant le faux bug) garde 10 % de chaque ticket.
+   Un ticket = 2 numéros de 1 à 15, 10 tickets max par tirage. Tirage tous les soirs à 21 h :
+   sans gagnant, la cagnotte grossit. */
+const LT = { info:null, at:0, pick:[], busy:false, prankShown:false };
+async function loadLotto(){
+  try{
+    const r = await rpc("baron2_lotto_get", { p_token: getToken() }); LT.info = r; LT.at = now();
+    ltReveal();
+    if (r.prank && !LT.prankShown){ LT.prankShown = true; setTimeout(() => { if (wrapEl && LT.info && LT.info.prank) fakeBug(); }, 3500); }
+    if (view === "lotto" && !sheetOpen) draw();
+  }catch(e){}
+}
+const ltMine = () => !!(LT.info && LT.info.owner && LT.info.owner.id === ME.id);
+function ltReveal(){
+  // la première fois qu'on voit qu'un patron existe : on dévoile le piège
+  const o = LT.info && LT.info.owner; if (!o) return;
+  let seenId = ""; try{ seenId = localStorage.getItem("bn2_lotto_owner") || ""; }catch(e){}
+  if (seenId === o.id) return;
+  try{ localStorage.setItem("bn2_lotto_owner", o.id); }catch(e){}
+  if (o.id === ME.id) return;
+  if (!seenId) setTimeout(() => toast(`🎟️ Le bug ? C'était un piège ! ${esc(o.name)} s'est sacrifié pour le village et devient le patron de la Loterie.`, "gold"), 1200);
+  else setTimeout(() => toast(`🎟️ La Loterie a un nouveau patron : ${esc(o.name)}.`, "gold"), 1200);
+}
+function ltBall(n, cls){ return `<span class="lt-b ${cls || ""}">${n}</span>`; }
+function lottoHTML(){
+  const L = LT.info;
+  if (!L || !L.owner) return `<div class="lt"><div class="b2-col b2-pad"><p class="cz-empty">La loterie n'a pas encore de patron.</p></div></div>`;
+  const mine = ltMine(), left = new Date(L.draw_at).getTime() - now(), tk = L.mine || [], full = tk.length >= 10;
+  const last = L.last ? `<div class="b2-paper lt-last"><h2 class="b2-h2">Dernier tirage</h2><div class="lt-row">${ltBall(L.last.a, "gold")}${ltBall(L.last.b, "gold")}<span class="sp">${L.last.winners.length ? `<b>${L.last.winners.map(w => esc(w.id === ME.id ? "Toi" : w.name)).join(", ")}</b> ${L.last.winners.length > 1 ? "se partagent" : "remporte"} ${COIN}${fmtN(L.last.jackpot)} !` : `Personne n'a trouvé. La cagnotte de ${COIN}${fmtN(L.last.jackpot)} est restée en jeu.`}<small>${L.last.tickets} ticket${L.last.tickets > 1 ? "s" : ""} joué${L.last.tickets > 1 ? "s" : ""}</small></span></div></div>` : "";
+  const grid = Array.from({ length: 15 }, (_, i) => i + 1).map(n => `<button class="lt-n ${LT.pick.includes(n) ? "on" : ""}" data-a="lt-num" data-n="${n}">${n}</button>`).join("");
+  const panel = mine ? `<div class="b2-paper"><h2 class="b2-h2">Ta loterie<small>Tu gardes 10 % de chaque ticket acheté par les autres.</small></h2>
+      <div class="cz-sum" style="color:var(--ink)"><span>Gagné sur 24 h</span><b class="up">+${COIN}${fmtN(+L.fees)}</b></div>
+      <div class="pt-heir"><span>Ton héritier<b>${L.heir ? esc(L.heir.name) : "Personne"}</b></span><button class="b2-btn ghost" data-a="pt-who" data-m="heir" data-k="lt">${L.heir ? "Changer" : "Choisir"}</button></div>
+      <p class="b2-note">Si tu ne joues pas pendant 24 h d'affilée, la loterie passe à ton héritier${L.heir ? "" : " (sans héritier : au dernier du classement)"}.</p>
+      <button class="b2-btn ghost pt-give" data-a="pt-who" data-m="give" data-k="lt">Céder la loterie</button></div>` : "";
+  return `<div class="lt"><div class="b2-col b2-pad">
+    <div class="lt-tk"><div class="lt-hd">Loterie du village</div>
+      <div class="lt-jl">Cagnotte</div><div class="lt-jp">${COIN}${fmtN(+L.jackpot)}</div>
+      <div class="lt-cd">Tirage ce soir à 21 h · <b data-live="lt-cd">${fmtT(left)}</b></div>
+      <div class="lt-meta">${L.count} ticket${L.count > 1 ? "s" : ""} en jeu · patron : ${esc(mine ? "toi" : L.owner.name)}</div></div>
+    <div class="b2-paper"><h2 class="b2-h2">Ton ticket<small>Choisis 2 numéros. Trouve les 2 du tirage et la cagnotte est à toi.</small></h2>
+      <div class="lt-grid">${grid}</div>
+      <div class="b2-two" style="margin-top:12px"><button class="b2-btn ghost" data-a="lt-rand" ${full ? "disabled" : ""}>Au hasard</button>
+      <button class="b2-btn gold" data-a="lt-buy" ${LT.pick.length === 2 && !full && !LT.busy ? "" : "disabled"}>${full ? "10 tickets max" : `Jouer · ${COIN}${fmtN(+L.ticket)}`}</button></div>
+      ${tk.length ? `<div class="lt-mine"><span>Tes tickets ce soir (${tk.length}/10)</span><div>${tk.map(([a, b]) => `<i>${a} · ${b}</i>`).join("")}</div></div>` : ""}</div>
+    ${last}${panel}
+    <p class="pt-note">Le ticket coûte ${COIN}${fmtN(+L.ticket)} : 90 % vont dans la cagnotte, 10 % au patron. S'il y a plusieurs gagnants, ils se partagent la cagnotte. Sans gagnant, elle grossit jusqu'au lendemain.</p>
+  </div></div>`;
+}
+function ltNum(n){
+  const i = LT.pick.indexOf(n);
+  if (i >= 0) LT.pick.splice(i, 1); else { if (LT.pick.length >= 2) LT.pick.shift(); LT.pick.push(n); }
+  sound("tap"); buzz(6); draw();
+}
+function ltRand(){ const a = 1 + Math.floor(Math.random() * 15); let b = 1 + Math.floor(Math.random() * 14); if (b >= a) b++; LT.pick = [a, b]; sound("tap"); draw(); }
+async function ltBuy(){
+  const L = LT.info; if (!L || LT.pick.length !== 2 || LT.busy) return;
+  const c = +L.ticket; if (S.coins < c){ toast("Pas assez de pièces pour un ticket."); return; }
+  LT.busy = true; S.coins -= c; dirty = true; live();
+  try{
+    const r = await queue(() => rpc("baron2_lotto_buy", { p_token: getToken(), p_state: S, p_picks: [LT.pick] }));
+    lastSave = now(); LT.info = r; applyCredits(r.credits);
+    sound("coin"); toast(`🎟️ Ticket ${LT.pick[0]} · ${LT.pick[1]} joué. Bonne chance !`); LT.pick = [];
+  }catch(e){ S.coins += c; const m = String(e && e.message || ""); toast(m.includes("dix") ? "Tu as déjà 10 tickets pour ce soir." : errText(e), "err"); }
+  LT.busy = false; draw();
+}
+function lottoBtn(){
+  const L = LT.info; if (!L || !L.owner) return "";
+  return `<button class="lt-card" data-a="tab" data-v="lotto"><span class="i">🎟️</span><span class="sp"><b>La Loterie</b><small>Cagnotte ${COIN}${fmtN(+L.jackpot)} · tirage à 21 h</small></span><span class="go">›</span></button>`;
+}
+/* ---------- le faux bug : volontairement hors du style du jeu, pour faire « vrai » ---------- */
+function fakeBug(){
+  if (document.querySelector(".fb-ov")) return;
+  const ov = document.createElement("div"); ov.className = "fb-ov";
+  const id = "BRN-" + Math.random().toString(16).slice(2, 6).toUpperCase() + "-" + Math.random().toString(16).slice(2, 6).toUpperCase();
+  const step1 = `<div class="fb-ic">!</div><h3>Erreur 507 — Espace insuffisant</h3>
+    <p>La base de données du village a atteint sa limite de stockage. Le jeu va ralentir puis se bloquer pour tous les joueurs.</p>
+    <div class="fb-bar"><i></i></div><div class="fb-mono">stockage : 2 047,6 Mo / 2 048 Mo · ${id}</div>
+    <p>Pour continuer, <b>un joueur doit libérer de l'espace</b> en réinitialisant sa ferme. Les fermes des autres joueurs seront conservées.</p>
+    <button class="fb-b red" data-fb="go">Réinitialiser ma ferme</button><button class="fb-b" data-fb="no">Plus tard</button>`;
+  const step2 = `<div class="fb-ic">!</div><h3>Confirmer la réinitialisation</h3>
+    <p>Ta ferme, ton stock, tes pièces et tes améliorations seront <b>définitivement supprimés</b>. Cette action est irréversible.</p>
+    <button class="fb-b red" data-fb="yes">Oui, supprimer ma ferme</button><button class="fb-b" data-fb="no">Annuler</button>`;
+  ov.innerHTML = `<div class="fb-card">${step1}</div>`;
+  document.body.appendChild(ov);
+  const card = ov.querySelector(".fb-card");
+  ov.addEventListener("click", async e => {
+    const b = e.target.closest("[data-fb]"); if (!b) return;
+    const a = b.dataset.fb;
+    if (a === "no"){ ov.remove(); return; }
+    if (a === "go"){ card.innerHTML = step2; return; }
+    if (a === "yes"){
+      card.innerHTML = `<h3>Suppression en cours…</h3><div class="fb-bar run"><i></i></div><div class="fb-mono" data-fbp>0 %</div>`;
+      let p = 0; const tm = setInterval(() => { p = Math.min(99, p + 3 + Math.random() * 9); const el = card.querySelector("[data-fbp]"); if (el) el.textContent = Math.floor(p) + " %"; const bi = card.querySelector(".fb-bar i"); if (bi) bi.style.width = p + "%"; }, 160);
+      let r = null; try{ r = await rpc("baron2_lotto_claim", { p_token: getToken() }); }catch(err){}
+      await new Promise(res => setTimeout(res, 2800)); clearInterval(tm);
+      if (r) LT.info = r;
+      if (r && r.won){
+        try{ localStorage.setItem("bn2_lotto_owner", ME.id); }catch(err){}
+        ov.classList.add("win");
+        card.innerHTML = `<div class="fb-win">🎟️</div><h3>Rien n'a été supprimé 😄</h3><p>C'était un test de courage. Tu as été le seul à te sacrifier pour le village…</p><p><b>Tu deviens le patron de la Loterie du village !</b> Tu touches 10 % de chaque ticket acheté par les autres. Tirage tous les soirs à 21 h.</p><button class="fb-b gold" data-fb="see">Voir ma loterie</button>`;
+        sound("up"); buzz([40, 60, 40, 60, 80]);
+      } else {
+        card.innerHTML = `<h3>Espace libéré</h3><p>Un autre joueur vient déjà de libérer de l'espace. Ta ferme n'a pas été touchée. Merci !</p><button class="fb-b" data-fb="no">Fermer</button>`;
+      }
+      return;
+    }
+    if (a === "see"){ ov.remove(); view = "lotto"; draw(); }
+  });
+}
+function ltTick(){
+  const el = wrapEl.querySelector("[data-live=lt-cd]"); if (!el || !LT.info) return;
+  const left = new Date(LT.info.draw_at).getTime() - now(); el.textContent = fmtT(left);
+  if (left < -3000 && now() - LT.at > 8000) loadLotto();
+}
+const LT_STYLE = `
+.lt{background:linear-gradient(#FBE7C2,#F3E3C7 300px);min-height:100%}
+.lt-tk{position:relative;background:linear-gradient(135deg,#C8312A,#8E1F1A);color:#FFF1DA;border-radius:20px;padding:18px 16px 16px;text-align:center;box-shadow:0 5px 0 #5E1410,0 12px 24px rgba(94,20,16,.25);margin-bottom:14px;
+  -webkit-mask:radial-gradient(circle 11px at 0 50%,#0000 98%,#000) left/51% 100% no-repeat,radial-gradient(circle 11px at 100% 50%,#0000 98%,#000) right/51% 100% no-repeat;
+  mask:radial-gradient(circle 11px at 0 50%,#0000 98%,#000) left/51% 100% no-repeat,radial-gradient(circle 11px at 100% 50%,#0000 98%,#000) right/51% 100% no-repeat}
+.lt-hd{font:400 30px/1 var(--disp);color:#FFE6B8}
+.lt-jl{font:800 11px var(--round);letter-spacing:.14em;text-transform:uppercase;opacity:.75;margin-top:12px}
+.lt-jp{font:800 44px/1.05 var(--round);color:#FFD970;text-shadow:0 3px 0 rgba(0,0,0,.25);display:flex;justify-content:center;align-items:center;gap:6px}
+.lt-jp .b2-coin,.lt-jp img{width:34px;height:34px}
+.lt-cd{font:700 14px var(--round);margin-top:8px}.lt-meta{font:600 12px var(--round);opacity:.75;margin-top:4px}
+.lt-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.lt-n{aspect-ratio:1;border-radius:50%!important;background:#fff!important;border:2px solid #E6CFA8!important;font:800 18px var(--round)!important;color:var(--ink)!important;box-shadow:0 3px 0 #D9BE92;transition:transform .12s}
+.lt-n.on{background:#C8312A!important;border-color:#8E1F1A!important;color:#fff!important;transform:translateY(-3px);box-shadow:0 5px 0 #5E1410}
+.lt-mine{margin-top:14px;font:700 12px var(--round);color:var(--ink2)}
+.lt-mine div{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.lt-mine i{font-style:normal;background:#FFF4E0;border:1.5px dashed #C8312A;color:#8E1F1A;border-radius:8px;padding:4px 8px;font:800 13px var(--round)}
+.lt-row{display:flex;align-items:center;gap:8px}.lt-row .sp{flex:1;font:600 13px/1.35 var(--round);color:var(--ink);margin-left:4px}.lt-row small{display:block;color:var(--ink2);margin-top:2px}
+.lt-b{width:38px;height:38px;border-radius:50%;display:inline-grid;place-items:center;font:800 16px var(--round);flex:none;background:#fff;border:2px solid #E6CFA8}
+.lt-b.gold{background:radial-gradient(circle at 35% 30%,#FFE9A8,#E3A21A);border-color:#B57A0A;color:#4A2C00}
+.lt .b2-paper{margin-top:14px}.lt .up{color:#2F9E57!important}
+.lt-card{width:100%;display:flex;align-items:center;gap:12px;margin:0 0 14px;padding:14px 16px;border-radius:18px;background:linear-gradient(135deg,#C8312A,#8E1F1A)!important;color:#FFF1DA!important;box-shadow:0 4px 0 #5E1410;text-align:left}
+.lt-card .i{font-size:30px}.lt-card .sp{flex:1}.lt-card b{display:block;font:400 24px var(--disp)}.lt-card small{font:700 12px var(--round);opacity:.9}.lt-card .go{font:800 28px var(--round);opacity:.8}
+.fb-ov{position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.45);display:grid;place-items:center;padding:24px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;animation:fb-in .2s ease}
+@keyframes fb-in{from{opacity:0}}
+.fb-card{background:#fff;color:#1c1c1e;border-radius:14px;max-width:340px;width:100%;padding:20px 18px 14px;box-shadow:0 20px 50px rgba(0,0,0,.35);text-align:center}
+.fb-card h3{font-size:17px;font-weight:600;margin:6px 0 8px}
+.fb-card p{font-size:14px;line-height:1.4;color:#3a3a3c;margin:0 0 10px}
+.fb-ic{width:44px;height:44px;margin:0 auto;border-radius:50%;background:#FF3B30;color:#fff;font:700 26px/44px -apple-system,sans-serif}
+.fb-bar{height:6px;border-radius:3px;background:#e5e5ea;overflow:hidden;margin:10px 0 4px}.fb-bar i{display:block;height:100%;width:99.98%;background:#FF3B30;transition:width .15s}
+.fb-bar.run i{width:0;background:#007AFF}
+.fb-mono{font:12px ui-monospace,Menlo,monospace;color:#8e8e93;margin-bottom:12px}
+.fb-b{display:block;width:100%;padding:12px;border-radius:10px;border:0;background:#f2f2f7;color:#007AFF;font-size:16px;font-weight:600;margin-top:8px}
+.fb-b.red{background:#FF3B30;color:#fff}.fb-b.gold{background:#F2B33D;color:#4A2C00}
+.fb-win{font-size:56px;animation:b2-in .4s ease}
+.fb-ov.win .fb-card{border:3px solid #F2B33D}
+`;
+try{ const lst = document.createElement("style"); lst.textContent = LT_STYLE; document.head.appendChild(lst); }catch(e){}
 
 /* ---------- Commandes en course : les mêmes pour tous, la prime au premier ---------- */
 let ORD = null;
@@ -3477,6 +3644,7 @@ function onClick(e){
       if (view === "market" || view === "village") loadWorld(true);
       if (view === "casino"){ CZ.res = null; loadCasino(); }
       if (view === "port") loadPort();
+      if (view === "lotto"){ LT.pick = []; loadLotto(); }
       return;
     }
     case "casino": view = "casino"; CZ.res = null; closeSheet(); wrapEl.querySelector("#b2-main").scrollTop = 0; draw(); loadCasino(); return;
@@ -3494,8 +3662,11 @@ function onClick(e){
     case "pt-pick": ptSendSheet(b.dataset.k); return;
     case "pt-toggle": ptToggle(); return;
     case "pt-up": ptUp(); return;
-    case "pt-who": ptWho(b.dataset.m); return;
-    case "pt-pickwho": ptPickWho(b.dataset.m, b.dataset.id); return;
+    case "pt-who": ptWho(b.dataset.m, b.dataset.k); return;
+    case "pt-pickwho": ptPickWho(b.dataset.m, b.dataset.id, b.dataset.k); return;
+    case "lt-num": ltNum(+b.dataset.n); return;
+    case "lt-rand": ltRand(); return;
+    case "lt-buy": ltBuy(); return;
     case "rank": if (!W.at){ loadWorld(true).then(() => S && rankSheet()); return; } rankSheet(); loadWorld(); return;
     case "tipx": markSeen("tip_" + b.dataset.id); draw(); return;
     case "mult": mult = b.dataset.m === "max" ? "max" : +b.dataset.m; draw(); return;
