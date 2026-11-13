@@ -3568,7 +3568,7 @@ const CH_STYLE = `
 try{ const cst = document.createElement("style"); cst.textContent = CH_STYLE; document.head.appendChild(cst); }catch(e){}
 
 /* =================== Les Œufs (13 nov. 2026) ===================
-   Couveuse (œufs gratuits toutes les 8 h, 2 max ; œufs à acheter), éclosion animée, Pokédex de 47 animaux,
+   Couveuse (œufs gratuits toutes les 8 h, 2 max ; œufs à acheter), éclosion animée, Bestiaire de 47 animaux,
    totem (pour frimer), classement des collectionneurs, Maître des œufs (1er au bout de 6 jours, à vie, 10 % des achats).
    Tout le tirage est fait par le serveur (supabase/baron2_18_oeufs.sql). */
 const FAM = [
@@ -3636,7 +3636,7 @@ const egAnim = (a, shiny, cls) => `<span class="eg-an ${cls || ""} ${shiny ? "sh
 function egCountdown(ms){ const s = Math.max(0, Math.floor(ms / 1000)), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d ? `${d} j ${h} h` : h ? `${h} h ${String(m).padStart(2, "0")}` : `${m} min`; }
 function eggsHTML(){
   const I = EG.info;
-  const segs = [["egg", "Couveuse"], ["dex", "Pokédex"], ["rank", "Classement"]].map(([k, l]) => `<button class="eg-seg ${EG.sub === k ? "on" : ""}" data-a="eg-sub" data-k="${k}">${l}</button>`).join("");
+  const segs = [["egg", "Couveuse"], ["dex", "Bestiaire"], ["rank", "Classement"]].map(([k, l]) => `<button class="eg-seg ${EG.sub === k ? "on" : ""}" data-a="eg-sub" data-k="${k}">${l}</button>`).join("");
   let body;
   if (!I) body = `<p class="eg-empty">La couveuse chauffe…</p>`;
   else if (EG.sub === "dex") body = egDexHTML();

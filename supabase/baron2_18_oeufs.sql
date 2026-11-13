@@ -1,12 +1,12 @@
 -- =====================================================================
 -- Le Baron · Les Œufs (13 nov. 2026)
 -- On ouvre des œufs (1 gratuit toutes les 8 h, 2 en réserve max ; ou achetés), l'animal éclot.
--- Le Pokédex : 47 animaux, 6 familles, 6 raretés (c, u, r, e, l, m). Brillant : 1 %.
+-- Le Bestiaire : 47 animaux, 6 familles, 6 raretés (c, u, r, e, l, m). Brillant : 1 %.
 -- Les mythiques (m) n'existent qu'en un exemplaire pour tout le groupe.
 -- Les points (une fois par animal, ×5 s'il est brillant) font le classement des collectionneurs.
 -- Le Maître des œufs : le premier au bout de 6 jours (19 nov. 13 h), à vie ; il touche 10 % du prix
 -- des œufs achetés par les autres, et paie les charges du matin comme les autres lieux.
--- Le totem : un animal du Pokédex qu'on montre aux autres (pour frimer, sans bonus).
+-- Le totem : un animal du Bestiaire qu'on montre aux autres (pour frimer, sans bonus).
 -- Les doublons se revendent presque rien (sauf épiques et légendaires).
 -- =====================================================================
 
