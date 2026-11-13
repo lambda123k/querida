@@ -1724,17 +1724,19 @@ const TABS = [
   { id:"port",    label:"Port",   i:"⚓", need:"village", hide:true, why:"Le port ouvre avec le village, à ta 3e parcelle." },
   { id:"lotto",   label:"Loterie",i:"🎟️", need:"village", hide:true, why:"La loterie ouvre avec le village, à ta 3e parcelle." },
   { id:"casino",  label:"Casino", i:"🎰", need:"village", why:"Le casino ouvre avec le village, à ta 3e parcelle." },
+  { id:"chat",    label:"Taverne",i:"💬", hide:true },
 ];
 function openBaron(){
   closeBaron(true);
   const w = document.createElement("div"); w.className = "b2-wrap"; w.setAttribute("role", "dialog"); w.setAttribute("aria-label", "Le Baron");
   w.innerHTML = `<div class="b2-hud"><div class="b2-col"><button class="b2-hbtn" data-a="arcade" aria-label="Retour à l'Arcade">‹</button>
     <div class="b2-pill"><i class="b2-coin"></i><span data-live="coins">…</span></div><div class="b2-pill"><span class="b2-e">🪵</span><span data-live="wood">…</span></div><button class="b2-pill b2-sea" data-a="season" aria-label="Saison"><span class="b2-e" data-live="sea-e">🌸</span><span class="lb" data-live="sea">…</span></button>
-    <div class="b2-sp"></div><button class="b2-crown" data-a="rank" aria-label="Classement"><span class="c">${CROWN}</span><b data-live="rank">–</b></button><button class="b2-hbtn" data-a="close" aria-label="Fermer">×</button></div></div>
+    <div class="b2-sp"></div><button class="b2-hbtn b2-chb" data-a="chat" aria-label="La Taverne">💬<span class="b2-chdot" data-live="chat"></span></button><button class="b2-crown" data-a="rank" aria-label="Classement"><span class="c">${CROWN}</span><b data-live="rank">–</b></button><button class="b2-hbtn" data-a="close" aria-label="Fermer">×</button></div></div>
     <div class="b2-scroll" id="b2-main"><div class="b2-load">Le Baron se prépare…</div></div><div id="b2-dock"></div><nav class="b2-tabs" id="b2-tabs"></nav>`;
   document.body.appendChild(w); document.body.style.overflow = "hidden"; wrapEl = w;
   w.addEventListener("click", onClick);
   w.addEventListener("input", onInput);
+  w.addEventListener("submit", e => { if (e.target.matches(".ch-bar")){ e.preventDefault(); chSend(); } });
   start();
 }
 function closeBaron(silent){
@@ -1794,6 +1796,7 @@ function loop(){
     if (n % 40 === 30 && (view === "lotto" || view === "casino")) loadLotto();
     if (n % 40 === 12 && (view === "port" || view === "village")) loadPort();
     if (n % 16 === 8 && view === "casino" && !CZ.spinning) loadCasino();
+    if (view === "chat" ? n % 12 === 6 : n % 60 === 6) chPoll();
     if (n % 80 === 20 && view === "atelier") loadEtb().then(() => { if (view === "atelier" && !sheetOpen && !gestOpen) draw(); });
     n++;
     if (n % 4 === 0) rankTick();
@@ -1875,8 +1878,12 @@ function draw(){
   const keep = main.dataset.v === view ? main.scrollTop : 0;
   if (view === "village") surpDot = false;
   if (view === "casino" && CZ.spinning && wrapEl.querySelector(".cz-wh.spin")) return;
+  if (view === "chat"){
+    if (main.dataset.v !== "chat"){ main.innerHTML = chatHTML(); main.dataset.v = "chat"; chScroll(true); } else chList();
+  } else {
   const html = view === "farm" ? farmHTML() : view === "barn" ? barnHTML() : view === "atelier" ? atelierHTML() : view === "market" ? marketHTML() : view === "casino" ? casinoHTML() : view === "port" ? portHTML() : view === "lotto" ? lottoHTML() : villageHTML();
   main.innerHTML = html; main.dataset.v = view; main.scrollTop = keep;
+  }
   wrapEl.querySelector("#b2-dock").innerHTML = view === "farm" ? dockHTML() : "";
   wrapEl.querySelector("#b2-main").classList.toggle("dockpad", view === "farm");
   wrapEl.querySelector("#b2-tabs").innerHTML = `<div class="b2-col">${TABS.filter(t => !t.hide).map(t => {
@@ -2870,7 +2877,7 @@ function czLobby(){
   return `<div class="cz"><div class="b2-col b2-pad">
     <h2 class="cz-ttl">Casino du Baron</h2><p class="cz-lead">Choisis ta table.</p>
     ${card("roulette", "🎡", "La Roulette", bar ? (czIamBaron() ? "Tu tiens la banque" : "Banque : " + esc(bar.name)) : "Roulette européenne", `<span class="cz-st ${open ? "on" : ""}">${open ? "Ouverte" : "Fermée"}</span>`, "r")}
-    ${card("envol", "✈️", "L'Aérodrome", F && F.owner ? `Patron : ${esc(F.owner.id === ME.id ? "toi" : F.owner.name)}${fh ? `<span class="cz-mini">${fh}</span>` : ""}` : "Encaisse avant le crash", `<span class="go">›</span>`, "a")}
+    ${card("envol", "✈️", "L'Aérodrome", F && F.owner ? `Patron : ${esc(F.owner.id === ME.id ? "toi" : F.owner.name)}${fh ? `<span class="cz-mini">${fh}</span>` : ""}` : "Encaisse avant le crash", F && F.owner ? `<span class="cz-st ${F.open !== false ? "on" : ""}">${F.open !== false ? "Ouvert" : "Fermé"}</span>` : `<span class="go">›</span>`, "a")}
     ${card("lotto", "🎟️", "La Loterie", L && L.owner ? `Cagnotte ${COIN}${fmtN(+L.jackpot)} · tirage à ${ltHour(L.draw_at)}` : "Bientôt…", `<span class="go">›</span>`, "l")}
   </div></div>`;
 }
@@ -3368,8 +3375,10 @@ function envolHTML(){
   else if (!own) ctrl = `<p class="cz-empty">L'Aérodrome n'a pas encore de patron.</p>`;
   else if (mine) ctrl = `<div class="cz-bank"><h3>Tu es le patron de l'Aérodrome</h3><p>Chaque vol te rapporte son billet d'embarquement (10 % de la mise), et à chaque crash la boîte noire te rapporte 10 % de la mise perdue. Les gains des joueurs sont payés par le village : tu ne perds jamais. Tu ne peux pas jouer.</p>
       <div class="cz-sum"><span>Billets et boîte noire sur 24 h</span><b class="up">+${COIN}${fmtN(+I.fees)}</b></div>
+      <button class="b2-btn big ${I.open !== false ? "red" : "gold"}" data-a="fl-toggle">${I.open !== false ? "Fermer l'aérodrome" : "Ouvrir l'aérodrome"}</button>
       <div class="pt-heir" style="border-color:rgba(255,255,255,.15)"><span style="color:#E8DCC4">Ton héritier<b style="color:#FFE6B8">${I.heir ? esc(I.heir.name) : "Personne"}</b></span><button class="b2-btn ghost" data-a="pt-who" data-m="heir" data-k="fl">${I.heir ? "Changer" : "Choisir"}</button></div>
       <button class="b2-btn ghost pt-give" data-a="pt-who" data-m="give" data-k="fl">Céder l'aérodrome</button>${chargeNote()}</div>`;
+  else if (I.open === false && !f) ctrl = `<div class="pt-shut fl-shut">🔒 L'Aérodrome est fermé<small>Seul ${esc(own.name)} peut l'ouvrir.</small></div>`;
   else {
     const sv = flStakeVal();
     ctrl = `<div class="cz-chips">${czChips().map((v, i) => `<button class="cz-tok t${i} ${FL.chip === i ? "on" : ""}" data-a="fl-chip" data-i="${i}" ${f ? "disabled" : ""}>${fmtN(v)}</button>`).join("")}<button class="cz-tok all ${FL.chip === 4 ? "on" : ""}" data-a="fl-chip" data-i="4" ${f ? "disabled" : ""}>Tapis</button></div>
@@ -3400,7 +3409,7 @@ async function flStart(){
   S.coins -= st + fee; dirty = true; live(); FL.res = null;
   let r;
   try{ r = await queue(() => rpc("baron2_fly_start", { p_token: getToken(), p_state: S, p_stake: st })); lastSave = now(); }
-  catch(e){ S.coins += st + fee; const m = String(e && e.message || ""); toast(m.includes("patron") ? "Tu es le patron de l'Aérodrome : tu ne peux pas jouer." : m.includes("déjà") ? "Ton avion est déjà en vol." : errText(e), "err"); draw(); return; }
+  catch(e){ S.coins += st + fee; loadFly(); const m = String(e && e.message || ""); toast(m.includes("fermé") ? "Le patron vient de fermer l'aérodrome." : m.includes("patron") ? "Tu es le patron de l'Aérodrome : tu ne peux pas jouer." : m.includes("déjà") ? "Ton avion est déjà en vol." : errText(e), "err"); draw(); return; }
   const off = now() - Date.parse(r.now);
   FL.f = { id: r.id, stake: st, t0: Date.parse(r.start) + off };
   sound("up"); buzz(20); draw();
@@ -3429,6 +3438,12 @@ function flEnd(r){
   else { sound("tap"); buzz([80, 40, 80]); }
   if (view === "casino") draw();
   loadFly();
+}
+async function flToggle(){
+  if (!FL.info) return;
+  try{ FL.info = await rpc("baron2_fly_set", { p_token: getToken(), p_open: FL.info.open === false }); sound("up"); toast(FL.info.open !== false ? "✈️ L'aérodrome est ouvert !" : "L'aérodrome est fermé."); }
+  catch(e){ toast(String(e && e.message || "").includes("pas le patron") ? "Tu n'es plus le patron de l'aérodrome." : errText(e), "err"); loadFly(); }
+  draw();
 }
 function chargeNote(){ return `<p class="b2-note fl-charge">🧾 Charges : chaque matin à 8 h, tu paies 20 % de ce que ton lieu t'a rapporté sur 24 h (au moins 0,5 % de ta fortune). Elles vont dans la cagnotte de la Loterie.</p>`; }
 const FL_STYLE = `
@@ -3461,6 +3476,85 @@ const FL_STYLE = `
 .cz .fl-charge{color:#E8DCC4;opacity:.85;margin-top:12px}
 `;
 try{ const fst = document.createElement("style"); fst.textContent = FL_STYLE; document.head.appendChild(fst); }catch(e){}
+
+/* =================== La Taverne (13 nov. 2026) ===================
+   Le chat des joueurs. Le serveur garde les 500 derniers messages (300 caractères max chacun).
+   On interroge toutes les 3 s quand la taverne est ouverte, toutes les 15 s sinon (pour la pastille). */
+const CH = { msgs:[], last:0, back:"farm", sending:false, first:true };
+const chSeen = () => { try{ return +localStorage.getItem("bn2_chat_seen") || 0; }catch(e){ return 0; } };
+const chSetSeen = id => { try{ localStorage.setItem("bn2_chat_seen", String(id)); }catch(e){} };
+function chUnread(){ const s = chSeen(); return CH.msgs.filter(m => m.id > s && (!ME || m.pid !== ME.id)).length; }
+function chBadge(){
+  const el = wrapEl && wrapEl.querySelector('[data-live="chat"]'); if (!el) return;
+  const n = view === "chat" ? 0 : chUnread();
+  el.textContent = n ? (n > 9 ? "9+" : String(n)) : ""; el.classList.toggle("on", !!n);
+}
+async function chPoll(){
+  if (!wrapEl) return;
+  let r; try{ r = await rpc("baron2_chat_get", { p_after: CH.last }); }catch(e){ return; }
+  if (!r || !r.length){ CH.first = false; chBadge(); return; }
+  const fresh = r.filter(m => m.id > CH.last);
+  CH.msgs = CH.msgs.concat(fresh).slice(-200); CH.last = CH.msgs[CH.msgs.length - 1].id;
+  if (view === "chat"){ chSetSeen(CH.last); chList(); }
+  else if (!CH.first){
+    const m = fresh.filter(x => !ME || x.pid !== ME.id).pop();
+    if (m && m.id > chSeen()) toast(`💬 <b>${esc(m.name)}</b> : ${esc(m.body.length > 60 ? m.body.slice(0, 60) + "…" : m.body)}`);
+  }
+  CH.first = false; chBadge();
+}
+const chTime = at => { const d = new Date(at), t = new Date(); const hm = d.toLocaleTimeString("fr-FR", { hour:"2-digit", minute:"2-digit" }); return d.toDateString() === t.toDateString() ? hm : d.toLocaleDateString("fr-FR", { day:"numeric", month:"short" }) + " " + hm; };
+function chMsgs(){
+  if (!CH.msgs.length) return `<div class="ch-empty"><div>🍺</div>Personne n'a encore parlé à la taverne.<br>Lance la discussion !</div>`;
+  let prev = null;
+  return CH.msgs.map(m => {
+    const mine = ME && m.pid === ME.id, same = prev && prev.pid === m.pid && Date.parse(m.at) - Date.parse(prev.at) < 300000; prev = m;
+    return `<div class="ch-m ${mine ? "me" : ""} ${same ? "same" : ""}">${!mine && !same ? `<b class="ch-n">${esc(m.name)}</b>` : ""}<div class="ch-b">${esc(m.body)}<small>${chTime(m.at)}</small></div></div>`;
+  }).join("");
+}
+function chatHTML(){
+  return `<div class="ch"><div class="ch-hd"><span>🍺</span><div><b>La Taverne</b><small>Le coin pour se parler entre fermiers</small></div></div>
+    <div class="ch-list" data-ch-list>${chMsgs()}</div>
+    <form class="ch-bar" autocomplete="off"><input class="ch-in" maxlength="300" enterkeyhint="send" placeholder="Écris un message…" aria-label="Message"><button class="ch-go" type="submit" aria-label="Envoyer">➤</button></form></div>`;
+}
+function chScroll(force){
+  const main = wrapEl && wrapEl.querySelector("#b2-main"); if (!main) return;
+  if (force || main.scrollHeight - main.scrollTop - main.clientHeight < 140) requestAnimationFrame(() => { main.scrollTop = main.scrollHeight; });
+}
+function chList(){
+  const l = wrapEl && wrapEl.querySelector("[data-ch-list]"); if (!l) return;
+  const html = chMsgs(); if (l.dataset.n === String(CH.last)) return;
+  l.dataset.n = String(CH.last); l.innerHTML = html; chScroll(false);
+}
+async function chSend(){
+  const inp = wrapEl && wrapEl.querySelector(".ch-in"); if (!inp || CH.sending) return;
+  const body = inp.value.trim(); if (!body) return;
+  CH.sending = true;
+  try{ await rpc("baron2_chat_send", { p_token: getToken(), p_body: body }); inp.value = ""; sound("tap"); await chPoll(); chScroll(true); }
+  catch(e){ toast(String(e && e.message || "").includes("doucement") ? "Doucement ! Attends quelques secondes." : errText(e), "err"); }
+  CH.sending = false; inp.focus();
+}
+const CH_STYLE = `
+.b2-chb{position:relative}
+.b2-chdot{position:absolute;top:-4px;right:-4px;min-width:17px;height:17px;padding:0 4px;border-radius:99px;background:var(--red);color:#fff;font:800 10.5px/17px var(--round);text-align:center;box-shadow:0 0 0 2px #5B3519;display:none}
+.b2-chdot.on{display:block}
+.ch{display:flex;flex-direction:column;min-height:100%;max-width:640px;margin:0 auto;background:linear-gradient(#F3E3C7,#EAD3AE)}
+.ch-hd{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:2px solid rgba(94,53,23,.15)}
+.ch-hd span{font-size:30px}.ch-hd b{display:block;font:400 22px var(--disp);color:var(--ink)}.ch-hd small{font:700 12.5px var(--round);color:var(--ink2)}
+.ch-list{flex:1;padding:12px 12px 6px;display:flex;flex-direction:column;gap:3px}
+.ch-empty{margin:auto;text-align:center;font:700 14px var(--round);color:var(--ink2);padding:40px 20px}.ch-empty div{font-size:44px;margin-bottom:8px}
+.ch-m{display:flex;flex-direction:column;align-items:flex-start;margin-top:8px}
+.ch-m.same{margin-top:0}
+.ch-m.me{align-items:flex-end}
+.ch-n{font:800 12px var(--round);color:#8A4A1E;margin:0 0 2px 10px}
+.ch-b{max-width:78%;background:#FFF8EA;color:var(--ink);padding:8px 12px 6px;border-radius:16px 16px 16px 4px;font:600 15px/1.35 var(--round);box-shadow:0 2px 0 rgba(94,53,23,.15);word-wrap:break-word;overflow-wrap:anywhere;white-space:pre-wrap}
+.ch-m.me .ch-b{background:#7C4A24;color:#FFF1DA;border-radius:16px 16px 4px 16px}
+.ch-b small{display:block;text-align:right;font:700 10.5px var(--round);opacity:.55;margin-top:2px}
+.ch-bar{position:sticky;bottom:0;display:flex;gap:8px;padding:10px 12px;background:#EAD3AE;border-top:2px solid rgba(94,53,23,.15)}
+.ch-in{flex:1;min-width:0;border:2px solid #C9A57A;border-radius:99px;padding:10px 16px;font:600 16px var(--round);background:#FFF8EA;color:var(--ink);outline:none}
+.ch-in:focus{border-color:#7C4A24}
+.ch-go{width:44px;height:44px;flex:none;border-radius:50%;background:#7C4A24!important;color:#FFF1DA!important;font-size:18px!important;display:grid;place-items:center}
+`;
+try{ const cst = document.createElement("style"); cst.textContent = CH_STYLE; document.head.appendChild(cst); }catch(e){}
 
 /* ---------- Commandes en course : les mêmes pour tous, la prime au premier ---------- */
 let ORD = null;
@@ -3812,6 +3906,9 @@ function onClick(e){
     case "pt-send": ptSendSheet(); return;
     case "pt-pick": ptSendSheet(b.dataset.k); return;
     case "pt-toggle": ptToggle(); return;
+    case "fl-toggle": flToggle(); return;
+    case "chat": if (view === "chat"){ view = CH.back || "farm"; draw(); return; } CH.back = view; view = "chat"; closeSheet(); draw(); chPoll(); return;
+    case "ch-send": chSend(); return;
     case "pt-up": ptUp(); return;
     case "pt-who": ptWho(b.dataset.m, b.dataset.k); return;
     case "pt-pickwho": ptPickWho(b.dataset.m, b.dataset.id, b.dataset.k); return;
