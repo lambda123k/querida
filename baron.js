@@ -1727,7 +1727,6 @@ const TABS = [
   { id:"village", label:"Village",i:"🏘️", need:"village", why:"Le village ouvre quand tu débloques ta 3e parcelle." },
   { id:"port",    label:"Port",   i:"⚓", need:"village", hide:true, why:"Le port ouvre avec le village, à ta 3e parcelle." },
   { id:"lotto",   label:"Loterie",i:"🎟️", need:"village", hide:true, why:"La loterie ouvre avec le village, à ta 3e parcelle." },
-  { id:"eggs",    label:"Œufs",   i:"🥚", need:"village", why:"Les œufs arrivent avec le village, à ta 3e parcelle." },
   { id:"casino",  label:"Casino", i:"🎰", need:"village", why:"Le casino ouvre avec le village, à ta 3e parcelle." },
   { id:"chat",    label:"Taverne",i:"💬", hide:true },
 ];
@@ -1762,7 +1761,7 @@ async function start(){
     view = "farm"; draw(); lastSig = unlockSig();
     if (reformMsg){ const m = reformMsg; reformMsg = null; dirty = true; setTimeout(() => reformSheet(m), 400); }
     else if (gained >= 1) setTimeout(() => toast(`Pendant ton absence, tes contremaîtres ont rentré ${fmtN(gained)} ${P[S.spec].e} dans la grange`, "gold"), 500);
-    loop(); loadWorld(true); save(true); loadEggs();
+    loop(); loadWorld(true); save(true);
   }catch(e){
     const m = String(e && e.message || "");
     if (m.includes("jeton inconnu")){ setToken(null); return showPick(); }
@@ -1803,7 +1802,6 @@ function loop(){
     if (n % 16 === 8 && view === "casino" && !CZ.spinning) loadCasino();
     if (view === "chat" ? n % 12 === 6 : n % 60 === 6) chPoll();
     if (n % 4 === 2 && view === "eggs") egTick();
-    if (view === "eggs" ? n % 60 === 30 : n % 240 === 100) loadEggs();
     if (n % 80 === 20 && view === "atelier") loadEtb().then(() => { if (view === "atelier" && !sheetOpen && !gestOpen) draw(); });
     n++;
     if (n % 4 === 0) rankTick();
