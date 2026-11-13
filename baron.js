@@ -770,12 +770,16 @@ function applyCredits(list){
     if (c.product === "lotto_fee"){ portFees.push(Object.assign({}, c, { lt: 1 })); continue; }
     if (c.product === "fly_win"){ S.stats.earned += +c.coins || 0; continue; }
     if (c.product === "fly_fee"){ portFees.push(Object.assign({}, c, { fl: 1 })); continue; }
-    if (c.product === "charge"){ toast(`🧾 Charges ${c.buyer === "Casino" ? "du casino" : c.buyer === "Port" ? "du port" : c.buyer === "Loterie" ? "de la loterie" : "de l'aérodrome"} : −${COIN}${fmtN(-c.coins)}, versées à la cagnotte de la Loterie`); continue; }
+    if (c.product === "egg_dup") continue;
+    if (c.product === "egg_fee"){ portFees.push(Object.assign({}, c, { eg: 1 })); continue; }
+    if (c.product === "charge"){ toast(`🧾 Charges ${c.buyer === "Casino" ? "du casino" : c.buyer === "Port" ? "du port" : c.buyer === "Loterie" ? "de la loterie" : c.buyer === "Œufs" ? "du Maître des œufs" : "de l'aérodrome"} : −${COIN}${fmtN(-c.coins)}, versées à la cagnotte de la Loterie`); continue; }
     if (c.product === "lotto_win"){ S.stats.earned += +c.coins || 0; toast(`🎟️ JACKPOT ! Ton ticket ${esc(c.buyer)} est sorti : +${COIN}${fmtN(c.coins)}`, "gold"); sound("up"); buzz([60, 40, 60, 40, 120]); continue; }
     S.stats.sold += +c.coins || 0; S.stats.earned += +c.coins || 0;
     msgs.push(c);
   }
-  const pf = portFees.filter(c => !c.lt && !c.fl), lf = portFees.filter(c => c.lt), ff = portFees.filter(c => c.fl);
+  const egf = portFees.filter(c => c.eg);
+  if (egf.length){ const tot = egf.reduce((a, c) => a + (+c.coins || 0), 0); toast(`👑 ${egf.length} œuf${egf.length > 1 ? "s" : ""} acheté${egf.length > 1 ? "s" : ""} au village : +${COIN}${fmtN(tot)} pour le Maître des œufs`, "gold"); }
+  const pf = portFees.filter(c => !c.lt && !c.fl && !c.eg), lf = portFees.filter(c => c.lt), ff = portFees.filter(c => c.fl);
   if (ff.length){ const tot = ff.reduce((a, c) => a + (+c.coins || 0), 0), nb = ff.filter(c => +c.qty === 0).length, nc = ff.length - nb;
     toast(`✈️ Aérodrome : ${[nb ? `${nb} billet${nb > 1 ? "s" : ""}` : "", nc ? `${nc} crash${nc > 1 ? "s" : ""}` : ""].filter(Boolean).join(" et ")}, +${COIN}${fmtN(tot)} pour toi`, "gold"); }
   if (pf.length){ const tot = pf.reduce((a, c) => a + (+c.coins || 0), 0); toast(`⚓ Commission du port : +${COIN}${fmtN(tot)}`, "gold"); }
@@ -1723,6 +1727,7 @@ const TABS = [
   { id:"village", label:"Village",i:"🏘️", need:"village", why:"Le village ouvre quand tu débloques ta 3e parcelle." },
   { id:"port",    label:"Port",   i:"⚓", need:"village", hide:true, why:"Le port ouvre avec le village, à ta 3e parcelle." },
   { id:"lotto",   label:"Loterie",i:"🎟️", need:"village", hide:true, why:"La loterie ouvre avec le village, à ta 3e parcelle." },
+  { id:"eggs",    label:"Œufs",   i:"🥚", need:"village", why:"Les œufs arrivent avec le village, à ta 3e parcelle." },
   { id:"casino",  label:"Casino", i:"🎰", need:"village", why:"Le casino ouvre avec le village, à ta 3e parcelle." },
   { id:"chat",    label:"Taverne",i:"💬", hide:true },
 ];
@@ -1757,7 +1762,7 @@ async function start(){
     view = "farm"; draw(); lastSig = unlockSig();
     if (reformMsg){ const m = reformMsg; reformMsg = null; dirty = true; setTimeout(() => reformSheet(m), 400); }
     else if (gained >= 1) setTimeout(() => toast(`Pendant ton absence, tes contremaîtres ont rentré ${fmtN(gained)} ${P[S.spec].e} dans la grange`, "gold"), 500);
-    loop(); loadWorld(true); save(true);
+    loop(); loadWorld(true); save(true); loadEggs();
   }catch(e){
     const m = String(e && e.message || "");
     if (m.includes("jeton inconnu")){ setToken(null); return showPick(); }
@@ -1797,6 +1802,8 @@ function loop(){
     if (n % 40 === 12 && (view === "port" || view === "village")) loadPort();
     if (n % 16 === 8 && view === "casino" && !CZ.spinning) loadCasino();
     if (view === "chat" ? n % 12 === 6 : n % 60 === 6) chPoll();
+    if (n % 4 === 2 && view === "eggs") egTick();
+    if (view === "eggs" ? n % 60 === 30 : n % 240 === 100) loadEggs();
     if (n % 80 === 20 && view === "atelier") loadEtb().then(() => { if (view === "atelier" && !sheetOpen && !gestOpen) draw(); });
     n++;
     if (n % 4 === 0) rankTick();
@@ -1872,6 +1879,14 @@ document.addEventListener("visibilitychange", () => { if (document.hidden && S &
 window.addEventListener("pageshow", e => { if (e.persisted && S && wrapEl){ const t = now(); BX.catchUp(S, t); lastTick = t; dirty = true; draw(); } });
 
 /* =================== Affichage =================== */
+function renderTabs(){
+  if (!wrapEl || !S) return;
+  wrapEl.querySelector("#b2-tabs").innerHTML = `<div class="b2-col">${TABS.filter(t => !t.hide).map(t => {
+    const lock = t.need && !BX.unlocked(S, t.need);
+    const dot = !lock && t.need && (!seen("tab_" + t.id) || (t.id === "barn" && BX.unlocked(S, "atelier") && !seen("tab_atelier")) || (t.id === "village" && surpDot && view !== "village") || (t.id === "eggs" && egFree() > 0));
+    return `<button class="b2-tab ${view === t.id || (view === "atelier" && t.id === "barn") || ((view === "port" || view === "lotto") && t.id === "village") ? "on" : ""} ${lock ? "locked" : ""}" data-a="tab" data-v="${t.id}"><span class="i">${lock ? "🔒" : t.i}</span>${t.label}${dot ? `<span class="dot"></span>` : ""}</button>`;
+  }).join("")}</div>`;
+}
 function draw(){
   if (!wrapEl || !S) return;
   const main = wrapEl.querySelector("#b2-main");
@@ -1881,16 +1896,12 @@ function draw(){
   if (view === "chat"){
     if (main.dataset.v !== "chat"){ main.innerHTML = chatHTML(); main.dataset.v = "chat"; chScroll(true); } else chList();
   } else {
-  const html = view === "farm" ? farmHTML() : view === "barn" ? barnHTML() : view === "atelier" ? atelierHTML() : view === "market" ? marketHTML() : view === "casino" ? casinoHTML() : view === "port" ? portHTML() : view === "lotto" ? lottoHTML() : villageHTML();
+  const html = view === "farm" ? farmHTML() : view === "barn" ? barnHTML() : view === "atelier" ? atelierHTML() : view === "market" ? marketHTML() : view === "casino" ? casinoHTML() : view === "port" ? portHTML() : view === "lotto" ? lottoHTML() : view === "eggs" ? eggsHTML() : villageHTML();
   main.innerHTML = html; main.dataset.v = view; main.scrollTop = keep;
   }
   wrapEl.querySelector("#b2-dock").innerHTML = view === "farm" ? dockHTML() : "";
   wrapEl.querySelector("#b2-main").classList.toggle("dockpad", view === "farm");
-  wrapEl.querySelector("#b2-tabs").innerHTML = `<div class="b2-col">${TABS.filter(t => !t.hide).map(t => {
-    const lock = t.need && !BX.unlocked(S, t.need);
-    const dot = !lock && t.need && (!seen("tab_" + t.id) || (t.id === "barn" && BX.unlocked(S, "atelier") && !seen("tab_atelier")) || (t.id === "village" && surpDot && view !== "village"));
-    return `<button class="b2-tab ${view === t.id || (view === "atelier" && t.id === "barn") || ((view === "port" || view === "lotto") && t.id === "village") ? "on" : ""} ${lock ? "locked" : ""}" data-a="tab" data-v="${t.id}"><span class="i">${lock ? "🔒" : t.i}</span>${t.label}${dot ? `<span class="dot"></span>` : ""}</button>`;
-  }).join("")}</div>`;
+  renderTabs();
   geo = null; if (view === "farm") requestAnimationFrame(measure);
   live(true);
 }
@@ -2764,7 +2775,7 @@ function villageHTML(){
     <div class="b2-notes">${notes}</div>
     ${top ? `<div class="b2-baron"><span class="crown">${CROWN}</span><div class="sp"><small>Le Baron du moment</small><b>${esc(top.id === ME.id ? "C'est toi !" : top.name)}</b><span class="f">${COIN}${fmtN(top.stats?.fortune || 0)} · ${P[top.specialty]?.e || ""} ${esc(P[top.specialty]?.label || "")}</span></div></div>` : ""}
     <div class="b2-paper b2-rank"><h2 class="b2-h2">Classement<small>Fortune : argent, stock et la moitié de ce que tu as construit.</small></h2>
-      ${players.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}${p.stats?.pio ? " 🎖️" : ""}<small>${esc(P[p.specialty]?.label || "")}${p.stats?.farms && p.stats.farms.length > 1 ? " + " + p.stats.farms.filter(x => x !== p.specialty).map(x => P[x]?.e).join("") : ""} · ${fmtN(p.stats?.prod || 0, 1)} pièces/s</small></span><span class="f">${COIN}${fmtN(p.stats?.fortune || 0)}</span></div>`).join("")}
+      ${players.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}${totTag(p.id)}${p.stats?.pio ? " 🎖️" : ""}<small>${esc(P[p.specialty]?.label || "")}${p.stats?.farms && p.stats.farms.length > 1 ? " + " + p.stats.farms.filter(x => x !== p.specialty).map(x => P[x]?.e).join("") : ""} · ${fmtN(p.stats?.prod || 0, 1)} pièces/s</small></span><span class="f">${COIN}${fmtN(p.stats?.fortune || 0)}</span></div>`).join("")}
     </div>
     <div class="b2-titles">${best("prod", "Gros producteur", "🏭")}${best("traded", "Meilleur trader", "📈")}${best("baked", "Pâtissier", "🧁")}${best("orders", "Ami du village", "📦")}</div>
   </div></div>`;
@@ -3508,7 +3519,7 @@ function chMsgs(){
   let prev = null;
   return CH.msgs.map(m => {
     const mine = ME && m.pid === ME.id, same = prev && prev.pid === m.pid && Date.parse(m.at) - Date.parse(prev.at) < 300000; prev = m;
-    return `<div class="ch-m ${mine ? "me" : ""} ${same ? "same" : ""}">${!mine && !same ? `<b class="ch-n">${esc(m.name)}</b>` : ""}<div class="ch-b">${esc(m.body)}<small>${chTime(m.at)}</small></div></div>`;
+    return `<div class="ch-m ${mine ? "me" : ""} ${same ? "same" : ""}">${!mine && !same ? `<b class="ch-n">${esc(m.name)}${totTag(m.pid)}</b>` : ""}<div class="ch-b">${esc(m.body)}<small>${chTime(m.at)}</small></div></div>`;
   }).join("");
 }
 function chatHTML(){
@@ -3555,6 +3566,299 @@ const CH_STYLE = `
 .ch-go{width:44px;height:44px;flex:none;border-radius:50%;background:#7C4A24!important;color:#FFF1DA!important;font-size:18px!important;display:grid;place-items:center}
 `;
 try{ const cst = document.createElement("style"); cst.textContent = CH_STYLE; document.head.appendChild(cst); }catch(e){}
+
+/* =================== Les Œufs (13 nov. 2026) ===================
+   Couveuse (œufs gratuits toutes les 8 h, 2 max ; œufs à acheter), éclosion animée, Pokédex de 47 animaux,
+   totem (pour frimer), classement des collectionneurs, Maître des œufs (1er au bout de 6 jours, à vie, 10 % des achats).
+   Tout le tirage est fait par le serveur (supabase/baron2_18_oeufs.sql). */
+const FAM = [
+  { id:"bc", label:"Basse-cour" }, { id:"pa", label:"Pâturage" }, { id:"fo", label:"Forêt" },
+  { id:"ma", label:"Mare et jardin" }, { id:"ex", label:"Exotiques" }, { id:"my", label:"Mythiques" },
+];
+const RAR = {
+  c:{ label:"Commun", pts:1, col:"#8FA37E" }, u:{ label:"Peu commun", pts:3, col:"#4FA35A" }, r:{ label:"Rare", pts:10, col:"#3E86D6" },
+  e:{ label:"Épique", pts:40, col:"#9A55D8" }, l:{ label:"Légendaire", pts:200, col:"#E8A21C" }, m:{ label:"Mythique", pts:1000, col:"#E2457A" },
+};
+const AN = [
+  ["poule","bc","c",null,"Poule rousse","🐔"],["poussin","bc","c",0,"Poussin","🐤"],["canard","bc","c",null,"Canard","🦆"],["oie","bc","u",null,"Oie","🪿"],
+  ["dinde","bc","u",2,"Dinde","🦃"],["pigeon","bc","u",null,"Pigeon voyageur","🕊️"],["coq","bc","r",null,"Coq doré","🐓"],["paon","bc","e",0,"Paon","🦚"],
+  ["vache","pa","c",null,"Vache","🐄"],["mouton","pa","c",null,"Mouton","🐑"],["cochon","pa","c",null,"Cochon","🐖"],["chevre","pa","u",null,"Chèvre","🐐"],
+  ["ane","pa","u",null,"Âne","🫏"],["cheval","pa","r",null,"Cheval","🐎"],["belier","pa","r",0,"Bélier","🐏"],["alpaga","pa","r",null,"Alpaga","🦙"],["bison","pa","e",null,"Bison","🦬"],
+  ["lapin","fo","c",0,"Lapin","🐇"],["ecureuil","fo","c",2,"Écureuil","🐿️"],["herisson","fo","u",2,"Hérisson","🦔"],["blaireau","fo","u",null,"Blaireau","🦡"],
+  ["sanglier","fo","u",2,"Sanglier","🐗"],["renard","fo","r",null,"Renard","🦊"],["hibou","fo","r",3,"Hibou grand-duc","🦉"],["cerf","fo","e",2,"Cerf","🦌"],
+  ["loup","fo","l",3,"Loup","🐺"],["ours","fo","l",2,"Ours brun","🐻"],
+  ["grenouille","ma","c",1,"Grenouille","🐸"],["escargot","ma","c",0,"Escargot","🐌"],["coccinelle","ma","c",0,"Coccinelle","🐞"],["abeille","ma","u",0,"Abeille","🐝"],
+  ["papillon","ma","u",1,"Papillon","🦋"],["tortue","ma","r",1,"Tortue","🐢"],["castor","ma","r",null,"Castor","🦫"],["cygne","ma","e",3,"Cygne","🦢"],["flamant","ma","e",1,"Flamant rose","🦩"],
+  ["perroquet","ex","r",1,"Perroquet","🦜"],["kangourou","ex","r",null,"Kangourou","🦘"],["koala","ex","e",null,"Koala","🐨"],["paresseux","ex","e",null,"Paresseux","🦥"],
+  ["manchot","ex","e",3,"Manchot","🐧"],["panda","ex","l",null,"Panda","🐼"],["tigre","ex","l",1,"Tigre","🐅"],["ourspolaire","ex","l",3,"Ours polaire","🐻‍❄️"],
+  ["licorne","my","m",null,"Licorne des prés","🦄"],["phenix","my","m",null,"Phénix de la moisson","🐦‍🔥"],["dragon","my","m",null,"Dragon des vergers","🐉"],
+].map(([id, fam, rar, season, name, e]) => ({ id, fam, rar, season, name, e }));
+const ANI = Object.fromEntries(AN.map(a => [a.id, a]));
+const EGGK = {
+  ferme: { label:"Œuf de ferme", txt:"Chances normales" },
+  saison:{ label:"Œuf de saison", txt:"Seulement les animaux de la saison" },
+  dore:  { label:"Œuf doré", txt:"Bien plus de chances d'avoir du rare" },
+};
+const EG = { info:null, at:0, sub:"egg", hatch:null, busy:false };
+async function loadEggs(){
+  if (!getToken()) return;
+  try{ EG.info = await rpc("baron2_egg_get", { p_token: getToken() }); EG.at = now(); EG.off = now() - Date.parse(EG.info.now);
+    // les grosses éclosions des autres : on prévient tout le monde
+    const fd = EG.info.feed || [], top = fd[0] ? Date.parse(fd[0].at) : 0;
+    if (EG.seenAt){ const big = fd.filter(h => Date.parse(h.at) > EG.seenAt && h.pid !== ME.id && (h.r === "l" || h.r === "m" || h.s))[0];
+      if (big && ANI[big.a]) toast(`${ANI[big.a].e} ${esc(big.name)} vient de faire éclore ${big.r === "m" ? "le mythique" : big.s ? "un brillant :" : "un légendaire :"} ${esc(ANI[big.a].name)} !`, "gold"); }
+    EG.seenAt = Math.max(EG.seenAt || 0, top || 1);
+    if (view === "eggs" && !sheetOpen && !EG.hatch) draw(); else renderTabs(); }catch(e){}
+}
+const egFree = () => EG.info ? +EG.info.free : 0;
+const egDex = () => { const m = {}; (EG.info ? EG.info.dex : []).forEach(d => { const o = m[d.a] || (m[d.a] = { n:0, s:false, sn:0 }); if (d.s){ o.s = true; o.sn = +d.n; } else o.n = +d.n; }); return m; };
+const egSeason = () => EG.info ? +EG.info.season : BX.seasonAt(now()).i;
+const egPts = d => Object.entries(d).reduce((a, [k, o]) => a + (o.n ? RAR[ANI[k]?.rar]?.pts || 0 : 0) + (o.s ? (RAR[ANI[k]?.rar]?.pts || 0) * 5 : 0), 0);
+const egTotemOf = pid => { const r = EG.info && EG.info.rank.find(x => x.pid === pid); return r && r.totem && ANI[r.totem] ? { a: ANI[r.totem], s: !!r.ts } : null; };
+function totTag(pid){ const t = egTotemOf(pid); return t ? `<span class="eg-tt ${t.s ? "sh" : ""}" title="${esc(t.a.name)}">${t.a.e}</span>` : ""; }
+function egDupVal(rar, shiny){ const b = EG.info ? +EG.info.base : 0; return Math.floor(b * ({ c:.01, u:.025, r:.06, e:.5, l:1.5 }[rar] || 0) * (shiny ? 3 : 1)); }
+function egDupTotal(){ const d = egDex(); let t = 0, q = 0; for (const [k, o] of Object.entries(d)){ const a = ANI[k]; if (!a) continue; if (o.n > 1){ t += (o.n - 1) * egDupVal(a.rar, false); q += o.n - 1; } if (o.sn > 1){ t += (o.sn - 1) * egDupVal(a.rar, true); q += o.sn - 1; } } return { t, q }; }
+function eggArt(kind, cls){
+  const sea = ["#F6B8C8", "#F6D36B", "#E39A4E", "#BFD8EE"][egSeason()];
+  const g = kind === "dore" ? ["#FFE9A3", "#F2B33D", "#B97F0E"] : kind === "saison" ? ["#FFFFFF", sea, "#8C6A4E"] : ["#FFF8EC", "#F1DFC2", "#B99A78"];
+  const id = "eg" + kind + (cls || "");
+  return `<svg class="eg-egg ${cls || ""}" viewBox="0 0 100 124" aria-hidden="true"><defs><radialGradient id="${id}" cx="38%" cy="30%" r="75%"><stop offset="0" stop-color="${g[0]}"/><stop offset=".6" stop-color="${g[1]}"/><stop offset="1" stop-color="${g[2]}"/></radialGradient></defs>
+    <ellipse cx="50" cy="118" rx="30" ry="5" fill="rgba(0,0,0,.15)"/>
+    <path d="M50 4 C76 4 94 46 94 74 C94 100 74 116 50 116 C26 116 6 100 6 74 C6 46 24 4 50 4 Z" fill="url(#${id})"/>
+    ${kind === "dore" ? `<path d="M20 60 L32 52 L44 62 L56 52 L68 62 L80 52" stroke="#FFF3C4" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".8"/><circle cx="30" cy="84" r="4" fill="#FFF3C4" opacity=".7"/><circle cx="66" cy="90" r="5" fill="#FFF3C4" opacity=".7"/>`
+      : kind === "saison" ? `<circle cx="34" cy="50" r="7" fill="${g[2]}" opacity=".25"/><circle cx="64" cy="70" r="9" fill="${g[2]}" opacity=".22"/><circle cx="40" cy="92" r="6" fill="${g[2]}" opacity=".25"/>`
+      : `<circle cx="34" cy="48" r="6" fill="#C9A57A" opacity=".45"/><circle cx="62" cy="66" r="8" fill="#C9A57A" opacity=".4"/><circle cx="42" cy="90" r="5" fill="#C9A57A" opacity=".45"/>`}
+    <ellipse cx="34" cy="30" rx="9" ry="14" fill="#fff" opacity=".45" transform="rotate(-20 34 30)"/>
+    <g class="eg-cracks" fill="none" stroke="#5A3A22" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+      <path class="k1" d="M30 52 L40 60 L36 68 L46 74"/><path class="k2" d="M46 74 L56 66 L62 74 L70 64"/><path class="k3" d="M70 64 L78 72 M36 68 L26 76"/></g></svg>`;
+}
+const egAnim = (a, shiny, cls) => `<span class="eg-an ${cls || ""} ${shiny ? "sh" : ""}">${a.e}</span>`;
+function egCountdown(ms){ const s = Math.max(0, Math.floor(ms / 1000)), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d ? `${d} j ${h} h` : h ? `${h} h ${String(m).padStart(2, "0")}` : `${m} min`; }
+function eggsHTML(){
+  const I = EG.info;
+  const segs = [["egg", "Couveuse"], ["dex", "Pokédex"], ["rank", "Classement"]].map(([k, l]) => `<button class="eg-seg ${EG.sub === k ? "on" : ""}" data-a="eg-sub" data-k="${k}">${l}</button>`).join("");
+  let body;
+  if (!I) body = `<p class="eg-empty">La couveuse chauffe…</p>`;
+  else if (EG.sub === "dex") body = egDexHTML();
+  else if (EG.sub === "rank") body = egRankHTML();
+  else body = egCouvHTML();
+  return `<div class="eg"><div class="b2-col b2-pad"><div class="eg-segs">${segs}</div>${body}</div></div>`;
+}
+function egMasterLine(){
+  const M = EG.info.master;
+  if (M.decided) return `<div class="eg-master won"><span class="ic">👑</span><div><small>Maître des œufs, à vie</small><b>${M.owner ? esc(M.owner.id === ME.id ? "Toi !" : M.owner.name) : "Personne"}</b><em>10 % de chaque œuf acheté${M.owner && M.owner.id === ME.id ? ` · +${COIN}${fmtN(+M.fees)} sur 24 h` : ""}</em></div></div>`;
+  const left = Date.parse(M.ends) - (now() - (EG.off || 0)), r = EG.info.rank, me = r.findIndex(x => x.pid === ME.id);
+  return `<button class="eg-master" data-a="eg-sub" data-k="rank"><span class="ic">👑</span><div><small>Maître des œufs dans <b data-eg-cd>${egCountdown(left)}</b></small><b>${r[0] && +r[0].pts > 0 ? `En tête : ${esc(r[0].pid === ME.id ? "toi" : r[0].name)}` : "La course commence !"}</b><em>Le plus de points gagne le titre à vie et 10 % de tous les œufs achetés</em></div><span class="go">›</span></button>`;
+}
+function egCouvHTML(){
+  const I = EG.info, free = egFree(), sea = BX.SEASONS[egSeason()];
+  const nxt = I.next_free ? Date.parse(I.next_free) - (now() - (EG.off || 0)) : 0;
+  const freeCard = `<div class="eg-free ${free ? "ready" : ""}"><button class="eg-freebtn" data-a="eg-open" data-k="free" ${free && !EG.busy ? "" : "disabled"}>${eggArt("ferme", free ? "wob" : "")}</button>
+    <div class="sp"><b>${free ? `${free} œuf${free > 1 ? "s" : ""} gratuit${free > 1 ? "s" : ""} !` : "Œuf gratuit"}</b><small>${free ? "Touche l'œuf pour le faire éclore" : `Le prochain arrive dans <span data-eg-free>${egCountdown(nxt)}</span>`}</small>
+    ${free < 2 && free ? `<small class="nx">Le suivant dans <span data-eg-free>${egCountdown(nxt)}</span></small>` : ""}<div class="eg-dots">${[0, 1].map(i => `<i class="${i < free ? "on" : ""}"></i>`).join("")}</div></div></div>`;
+  const buy = ["ferme", "saison", "dore"].map(k => { const p = +I.prices[k], ok = S.coins >= p;
+    return `<button class="eg-buy ${k}" data-a="eg-open" data-k="${k}" ${EG.busy ? "disabled" : ""}>${eggArt(k, "sm")}<span class="sp"><b>${k === "saison" ? `Œuf ${sea.e} ${sea.label.toLowerCase()}` : EGGK[k].label}</b><small>${EGGK[k].txt}</small></span><span class="pr ${ok ? "" : "no"}">${COIN}${fmtN(p)}</span></button>`; }).join("");
+  const feed = I.feed.length ? I.feed.map(h => { const a = ANI[h.a]; if (!a) return ""; return `<div class="eg-fd"><span class="eg-an mini ${h.s ? "sh" : ""}">${a.e}</span><span class="sp"><b>${esc(h.pid === ME.id ? "Toi" : h.name)}</b> a fait éclore ${h.s ? "un " : ""}<b style="color:${RAR[h.r].col}">${esc(a.name)}${h.s ? " brillant" : ""}</b></span><small>${chTime(h.at)}</small></div>`; }).join("") : `<p class="eg-note">Les plus belles éclosions du village s'afficheront ici.</p>`;
+  return `${egMasterLine()}${freeCard}
+    <h3 class="eg-h">Acheter un œuf</h3>${buy}
+    <p class="eg-note">Chaque œuf acheté rend le suivant 15 % plus cher pendant 24 h.${I.master.decided && I.master.owner ? ` 10 % du prix va au Maître des œufs.` : ""}</p>
+    <h3 class="eg-h">Dernières éclosions</h3><div class="eg-feed">${feed}</div>`;
+}
+function egDexHTML(){
+  const d = egDex(), have = Object.keys(d).length, I = EG.info, my = egTotemOf(ME.id), myth = Object.fromEntries(I.myth.map(m => [m.a, m]));
+  const dup = egDupTotal();
+  const fams = FAM.map(f => {
+    const list = AN.filter(a => a.fam === f.id), got = list.filter(a => d[a.id]).length;
+    return `<div class="eg-fam"><h3>${f.label}<span class="${got === list.length ? "full" : ""}">${got === list.length ? "✓ complète" : `${got}/${list.length}`}</span></h3><div class="eg-grid">${list.map(a => {
+      const o = d[a.id], taken = myth[a.id] && myth[a.id].pid !== ME.id;
+      if (!o) return `<button class="eg-cell unk" data-a="eg-ani" data-k="${a.id}"><span class="eg-an sil">${a.e}</span><b>???</b><small>${taken ? `Chez ${esc(myth[a.id].name)}` : a.rar === "m" ? "Unique au village" : a.season != null ? BX.SEASONS[a.season].e + " " + BX.SEASONS[a.season].label : RAR[a.rar].label}</small></button>`;
+      return `<button class="eg-cell r-${a.rar}" data-a="eg-ani" data-k="${a.id}">${egAnim(a, o.s && !o.n)}${o.s ? `<i class="eg-star">✦</i>` : ""}${o.n + o.sn > 1 ? `<i class="eg-n">×${o.n + o.sn}</i>` : ""}<b>${esc(a.name)}</b><small style="color:${RAR[a.rar].col}">${RAR[a.rar].label}</small></button>`;
+    }).join("")}</div></div>`;
+  }).join("");
+  return `<div class="eg-dexhd"><div class="eg-totem">${my ? egAnim(my.a, my.s, "big") : `<span class="eg-an big sil">🥚</span>`}<small>Ton totem</small><b>${my ? esc(my.a.name) + (my.s ? " ✦" : "") : "Aucun"}</b></div>
+    <div class="sp"><div class="eg-prog"><b>${have}</b>/${AN.length} animaux</div><div class="b2-gbar"><i style="width:${have / AN.length * 100}%"></i></div><div class="eg-pts">${fmtN(egPts(d))} points</div>
+    ${dup.q ? `<button class="b2-btn ghost eg-sellall" data-a="eg-sell">Revendre ${dup.q} doublon${dup.q > 1 ? "s" : ""} · +${COIN}${fmtN(dup.t)}</button>` : ""}</div></div>
+    <p class="eg-note">Touche un animal pour en faire ton totem : c'est lui que les autres voient à côté de ton nom.</p>${fams}`;
+}
+function egRankHTML(){
+  const I = EG.info, r = I.rank, M = I.master;
+  const left = Date.parse(M.ends) - (now() - (EG.off || 0));
+  return `${egMasterLine()}<div class="eg-rank">${r.map((p, i) => { const t = p.totem && ANI[p.totem];
+    return `<div class="eg-rk ${p.pid === ME.id ? "me" : ""}"><span class="n">${i === 0 && +p.pts > 0 ? "👑" : i + 1}</span>${t ? egAnim(t, p.ts, "mid") : `<span class="eg-an mid sil">🥚</span>`}<span class="sp"><b>${esc(p.pid === ME.id ? "Toi" : p.name)}</b><small>${p.nb}/${AN.length} animaux${t ? " · totem : " + esc(t.name) : ""}</small></span><span class="eg-pt">${fmtN(+p.pts)}<small>pts</small></span></div>`; }).join("")}</div>
+    <p class="eg-note">Points : commun 1 · peu commun 3 · rare 10 · épique 40 · légendaire 200 · mythique 1000. Un brillant vaut 5 fois plus. Chaque animal compte une seule fois.${M.decided ? "" : ` Fin de la course le ${new Date(M.ends).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} à ${new Date(M.ends).toLocaleTimeString("fr-FR", { hour:"2-digit", minute:"2-digit" })}.`}</p>`;
+}
+function egAniSheet(k){
+  const a = ANI[k], o = egDex()[k], I = EG.info, myth = I.myth.find(m => m.a === k), my = egTotemOf(ME.id);
+  if (!o){ sheet(`<div class="eg-sh"><span class="eg-an huge sil">${a.e}</span><h3>???</h3>
+      <p>${a.rar === "m" ? (myth ? `Ce mythique vit déjà chez <b>${esc(myth.name)}</b>. Il n'en existe qu'un seul au village.` : "Un mythique : il n'en existe qu'un seul pour tout le village. Le premier qui le fait éclore l'aura pour toujours.") : a.season != null ? `N'éclot qu'au ${BX.SEASONS[a.season].label.toLowerCase()} ${BX.SEASONS[a.season].e}.` : "Il se cache dans un œuf, quelque part…"}</p>
+      <p class="eg-note">${RAR[a.rar].label} · ${FAM.find(f => f.id === a.fam).label}${a.rar === "e" || a.rar === "l" ? " · plus fréquent dans un œuf doré" : ""}</p><button class="b2-btn big" data-a="close-sheet">OK</button></div>`); return; }
+  const isT = (s) => my && my.a.id === k && my.s === s;
+  sheet(`<div class="eg-sh r-${a.rar}"><div class="eg-glow" style="--c:${RAR[a.rar].col}">${egAnim(a, o.s && !o.n, "huge")}</div><h3>${esc(a.name)}</h3>
+    <p class="eg-tag" style="background:${RAR[a.rar].col}">${RAR[a.rar].label}</p>
+    <p class="eg-note">${FAM.find(f => f.id === a.fam).label}${a.season != null ? ` · ${BX.SEASONS[a.season].e} ${BX.SEASONS[a.season].label}` : ""} · ${RAR[a.rar].pts} pt${RAR[a.rar].pts > 1 ? "s" : ""}${o.s ? ` · brillant ✦ ${RAR[a.rar].pts * 5} pts` : ""}</p>
+    <div class="eg-two">${o.n ? `<button class="b2-btn ${isT(false) ? "" : "gold"}" data-a="eg-totem" data-k="${k}" data-s="0" ${isT(false) ? "disabled" : ""}>${isT(false) ? "C'est ton totem" : "Choisir comme totem"}</button>` : ""}
+    ${o.s ? `<button class="b2-btn ${isT(true) ? "" : "gold"}" data-a="eg-totem" data-k="${k}" data-s="1" ${isT(true) ? "disabled" : ""}>${isT(true) ? "Ton totem ✦" : "Totem brillant ✦"}</button>` : ""}</div>
+    ${o.n > 1 ? `<button class="b2-btn ghost" data-a="eg-sell" data-k="${k}" data-s="0">Revendre ${o.n - 1} doublon${o.n > 2 ? "s" : ""} · +${COIN}${fmtN((o.n - 1) * egDupVal(a.rar, false))}</button>` : ""}
+    ${o.sn > 1 ? `<button class="b2-btn ghost" data-a="eg-sell" data-k="${k}" data-s="1">Revendre ${o.sn - 1} brillant${o.sn > 2 ? "s" : ""} en double · +${COIN}${fmtN((o.sn - 1) * egDupVal(a.rar, true))}</button>` : ""}
+  </div>`);
+}
+async function egOpen(kind){
+  if (EG.busy || !EG.info) return;
+  let price = 0;
+  if (kind === "free"){ if (egFree() < 1){ toast("Pas d'œuf gratuit pour l'instant."); return; } }
+  else { price = +EG.info.prices[kind]; if (S.coins < price){ toast("Pas assez de pièces pour cet œuf."); sound("err"); return; } }
+  EG.busy = true;
+  if (price){ S.coins -= price; dirty = true; live(); }
+  EG.hatch = { kind, res:null, taps:0, phase:"egg" };
+  egOverlay();
+  let r;
+  try{ r = await queue(() => rpc("baron2_egg_open", { p_token: getToken(), p_state: S, p_kind: kind, p_price: price })); if (price) lastSave = now(); }
+  catch(e){
+    if (price){ S.coins += price; }
+    EG.busy = false; EG.hatch = null; egOverlayClose();
+    const m = String(e && e.message || ""); toast(m.includes("prix changé") ? "Le prix vient de changer, réessaie." : m.includes("gratuit") ? "Pas d'œuf gratuit pour l'instant." : errText(e), "err");
+    loadEggs(); draw(); return;
+  }
+  EG.info = r.get; EG.at = now(); EG.hatch.res = r; EG.busy = false;
+  egOverlay();
+}
+function egOverlayClose(){ wrapEl && wrapEl.querySelector(".eg-ov")?.remove(); }
+function egOverlay(){
+  const H = EG.hatch; if (!H || !wrapEl) return;
+  let ov = wrapEl.querySelector(".eg-ov");
+  if (!ov){ ov = document.createElement("div"); ov.className = "eg-ov"; wrapEl.appendChild(ov); }
+  if (H.phase === "egg"){
+    ov.className = `eg-ov k${Math.min(3, H.taps)}`;
+    ov.innerHTML = `<div class="eg-ovin"><div class="eg-ovegg" data-a="eg-tap">${eggArt(H.kind === "free" ? "ferme" : H.kind, "huge")}</div><p class="eg-ovtxt">${H.taps ? "Encore !" : "Touche l'œuf pour le faire éclore"}</p></div>`;
+    return;
+  }
+  const r = H.res, a = ANI[r.a], R = RAR[r.r];
+  ov.className = `eg-ov reveal r-${r.r} ${r.s ? "shiny" : ""}`;
+  ov.style.setProperty("--c", R.col);
+  ov.innerHTML = `<div class="eg-ovin"><div class="eg-rays"></div><div class="eg-shell l"></div><div class="eg-shell r"></div>
+    <div class="eg-pop">${egAnim(a, r.s, "huge")}</div>
+    <p class="eg-tag" style="background:${R.col}">${r.s ? "✦ Brillant · " : ""}${R.label}</p>
+    <h2 class="eg-name">${esc(a.name)}</h2>
+    <p class="eg-sub">${r.r === "m" ? "Unique au village : il est à toi pour toujours !" : r.new ? `Nouveau ! +${R.pts * (r.s ? 5 : 1)} points` : `Doublon (tu en as ${r.n}) · revente ${COIN}${fmtN(egDupVal(r.r, r.s))}`}</p>
+    <div class="eg-ovbtns">${egFree() > 0 ? `<button class="b2-btn gold big" data-a="eg-again">Ouvrir un autre œuf gratuit</button>` : ""}<button class="b2-btn big ${egFree() > 0 ? "ghost" : "gold"}" data-a="eg-done">${r.new ? "Super !" : "OK"}</button></div></div>`;
+  if (r.r === "l" || r.r === "m" || r.s){ sound("up"); buzz([60, 40, 60, 40, 140]); } else if (r.r === "e" || r.r === "r"){ sound("up"); buzz([40, 30, 80]); } else { sound("coin"); buzz(30); }
+}
+function egTap(){
+  const H = EG.hatch; if (!H || H.phase !== "egg") return;
+  H.taps++; sound("tap"); buzz(15 + H.taps * 10);
+  const eg = wrapEl.querySelector(".eg-ovegg"); if (eg){ eg.classList.remove("hit"); void eg.offsetWidth; eg.classList.add("hit"); }
+  if (H.taps >= 3 && H.res){ H.phase = "reveal"; setTimeout(egOverlay, 180); return; }
+  if (H.taps >= 3 && !H.res){ wrapEl.querySelector(".eg-ovtxt") && (wrapEl.querySelector(".eg-ovtxt").textContent = "Ça bouge…"); const w = setInterval(() => { if (!EG.hatch){ clearInterval(w); return; } if (EG.hatch.res){ clearInterval(w); EG.hatch.phase = "reveal"; egOverlay(); } }, 150); return; }
+  const ov = wrapEl.querySelector(".eg-ov"); if (ov) ov.className = `eg-ov k${Math.min(3, H.taps)}`;
+  const t = wrapEl.querySelector(".eg-ovtxt"); if (t) t.textContent = H.taps === 1 ? "Ça craque…" : "Encore un coup !";
+}
+async function egSell(k, s){
+  try{ const r = await queue(() => rpc("baron2_egg_sell", { p_token: getToken(), p_state: S, p_animal: k || null, p_shiny: s == null ? null : !!s })); lastSave = now();
+    EG.info = r.get; applyCredits(r.credits); if (r.qty) { toast(`${r.qty} doublon${r.qty > 1 ? "s" : ""} revendu${r.qty > 1 ? "s" : ""} : +${COIN}${fmtN(r.coins)}`, "gold"); sound("coin"); } }
+  catch(e){ toast(errText(e), "err"); }
+  closeSheet(); draw();
+}
+async function egTotem(k, s){
+  try{ EG.info = await rpc("baron2_egg_totem", { p_token: getToken(), p_animal: k, p_shiny: !!s }); sound("up"); toast(`${ANI[k].e} ${esc(ANI[k].name)} est ton nouveau totem !`, "gold"); }
+  catch(e){ toast(errText(e), "err"); }
+  closeSheet(); draw();
+}
+function egTick(){
+  if (!wrapEl || !EG.info) return;
+  const M = EG.info.master, off = EG.off || 0;
+  wrapEl.querySelectorAll("[data-eg-cd]").forEach(el => el.textContent = egCountdown(Date.parse(M.ends) - (now() - off)));
+  if (EG.info.next_free){ const ms = Date.parse(EG.info.next_free) - (now() - off); wrapEl.querySelectorAll("[data-eg-free]").forEach(el => el.textContent = egCountdown(ms)); if (ms <= 0 && now() - EG.at > 5000) loadEggs(); }
+}
+const EG_STYLE = `
+.eg{min-height:100%;background:radial-gradient(120% 60% at 50% 0,#FFF4DC,#F3DDB5 70%,#EBCB98)}
+.eg-segs{display:flex;background:rgba(94,53,23,.12);border-radius:99px;padding:4px;margin-bottom:14px}
+.eg-seg{flex:1;padding:9px 4px;border-radius:99px;font:800 14px var(--round)!important;color:var(--ink2)!important}
+.eg-seg.on{background:#7C4A24!important;color:#FFF1DA!important;box-shadow:0 2px 0 #4E2B12}
+.eg-empty{text-align:center;padding:40px;font:700 15px var(--round);color:var(--ink2)}
+.eg-h{font:400 22px var(--disp);color:var(--ink);margin:20px 0 8px}
+.eg-note{font:600 12.5px/1.4 var(--round);color:var(--ink2);margin:8px 2px}
+.eg-master{width:100%;display:flex;align-items:center;gap:12px;text-align:left;padding:12px 14px;border-radius:18px;background:linear-gradient(135deg,#5B3519,#3B1F17)!important;color:#FFE6B8!important;box-shadow:0 4px 0 rgba(0,0,0,.25);margin-bottom:14px}
+.eg-master .ic{font-size:30px}.eg-master div{flex:1;min-width:0}.eg-master small{display:block;font:700 12px var(--round);opacity:.85}.eg-master small b{display:inline;font:800 12px var(--round);color:#F2B33D}
+.eg-master > div > b{display:block;font:400 21px var(--disp);color:#FFF1DA}.eg-master em{display:block;font:600 11.5px/1.3 var(--round);font-style:normal;opacity:.7;margin-top:2px}
+.eg-master .go{font-size:24px;opacity:.6}
+.eg-master.won{background:linear-gradient(135deg,#C98A12,#7A4E06)!important}
+.eg-free{display:flex;align-items:center;gap:14px;padding:14px;border-radius:22px;background:#FFF8EA;box-shadow:0 4px 0 rgba(94,53,23,.18)}
+.eg-free.ready{background:linear-gradient(135deg,#FFF8EA,#FFE7B0);box-shadow:0 4px 0 #C98A12,0 0 0 2px #F2B33D inset}
+.eg-freebtn{width:96px;flex:none}.eg-freebtn:disabled{opacity:.5;filter:grayscale(.6)}
+.eg-free .sp{flex:1}.eg-free b{display:block;font:400 22px var(--disp);color:var(--ink)}.eg-free small{display:block;font:700 13px var(--round);color:var(--ink2)}.eg-free .nx{opacity:.7;margin-top:2px}
+.eg-dots{display:flex;gap:6px;margin-top:8px}.eg-dots i{width:12px;height:12px;border-radius:50%;background:rgba(94,53,23,.18)}.eg-dots i.on{background:#F2B33D;box-shadow:0 0 0 2px #C98A12 inset}
+.eg-egg{width:100%;height:auto;display:block;overflow:visible}
+.eg-egg.sm{width:46px;flex:none}
+.eg-egg .eg-cracks path{opacity:0}
+.eg-egg.wob{animation:egwob 2.4s ease-in-out infinite;transform-origin:50% 90%}
+@keyframes egwob{0%,70%,100%{transform:rotate(0)}76%{transform:rotate(-7deg)}82%{transform:rotate(6deg)}88%{transform:rotate(-4deg)}94%{transform:rotate(2deg)}}
+.eg-buy{width:100%;display:flex;align-items:center;gap:12px;text-align:left;padding:10px 14px;border-radius:18px;background:#FFF8EA!important;box-shadow:0 3px 0 rgba(94,53,23,.18);margin-bottom:10px;color:var(--ink)!important}
+.eg-buy.dore{background:linear-gradient(135deg,#FFF3CC,#FFE08A)!important;box-shadow:0 3px 0 #C98A12}
+.eg-buy .sp{flex:1;min-width:0}.eg-buy b{display:block;font:800 15.5px var(--round)}.eg-buy small{display:block;font:600 12px var(--round);color:var(--ink2)}
+.eg-buy .pr{font:800 14px var(--round);white-space:nowrap;background:#7C4A24;color:#FFF1DA;padding:6px 10px;border-radius:99px}.eg-buy .pr.no{background:rgba(94,53,23,.25);color:var(--ink2)}
+.eg-feed{background:#FFF8EA;border-radius:18px;padding:4px 12px;box-shadow:0 3px 0 rgba(94,53,23,.12)}
+.eg-fd{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(94,53,23,.1);font:600 13.5px var(--round);color:var(--ink)}.eg-fd:last-child{border:0}
+.eg-fd .sp{flex:1}.eg-fd small{font:700 11px var(--round);color:var(--ink3)}
+.eg-an{display:inline-grid;place-items:center;line-height:1;font-size:34px;font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif}
+.eg-an.mini{font-size:22px}.eg-an.mid{font-size:30px}.eg-an.big{font-size:52px}.eg-an.huge{font-size:120px}
+.eg-an.sil{filter:brightness(0);opacity:.18}
+.eg-an.sh{filter:hue-rotate(160deg) saturate(1.6) drop-shadow(0 0 6px #FFF59A);position:relative}
+.eg-dexhd{display:flex;gap:14px;align-items:center;background:#FFF8EA;border-radius:22px;padding:14px;box-shadow:0 4px 0 rgba(94,53,23,.18)}
+.eg-totem{width:96px;flex:none;text-align:center}.eg-totem small{display:block;font:700 11px var(--round);color:var(--ink2);margin-top:4px}.eg-totem b{display:block;font:800 13px var(--round);color:var(--ink)}
+.eg-dexhd .sp{flex:1;min-width:0}.eg-prog{font:700 14px var(--round);color:var(--ink2);margin-bottom:6px}.eg-prog b{font:400 30px var(--disp);color:var(--ink)}
+.eg-pts{font:800 13px var(--round);color:#8A4A1E;margin-top:6px}
+.eg-sellall{margin-top:10px;width:100%;font-size:13px!important}
+.eg-fam h3{display:flex;align-items:center;justify-content:space-between;font:400 22px var(--disp);color:var(--ink);margin:18px 2px 8px}
+.eg-fam h3 span{font:800 12px var(--round);color:var(--ink2);background:rgba(94,53,23,.1);padding:3px 9px;border-radius:99px}.eg-fam h3 span.full{background:#4FA35A;color:#fff}
+.eg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(94px,1fr));gap:8px}
+.eg-cell{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;padding:12px 4px 8px;border-radius:16px;background:#FFF8EA!important;box-shadow:0 3px 0 rgba(94,53,23,.15);color:var(--ink)!important}
+.eg-cell b{font:800 12px/1.15 var(--round);text-align:center;margin-top:4px}.eg-cell small{font:700 10.5px/1.15 var(--round);text-align:center;color:var(--ink3)}
+.eg-cell.unk{background:rgba(255,248,234,.55)!important;box-shadow:none;border:2px dashed rgba(94,53,23,.18)}
+.eg-cell.r-r{box-shadow:0 3px 0 #3E86D6}.eg-cell.r-e{box-shadow:0 3px 0 #9A55D8;background:linear-gradient(#FFF8EA,#F3E6FF)!important}
+.eg-cell.r-l{box-shadow:0 3px 0 #C98A12;background:linear-gradient(#FFF8EA,#FFE9A8)!important}.eg-cell.r-m{box-shadow:0 3px 0 #E2457A;background:linear-gradient(#FFF8EA,#FFD6E4)!important}
+.eg-star{position:absolute;top:6px;left:8px;font-style:normal;color:#E8A21C;font-size:15px;text-shadow:0 0 6px #FFF59A}
+.eg-n{position:absolute;top:6px;right:7px;font:800 11px var(--round);font-style:normal;background:#7C4A24;color:#FFF1DA;padding:2px 6px;border-radius:99px}
+.eg-rank{background:#FFF8EA;border-radius:20px;padding:4px 12px;box-shadow:0 4px 0 rgba(94,53,23,.15)}
+.eg-rk{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(94,53,23,.1)}.eg-rk:last-child{border:0}
+.eg-rk.me{background:rgba(242,179,61,.18);margin:0 -12px;padding:10px 12px}
+.eg-rk .n{width:26px;text-align:center;font:800 15px var(--round);color:var(--ink2)}.eg-rk .sp{flex:1;min-width:0}.eg-rk b{display:block;font:800 15px var(--round);color:var(--ink)}.eg-rk small{display:block;font:600 11.5px var(--round);color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.eg-rk .eg-pt{font:400 24px var(--disp);color:var(--ink);text-align:right}.eg-rk .eg-pt small{font:700 10px var(--round);display:block;margin-top:-2px}
+.eg-sh{text-align:center}.eg-sh h3{font:400 30px var(--disp);margin:6px 0}
+.eg-glow{display:inline-block;border-radius:50%;padding:10px 26px;background:radial-gradient(circle,color-mix(in srgb,var(--c) 35%,transparent),transparent 70%)}
+.eg-tag{display:inline-block;color:#fff;font:800 12px var(--round);padding:4px 12px;border-radius:99px;letter-spacing:.03em;margin:4px 0}
+.eg-two{display:flex;gap:8px;margin:12px 0 8px}.eg-two .b2-btn{flex:1}
+.eg-sh .b2-btn.ghost{width:100%;margin-top:6px}
+.eg-tt{display:inline-block;margin-left:5px;font-size:.95em;vertical-align:-1px}.eg-tt.sh{filter:hue-rotate(160deg) saturate(1.6) drop-shadow(0 0 3px #FFF59A)}
+.eg-ov{position:absolute;inset:0;z-index:60;display:grid;place-items:center;background:radial-gradient(circle at 50% 45%,#5B3519,#1E0F08 75%);animation:egin .25s ease}
+@keyframes egin{from{opacity:0}}
+.eg-ovin{position:relative;text-align:center;width:min(92vw,420px);padding:20px}
+.eg-ovegg{width:190px;margin:0 auto;cursor:pointer;animation:egwob 1.6s ease-in-out infinite;transform-origin:50% 90%}
+.eg-ovegg.hit{animation:eghit .35s ease}
+@keyframes eghit{20%{transform:rotate(-12deg) scale(1.05)}45%{transform:rotate(10deg) scale(1.08)}70%{transform:rotate(-6deg)}100%{transform:none}}
+.eg-ov.k1 .k1,.eg-ov.k2 .k1,.eg-ov.k2 .k2,.eg-ov.k3 .eg-cracks path{opacity:1!important}
+.eg-ov.k2 .eg-ovegg{filter:drop-shadow(0 0 18px rgba(255,230,160,.5))}.eg-ov.k3 .eg-ovegg{filter:drop-shadow(0 0 30px rgba(255,240,190,.9))}
+.eg-ovtxt{font:800 17px var(--round);color:#FFE6B8;margin-top:18px}
+.eg-ov.reveal{background:radial-gradient(circle at 50% 40%,color-mix(in srgb,var(--c) 70%,#000),#120804 78%)}
+.eg-rays{position:absolute;left:50%;top:30%;width:520px;height:520px;margin:-260px 0 0 -260px;background:repeating-conic-gradient(from 0deg,rgba(255,255,255,.16) 0 10deg,transparent 10deg 20deg);border-radius:50%;animation:egspin 14s linear infinite;mask:radial-gradient(circle,#000 20%,transparent 68%);-webkit-mask:radial-gradient(circle,#000 20%,transparent 68%)}
+.eg-ov.r-c .eg-rays,.eg-ov.r-u .eg-rays{opacity:.45}
+@keyframes egspin{to{transform:rotate(360deg)}}
+.eg-pop{position:relative;animation:egpop .7s cubic-bezier(.2,1.6,.4,1) both}
+@keyframes egpop{0%{transform:scale(.1) translateY(40px);opacity:0}100%{transform:none;opacity:1}}
+.eg-ov.shiny .eg-pop::after{content:"✦ ✧ ✦";position:absolute;inset:-10px 0 auto;color:#FFF59A;font-size:30px;letter-spacing:40px;animation:egtw 1s ease-in-out infinite alternate}
+@keyframes egtw{from{opacity:.3}to{opacity:1}}
+.eg-shell{position:absolute;top:28%;width:70px;height:60px;background:#F1DFC2;border-radius:50% 50% 10% 10%;opacity:0}
+.eg-shell.l{left:22%;animation:egsl .8s ease-out both}.eg-shell.r{right:22%;animation:egsr .8s ease-out both}
+@keyframes egsl{0%{opacity:1;transform:none}100%{opacity:0;transform:translate(-90px,140px) rotate(-90deg)}}
+@keyframes egsr{0%{opacity:1;transform:none}100%{opacity:0;transform:translate(90px,140px) rotate(90deg)}}
+.eg-ov .eg-tag{animation:egup .5s .35s both}
+.eg-name{font:400 40px var(--disp);color:#FFF1DA;margin:6px 0 4px;animation:egup .5s .45s both}
+.eg-sub{font:700 14px var(--round);color:#FFE6B8;opacity:.9;animation:egup .5s .55s both}
+.eg-ovbtns{display:flex;flex-direction:column;gap:10px;margin-top:22px;animation:egup .5s .7s both}
+.eg-ov .b2-btn.ghost{background:rgba(255,255,255,.14)!important;color:#FFF1DA!important}
+@keyframes egup{from{opacity:0;transform:translateY(14px)}}
+.eg-ov.r-l .eg-name,.eg-ov.r-m .eg-name{background:linear-gradient(90deg,#FFE6B8,#F2B33D,#FFE6B8);-webkit-background-clip:text;background-clip:text;color:transparent}
+`;
+try{ const est = document.createElement("style"); est.textContent = EG_STYLE; document.head.appendChild(est); }catch(e){}
 
 /* ---------- Commandes en course : les mêmes pour tous, la prime au premier ---------- */
 let ORD = null;
@@ -3654,7 +3958,7 @@ function rankSheet(){
   sheet(`<div class="b2-throne"><span class="c">${CROWN}</span><small>Le Baron du moment</small><b>${esc(top.id === ME.id ? "Toi !" : top.name)}</b>
       <span class="f">${COIN}${fmtN(f(top))} ${P[top.specialty]?.e || ""}</span></div>
     ${above ? `<div class="b2-chase">Encore ${COIN}<b>${fmtN(gap)}</b> pour dépasser ${esc(above.name)}</div>` : `<div class="b2-chase win">Garde ta couronne !</div>`}
-    <div class="b2-rank">${pl.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}${p.stats?.pio ? " 🎖️" : ""}</span><span class="f">${COIN}${fmtN(f(p))}</span></div>`).join("")}</div>
+    <div class="b2-rank">${pl.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}${totTag(p.id)}${p.stats?.pio ? " 🎖️" : ""}</span><span class="f">${COIN}${fmtN(f(p))}</span></div>`).join("")}</div>
     <p class="b2-note" style="text-align:center">Fortune = pièces + stock + la moitié de ce que tu as construit</p>`);
 }
 
@@ -3882,6 +4186,7 @@ function onClick(e){
       if (tb.id === "market") mkt.open = false;
       view = tb.id; markSeen("tab_" + tb.id); closeSheet(); wrapEl.querySelector("#b2-main").scrollTop = 0; draw();
       if (view === "market" || view === "village") loadWorld(true);
+      if (view === "eggs") loadEggs();
       if (view === "casino"){ CZ.res = null; if (!FL.f) CZ.game = "lobby"; loadCasino(); loadFly(); loadLotto(); }
       if (view === "port") loadPort();
       if (view === "lotto"){ LT.pick = []; loadLotto(); }
@@ -3909,6 +4214,14 @@ function onClick(e){
     case "fl-toggle": flToggle(); return;
     case "chat": if (view === "chat"){ view = CH.back || "farm"; draw(); return; } CH.back = view; view = "chat"; closeSheet(); draw(); chPoll(); return;
     case "ch-send": chSend(); return;
+    case "eg-sub": EG.sub = b.dataset.k; closeSheet(); if (view !== "eggs"){ view = "eggs"; } wrapEl.querySelector("#b2-main").scrollTop = 0; draw(); return;
+    case "eg-open": egOpen(b.dataset.k); return;
+    case "eg-tap": egTap(); return;
+    case "eg-again": EG.hatch = null; egOpen("free"); return;
+    case "eg-done": EG.hatch = null; egOverlayClose(); draw(); return;
+    case "eg-ani": egAniSheet(b.dataset.k); return;
+    case "eg-sell": egSell(b.dataset.k || null, b.dataset.k ? b.dataset.s === "1" : null); return;
+    case "eg-totem": egTotem(b.dataset.k, b.dataset.s === "1"); return;
     case "pt-up": ptUp(); return;
     case "pt-who": ptWho(b.dataset.m, b.dataset.k); return;
     case "pt-pickwho": ptPickWho(b.dataset.m, b.dataset.id, b.dataset.k); return;
