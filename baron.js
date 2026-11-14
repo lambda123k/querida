@@ -772,7 +772,11 @@ function applyCredits(list){
     if (c.product === "fly_fee" || c.product === "fly_bank"){ portFees.push(Object.assign({}, c, { fl: 1 })); continue; }
     if (c.product === "egg_dup") continue;
     if (c.product === "egg_fee"){ portFees.push(Object.assign({}, c, { eg: 1 })); continue; }
-    if (c.product === "charge"){ toast(`🧾 Charges ${c.buyer === "Casino" ? "du casino" : c.buyer === "Port" ? "du port" : c.buyer === "Loterie" ? "de la loterie" : c.buyer === "Œufs" ? "du Maître des œufs" : "de l'aérodrome"} : −${COIN}${fmtN(-c.coins)}, versées à la cagnotte de la Loterie`); continue; }
+    if (c.product === "charge"){ toast(`🧾 Charges ${c.buyer === "Casino" ? "du casino" : c.buyer === "Port" ? "du port" : c.buyer === "Loterie" ? "de la loterie" : c.buyer === "Œufs" ? "du Maître des œufs" : "de l'aérodrome"} : −${COIN}${fmtN(-c.coins)}, versées au Baron (le Tribut)`); continue; }
+    if (c.product === "tribut"){ toast(`👑 Le Tribut du matin : +${COIN}${fmtN(c.coins)} versés par les patrons de la ville`, "gold"); sound("coin"); continue; }
+    if (c.product === "loan_in"){ toast(`🤝 ${esc(c.buyer)} t'a prêté ${COIN}${fmtN(c.coins)} ! Tu as ${c.qty} h pour rembourser (+10 %).`, "gold"); sound("coin"); loadLoans(); continue; }
+    if (c.product === "loan_back"){ toast(`🤝 ${esc(c.buyer)} t'a remboursé : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); loadLoans(); continue; }
+    if (c.product === "loan_seize"){ toast(+c.coins >= 0 ? `👑 ${esc(c.buyer)} n'a pas remboursé à temps : tu t'es servi, +${COIN}${fmtN(c.coins)}` : `👑 Délai dépassé : ${esc(c.buyer)} s'est servi, −${COIN}${fmtN(-c.coins)}`, +c.coins >= 0 ? "gold" : "err"); loadLoans(); continue; }
     if (c.product === "lotto_win"){ S.stats.earned += +c.coins || 0; toast(`🎟️ JACKPOT ! Ton ticket ${esc(c.buyer)} est sorti : +${COIN}${fmtN(c.coins)}`, "gold"); sound("up"); buzz([60, 40, 60, 40, 120]); continue; }
     S.stats.sold += +c.coins || 0; S.stats.earned += +c.coins || 0;
     msgs.push(c);
@@ -858,7 +862,7 @@ async function loadWorld(force){
     const r = await rpc("baron2_world", {});
     BX.setMarket({ press: r.press || {}, med: r.med });
     W = { res: r.reserve || null, players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
-    await loadOrders(true); await loadEtb(); loadCasino(); loadPort(); loadLotto(); loadFly();
+    await loadOrders(true); await loadEtb(); loadCasino(); loadPort(); loadLotto(); loadFly(); loadLoans();
     if (wrapEl && (view === "market" || view === "village" || view === "atelier") && !gestOpen && !sheetOpen) draw();
   }catch(e){}
 }
@@ -1800,6 +1804,8 @@ function loop(){
     if (n % 40 === 30 && (view === "lotto" || view === "casino")) loadLotto();
     if (n % 40 === 12 && (view === "port" || view === "village")) loadPort();
     if (n % 16 === 8 && view === "casino" && !CZ.spinning) loadCasino();
+    if (n % 40 === 24) loadLoans();
+    if (view === "casino" && CZ.game === "bureau") lnTick();
     if (view === "chat" ? n % 12 === 6 : n % 60 === 6) chPoll();
     if (n % 4 === 2 && view === "eggs") egTick();
     if (n % 80 === 20 && view === "atelier") loadEtb().then(() => { if (view === "atelier" && !sheetOpen && !gestOpen) draw(); });
@@ -2857,7 +2863,7 @@ function casinoHTML(){
   if (!info) body = `<p class="cz-empty">Le croupier arrive…</p>`;
   else if (me) body = `<div class="cz-bank"><h3>Tu tiens la banque</h3><p>Tant que tu es le Baron, ce que les joueurs perdent est à toi et c'est toi qui paies leurs gains, même si tu passes en négatif. Tu ne peux pas jouer.</p>
       <div class="cz-sum"><span>Banque sur 24 h</span><b class="${+info.bank >= 0 ? "up" : "dn"}">${+info.bank >= 0 ? "+" : "−"}${COIN}${fmtN(Math.abs(+info.bank))}</b></div>
-      <button class="b2-btn big ${open ? "red" : "gold"}" data-a="cz-toggle">${open ? "Fermer le casino" : "Ouvrir le casino"}</button>${rgPanel("casino")}${chargeNote()}</div>`;
+      <button class="b2-btn big ${open ? "red" : "gold"}" data-a="cz-toggle">${open ? "Fermer le casino" : "Ouvrir le casino"}</button>${rgPanel("casino")}<p class="b2-note fl-charge">👑 Tu es le Baron : tu ne paies pas de charges, c'est toi qui touches le Tribut.</p></div>`;
   else body = `<div class="cz-play ${open ? "" : "shut"}">
       ${open ? "" : `<div class="cz-closed">🔒 Le casino est fermé<small>Seul le Baron peut l'ouvrir.</small></div>`}
       <div class="cz-chips">${chips.map((v, i) => `<button class="cz-tok t${i} ${CZ.chip === i ? "on" : ""}" data-a="cz-chip" data-i="${i}">${fmtN(v)}</button>`).join("")}<button class="cz-tok all ${CZ.chip === 4 ? "on" : ""}" data-a="cz-chip" data-i="4">Tapis</button></div>
@@ -2868,6 +2874,7 @@ function casinoHTML(){
   if (CZ.game === "lobby") return czLobby();
   if (CZ.game === "lotto") return `<div class="cz cz-lt"><div class="b2-col b2-pad" style="padding-bottom:0">${back("🎟️ La Loterie")}</div>${lottoHTML()}</div>`;
   if (CZ.game === "envol") return `<div class="cz"><div class="b2-col b2-pad">${back("✈️ L'Aérodrome")}${envolHTML()}</div></div>`;
+  if (CZ.game === "bureau") return `<div class="cz"><div class="b2-col b2-pad">${back("🤝 Le Bureau du Baron")}${bureauHTML()}</div></div>`;
   return `<div class="cz"><div class="b2-col b2-pad">
     ${back("🎡 La Roulette")}
     <div class="cz-hd"><span class="cz-st ${open ? "on" : ""}">${open ? "Roulette ouverte" : "Roulette fermée"}</span></div>
@@ -2887,6 +2894,7 @@ function czLobby(){
     <h2 class="cz-ttl">Casino du Baron</h2><p class="cz-lead">Choisis ta table.</p>
     ${card("roulette", "🎡", "La Roulette", bar ? (czIamBaron() ? "Tu tiens la banque" : "Banque : " + esc(bar.name)) : "Roulette européenne", `<span class="cz-st ${open ? "on" : ""}">${open ? "Ouverte" : "Fermée"}</span>`, "r")}
     ${card("envol", "✈️", "L'Aérodrome", F && F.owner ? `Patron : ${esc(F.owner.id === ME.id ? "toi" : F.owner.name)}${fh ? `<span class="cz-mini">${fh}</span>` : ""}` : "Encaisse avant le crash", F && F.owner ? `<span class="cz-st ${F.open !== false ? "on" : ""}">${F.open !== false ? "Ouvert" : "Fermé"}</span>` : `<span class="go">›</span>`, "a")}
+    ${card("bureau", "🤝", "Le Bureau du Baron", LN.info && LN.info.baron ? (lnIamBaron() ? (LN.info.asks.length ? `${LN.info.asks.length} demande${LN.info.asks.length > 1 ? "s" : ""} de prêt` : "Ton tribut et tes prêts") : (LN.info.mine && LN.info.mine.status === "live" ? `Tu dois ${COIN}${fmtN(+LN.info.mine.owed)}` : "Emprunter au Baron")) : "Prêts et tribut", lnIamBaron() && LN.info.asks.length ? `<span class="cz-st on">${LN.info.asks.length}</span>` : `<span class="go">›</span>`, "r")}
     ${card("lotto", "🎟️", "La Loterie", L && L.owner ? `Cagnotte ${COIN}${fmtN(+L.jackpot)} · tirage à ${ltHour(L.draw_at)}` : "Bientôt…", `<span class="go">›</span>`, "l")}
   </div></div>`;
 }
@@ -3460,7 +3468,92 @@ async function flToggle(){
   catch(e){ toast(String(e && e.message || "").includes("pas le patron") ? "Tu n'es plus le patron de l'aérodrome." : errText(e), "err"); loadFly(); }
   draw();
 }
-function chargeNote(){ return `<p class="b2-note fl-charge">🧾 Charges : chaque matin à 8 h, tu paies 20 % de ce que ton lieu t'a rapporté sur 24 h. Elles vont dans la cagnotte de la Loterie.</p>`; }
+function chargeNote(){ return `<p class="b2-note fl-charge">🧾 Charges : chaque matin à 8 h, tu paies 20 % de ce que ton lieu t'a rapporté sur 24 h. C'est le Tribut : il va au Baron.</p>`; }
+/* =================== Le Bureau du Baron (14 nov. 2026) ===================
+   Le parrain de la ville : il touche le Tribut (les charges des lieux) et fait des prêts.
+   On demande, il accepte en fixant le délai ; on rembourse 10 % de plus. Délai dépassé : il se sert (dû + 20 %). */
+const LN = { info:null, at:0, pick:1, seenAsk:0, busy:false };
+async function loadLoans(){
+  try{
+    const r = await rpc("baron2_loans_get", { p_token: getToken() }); LN.info = r; LN.at = now();
+    const top = r.asks && r.asks.length ? Math.max(...r.asks.map(a => +a.id)) : 0;
+    if (top > LN.seenAsk){ if (LN.seenAsk) toast(`🤝 ${esc(r.asks[r.asks.length - 1].name)} te demande un prêt. Va dans ton Bureau (Casino).`, "gold"); LN.seenAsk = top; }
+    if (view === "casino" && (CZ.game === "bureau" || CZ.game === "lobby") && !sheetOpen && !CZ.spinning && !FL.f) draw();
+  }catch(e){}
+}
+const lnIamBaron = () => !!(LN.info && LN.info.baron && LN.info.baron.id === ME.id);
+function lnAmounts(){
+  // des montants ronds autour de ta fortune en pièces
+  const c = Math.max(1e6, S.coins);
+  const down = x => { const p = Math.pow(10, Math.floor(Math.log10(x))), m = x / p; return (m >= 5 ? 5 : m >= 2 ? 2 : 1) * p; };
+  return [down(c * .1), down(c * .5), down(c), down(c * 3)];
+}
+function bureauHTML(){
+  const I = LN.info;
+  if (!I) return `<p class="cz-empty">Le Baron arrive dans son bureau…</p>`;
+  const bar = I.baron, me = lnIamBaron(), left = t => fmtT(new Date(t).getTime() - now());
+  const rule = `<p class="cz-note">On rembourse 10 % de plus que la somme prêtée, dans le délai fixé par le Baron. Si le délai est dépassé, le Baron se sert tout seul : il prend ce qui est dû + 20 % sur tes pièces, même si tu passes en négatif.</p>`;
+  const book = I.book.length ? `<div class="cz-feed"><h3>Tes prêts en cours</h3>${I.book.map(l => `<div class="cz-row"><span class="sp">${esc(l.name)}<small>prêté ${COIN}${fmtN(+l.amount)}</small></span><b>${COIN}${fmtN(+l.owed)}<small data-ln-due="${l.due_at}">${left(l.due_at)}</small></b></div>`).join("")}</div>` : "";
+  if (me){
+    const asks = I.asks.length ? I.asks.map(a => `<div class="ln-ask"><div class="ln-who"><b>${esc(a.name)}</b> te demande <b>${COIN}${fmtN(+a.amount)}</b><small>Il te rendra ${COIN}${fmtN(Math.ceil(+a.amount * 1.1))}</small></div>
+        <div class="ln-hrs">${[1, 3, 6, 24].map(h => `<button class="b2-btn gold" data-a="ln-yes" data-id="${a.id}" data-h="${h}" ${S.coins >= +a.amount && !LN.busy ? "" : "disabled"}>${h} h</button>`).join("")}<button class="b2-btn ghost" data-a="ln-yes" data-id="${a.id}" data-h="0">Non</button></div>
+        ${S.coins < +a.amount ? `<small class="ln-poor">Tu n'as pas assez de pièces pour ce prêt.</small>` : ""}</div>`).join("") : `<p class="cz-empty">Personne ne te demande d'argent pour l'instant.</p>`;
+    return `<div class="cz-bank"><h3>Ton bureau, Baron</h3>
+      <div class="cz-sum"><span>Tribut sur 24 h</span><b class="up">+${COIN}${fmtN(+I.tribut)}</b></div>
+      <p>Chaque matin à 8 h, les charges du Port, de la Loterie et de l'Aérodrome te sont versées.</p></div>
+      <div class="cz-feed"><h3>Demandes de prêt</h3><p class="ln-tip">Choisis le délai pour dire oui.</p>${asks}</div>${book}${rule}`;
+  }
+  const m = I.mine;
+  let box;
+  if (m && m.status === "live") box = `<div class="cz-bank"><h3>Tu dois ${COIN}${fmtN(+m.owed)}</h3><p>À ${esc(m.lender_name || "Baron")}, à rendre dans <b data-ln-due="${m.due_at}">${left(m.due_at)}</b>.</p>
+      <button class="b2-btn big gold" data-a="ln-repay" ${S.coins >= +m.owed && !LN.busy ? "" : "disabled"}>Rembourser · ${COIN}${fmtN(+m.owed)}</button>${S.coins < +m.owed ? `<small class="ln-poor">Il te manque ${COIN}${fmtN(+m.owed - S.coins)}.</small>` : ""}</div>`;
+  else if (m && m.status === "ask") box = `<div class="cz-bank"><h3>Demande envoyée</h3><p>Tu as demandé ${COIN}${fmtN(+m.amount)} à ${bar ? esc(bar.name) : "le Baron"}. Il a 1 h pour te répondre.</p><button class="b2-btn ghost" data-a="ln-cancel">Annuler ma demande</button></div>`;
+  else {
+    const am = lnAmounts(), last = m && m.status === "refused" ? `<p class="ln-res dn">Le Baron a refusé ton dernier prêt.</p>` : m && m.status === "seized" ? `<p class="ln-res dn">Délai dépassé : le Baron s'est servi.</p>` : m && m.status === "paid" ? `<p class="ln-res up">Prêt remboursé. Le Baron s'en souviendra.</p>` : "";
+    box = `<div class="cz-bank"><h3>Demander un prêt</h3><p>Combien veux-tu emprunter à ${bar ? esc(bar.name) : "le Baron"} ?</p>${last}
+      <div class="cz-chips">${am.map((v, i) => `<button class="cz-tok t${i} ${LN.pick === i ? "on" : ""}" data-a="ln-pick" data-i="${i}">${fmtN(v)}</button>`).join("")}</div>
+      <button class="b2-btn big gold" data-a="ln-ask" ${LN.busy ? "disabled" : ""}>Demander ${COIN}${fmtN(am[LN.pick])}</button></div>`;
+  }
+  return `${box}${book}${rule}`;
+}
+async function lnAsk(){
+  const v = lnAmounts()[LN.pick]; LN.busy = true;
+  try{ LN.info = await rpc("baron2_loan_ask", { p_token: getToken(), p_amount: v }); sound("up"); toast(`🤝 Demande envoyée au Baron : ${COIN}${fmtN(v)}.`); }
+  catch(e){ const m = String(e && e.message || ""); toast(m.includes("déjà") ? "Tu as déjà un prêt en cours." : m.includes("tu es le baron") ? "Tu es le Baron : c'est toi qui prêtes." : errText(e), "err"); }
+  LN.busy = false; draw();
+}
+async function lnCancel(){ try{ LN.info = await rpc("baron2_loan_cancel", { p_token: getToken() }); }catch(e){ toast(errText(e), "err"); } draw(); }
+async function lnYes(id, h){
+  const a = LN.info && LN.info.asks.find(x => String(x.id) === String(id)); if (!a || LN.busy) return;
+  const amt = h ? +a.amount : 0;
+  if (amt > S.coins){ toast("Pas assez de pièces pour ce prêt."); return; }
+  LN.busy = true; S.coins -= amt; dirty = true; live();
+  try{
+    const r = await queue(() => rpc("baron2_loan_answer", { p_token: getToken(), p_state: S, p_id: +id, p_hours: h })); lastSave = now();
+    LN.info = r; if (r.credits) applyCredits(r.credits);
+    sound("up"); toast(h ? `🤝 Prêt accordé à ${esc(a.name)} : il a ${h} h pour te rendre ${COIN}${fmtN(Math.ceil(amt * 1.1))}.` : `Tu as refusé le prêt de ${esc(a.name)}.`);
+  }catch(e){ S.coins += amt; const m = String(e && e.message || ""); toast(m.includes("expirée") ? "Cette demande n'est plus valable." : m.includes("pas le baron") ? "Tu n'es plus le Baron." : errText(e), "err"); loadLoans(); }
+  LN.busy = false; draw();
+}
+async function lnRepay(){
+  const m = LN.info && LN.info.mine; if (!m || m.status !== "live" || LN.busy) return;
+  const o = +m.owed; if (o > S.coins){ toast("Pas assez de pièces pour rembourser."); return; }
+  LN.busy = true; S.coins -= o; dirty = true; live();
+  try{ const r = await queue(() => rpc("baron2_loan_repay", { p_token: getToken(), p_state: S })); lastSave = now(); LN.info = r; applyCredits(r.credits); sound("coin"); toast(`🤝 Prêt remboursé : ${COIN}${fmtN(o)}.`, "gold"); }
+  catch(e){ S.coins += o; toast(errText(e), "err"); loadLoans(); }
+  LN.busy = false; draw();
+}
+function lnTick(){ wrapEl.querySelectorAll("[data-ln-due]").forEach(el => { el.textContent = fmtT(new Date(el.dataset.lnDue).getTime() - now()); }); }
+const LN_STYLE = `
+.ln-ask{padding:10px 0;border-top:1px solid rgba(255,255,255,.08)}
+.ln-who{font:700 14px/1.35 var(--round)}.ln-who small{display:block;font:600 12px var(--round);opacity:.7}
+.ln-hrs{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:8px}.ln-hrs .b2-btn{padding:8px 0!important;font-size:13px!important}
+.ln-tip{font:600 12px var(--round);opacity:.65;margin:-4px 0 4px}
+.ln-poor{display:block;font:700 12px var(--round);color:#FF9C88;margin-top:6px;text-align:center}
+.ln-res{font:800 13px var(--round);margin:0 0 8px}
+.cz-row b small{display:block;font:700 11px var(--round);opacity:.7;text-align:right}
+`;
+try{ const lst = document.createElement("style"); lst.id = "ln-style"; lst.textContent = LN_STYLE; document.head.appendChild(lst); }catch(e){}
 /* =================== Les Réglages des lieux (14 nov. 2026) ===================
    Le propriétaire règle son lieu : chaque choix a un pour et un contre, et tout le monde voit les réglages.
    Un changement par lieu toutes les 10 minutes. */
@@ -4288,7 +4381,7 @@ function onClick(e){
     }
     case "cz-spin": czSpin(); return;
     case "cz-game": if (FL.f) return; CZ.game = b.dataset.g; CZ.res = null; LT.pick = []; sound("tap"); wrapEl.querySelector("#b2-main").scrollTop = 0; draw();
-      if (CZ.game === "envol") loadFly(); if (CZ.game === "lotto") loadLotto(); if (CZ.game === "roulette" || CZ.game === "lobby") loadCasino(); return;
+      if (CZ.game === "envol") loadFly(); if (CZ.game === "lotto") loadLotto(); if (CZ.game === "roulette" || CZ.game === "lobby") loadCasino(); if (CZ.game === "bureau" || CZ.game === "lobby") loadLoans(); return;
     case "fl-chip": FL.chip = +b.dataset.i; FL.res = null; sound("tap"); draw(); return;
     case "fl-start": flStart(); return;
     case "fl-cash": flCash(); return;
@@ -4297,6 +4390,11 @@ function onClick(e){
     case "pt-pick": ptSendSheet(b.dataset.k); return;
     case "pt-toggle": ptToggle(); return;
     case "fl-toggle": flToggle(); return;
+    case "ln-pick": LN.pick = +b.dataset.i; sound("tap"); draw(); return;
+    case "ln-ask": lnAsk(); return;
+    case "ln-cancel": lnCancel(); return;
+    case "ln-yes": lnYes(b.dataset.id, +b.dataset.h); return;
+    case "ln-repay": lnRepay(); return;
     case "rg-set": rgSet(b.dataset.p, b.dataset.k, b.dataset.v); return;
     case "chat": if (view === "chat"){ view = CH.back || "farm"; draw(); return; } CH.back = view; view = "chat"; closeSheet(); draw(); chPoll(); return;
     case "ch-send": chSend(); return;
