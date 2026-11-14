@@ -1731,7 +1731,7 @@ const TABS = [
   { id:"village", label:"Village",i:"🏘️", need:"village", why:"Le village ouvre quand tu débloques ta 3e parcelle." },
   { id:"port",    label:"Port",   i:"⚓", need:"village", hide:true, why:"Le port ouvre avec le village, à ta 3e parcelle." },
   { id:"lotto",   label:"Loterie",i:"🎟️", need:"village", hide:true, why:"La loterie ouvre avec le village, à ta 3e parcelle." },
-  { id:"casino",  label:"Casino", i:"🎰", need:"village", why:"Le casino ouvre avec le village, à ta 3e parcelle." },
+  { id:"casino",  label:"La Place", i:"🏛️", need:"village", why:"La place ouvre avec le village, à ta 3e parcelle." },
   { id:"chat",    label:"Taverne",i:"💬", hide:true },
 ];
 function openBaron(){
@@ -1888,7 +1888,7 @@ function renderTabs(){
   wrapEl.querySelector("#b2-tabs").innerHTML = `<div class="b2-col">${TABS.filter(t => !t.hide).map(t => {
     const lock = t.need && !BX.unlocked(S, t.need);
     const dot = !lock && t.need && (!seen("tab_" + t.id) || (t.id === "barn" && BX.unlocked(S, "atelier") && !seen("tab_atelier")) || (t.id === "village" && surpDot && view !== "village") || (t.id === "eggs" && egFree() > 0));
-    return `<button class="b2-tab ${view === t.id || (view === "atelier" && t.id === "barn") || ((view === "port" || view === "lotto") && t.id === "village") ? "on" : ""} ${lock ? "locked" : ""}" data-a="tab" data-v="${t.id}"><span class="i">${lock ? "🔒" : t.i}</span>${t.label}${dot ? `<span class="dot"></span>` : ""}</button>`;
+    return `<button class="b2-tab ${view === t.id || (view === "atelier" && t.id === "barn") || ((view === "port" || view === "lotto") && t.id === "casino") ? "on" : ""} ${lock ? "locked" : ""}" data-a="tab" data-v="${t.id}"><span class="i">${lock ? "🔒" : t.i}</span>${t.label}${dot ? `<span class="dot"></span>` : ""}</button>`;
   }).join("")}</div>`;
 }
 function draw(){
@@ -2870,7 +2870,7 @@ function casinoHTML(){
       ${czTable()}
       <div class="cz-acts"><button class="b2-btn ghost" data-a="cz-clear" ${stake ? "" : "disabled"}>Effacer</button><button class="b2-btn ghost" data-a="cz-again" ${CZ.last && !stake ? "" : "disabled"}>Rejouer</button></div>
       <button class="b2-btn big gold cz-go" data-a="cz-spin" ${stake && open && !CZ.spinning ? "" : "disabled"}>${stake ? `Lancer · ${COIN}${fmtN(stake)}` : "Pose tes jetons"}</button></div>`;
-  const back = t => `<div class="cz-top"><button class="b2-btn ghost cz-back" data-a="cz-game" data-g="lobby">‹ Casino</button><span>${t}</span></div>`;
+  const back = t => `<div class="cz-top"><button class="b2-btn ghost cz-back" data-a="cz-game" data-g="lobby">‹ La Place</button><span>${t}</span></div>`;
   if (CZ.game === "lobby") return czLobby();
   if (CZ.game === "lotto") return `<div class="cz cz-lt"><div class="b2-col b2-pad" style="padding-bottom:0">${back("🎟️ La Loterie")}</div>${lottoHTML()}</div>`;
   if (CZ.game === "envol") return `<div class="cz"><div class="b2-col b2-pad">${back("✈️ L'Aérodrome")}${envolHTML()}</div></div>`;
@@ -2891,11 +2891,12 @@ function czLobby(){
   const fh = F && F.hist.length ? F.hist.slice(0, 5).map(h => `<span class="fl-h ${flCol(+h.c)}">${flFmt(+h.c)}</span>`).join("") : "";
   const card = (g, ic, name, line, side, cls) => `<button class="cz-room ${cls}" data-a="cz-game" data-g="${g}"><span class="ic">${ic}</span><span class="sp"><b>${name}</b><small>${line}</small></span>${side}</button>`;
   return `<div class="cz"><div class="b2-col b2-pad">
-    <h2 class="cz-ttl">Casino du Baron</h2><p class="cz-lead">Choisis ta table.</p>
+    <h2 class="cz-ttl">La Place</h2><p class="cz-lead">Tous les lieux de la ville.</p>
+    ${card("bureau", "🤝", "Le Bureau du Baron", LN.info && LN.info.baron ? (lnIamBaron() ? (LN.info.asks.length ? `${LN.info.asks.length} demande${LN.info.asks.length > 1 ? "s" : ""} de prêt` : "Ton tribut et tes prêts") : (LN.info.mine && LN.info.mine.status === "live" ? `Tu dois ${COIN}${fmtN(+LN.info.mine.owed)}` : "Emprunter au Baron")) : "Prêts et tribut", lnIamBaron() && LN.info.asks.length ? `<span class="cz-st on">${LN.info.asks.length}</span>` : `<span class="go">›</span>`, "r")}
     ${card("roulette", "🎡", "La Roulette", bar ? (czIamBaron() ? "Tu tiens la banque" : "Banque : " + esc(bar.name)) : "Roulette européenne", `<span class="cz-st ${open ? "on" : ""}">${open ? "Ouverte" : "Fermée"}</span>`, "r")}
     ${card("envol", "✈️", "L'Aérodrome", F && F.owner ? `Patron : ${esc(F.owner.id === ME.id ? "toi" : F.owner.name)}${fh ? `<span class="cz-mini">${fh}</span>` : ""}` : "Encaisse avant le crash", F && F.owner ? `<span class="cz-st ${F.open !== false ? "on" : ""}">${F.open !== false ? "Ouvert" : "Fermé"}</span>` : `<span class="go">›</span>`, "a")}
-    ${card("bureau", "🤝", "Le Bureau du Baron", LN.info && LN.info.baron ? (lnIamBaron() ? (LN.info.asks.length ? `${LN.info.asks.length} demande${LN.info.asks.length > 1 ? "s" : ""} de prêt` : "Ton tribut et tes prêts") : (LN.info.mine && LN.info.mine.status === "live" ? `Tu dois ${COIN}${fmtN(+LN.info.mine.owed)}` : "Emprunter au Baron")) : "Prêts et tribut", lnIamBaron() && LN.info.asks.length ? `<span class="cz-st on">${LN.info.asks.length}</span>` : `<span class="go">›</span>`, "r")}
     ${card("lotto", "🎟️", "La Loterie", L && L.owner ? `Cagnotte ${COIN}${fmtN(+L.jackpot)} · tirage à ${ltHour(L.draw_at)}` : "Bientôt…", `<span class="go">›</span>`, "l")}
+    <button class="cz-room a" data-a="tab" data-v="port"><span class="ic">⚓</span><span class="sp"><b>Le Port</b><small>${ptOwner() ? (ptMine() ? "Ton port" : "Capitaine : " + esc(ptOwner().name)) : "Vendre à l'étranger"}</small></span><span class="cz-st ${PT.info && PT.info.open ? "on" : ""}">${PT.info && PT.info.open ? "Ouvert" : "Fermé"}</span></button>
   </div></div>`;
 }
 function czBet(k){
@@ -3477,7 +3478,7 @@ async function loadLoans(){
   try{
     const r = await rpc("baron2_loans_get", { p_token: getToken() }); LN.info = r; LN.at = now();
     const top = r.asks && r.asks.length ? Math.max(...r.asks.map(a => +a.id)) : 0;
-    if (top > LN.seenAsk){ if (LN.seenAsk) toast(`🤝 ${esc(r.asks[r.asks.length - 1].name)} te demande un prêt. Va dans ton Bureau (Casino).`, "gold"); LN.seenAsk = top; }
+    if (top > LN.seenAsk){ if (LN.seenAsk) toast(`🤝 ${esc(r.asks[r.asks.length - 1].name)} te demande un prêt. Va dans ton Bureau, sur La Place.`, "gold"); LN.seenAsk = top; }
     if (view === "casino" && (CZ.game === "bureau" || CZ.game === "lobby") && !sheetOpen && !CZ.spinning && !FL.f) draw();
   }catch(e){}
 }
