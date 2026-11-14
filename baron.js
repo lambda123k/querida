@@ -767,6 +767,8 @@ function applyCredits(list){
     if (c.product === "port_back"){ S.stats.earned += +c.coins || 0; toast(`⚓ Ton bateau est rentré : ${fmtN(c.qty)} ${P[c.buyer] ? P[c.buyer].e : ""} vendus +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); continue; }
     if (c.product === "port_storm"){ toast(`🌊 Tempête ! Ta cargaison de ${fmtN(c.qty)} ${P[c.buyer] ? P[c.buyer].e : ""} a coulé.`, "err"); buzz([60, 40, 60]); continue; }
     if (c.product === "port_fee"){ portFees.push(c); continue; }
+    if (c.product === "port_insured"){ S.stats.earned += +c.coins || 0; toast(`🛡️ L'assurance te rembourse ta cargaison coulée : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); continue; }
+    if (c.product === "port_ins"){ toast(+c.qty === 0 ? `🛡️ ${esc(c.buyer)} assure sa cargaison : +${COIN}${fmtN(c.coins)} de prime` : `🌊 Le bateau assuré de ${esc(c.buyer)} a coulé : tu le rembourses −${COIN}${fmtN(-c.coins)}`, +c.qty === 0 ? "gold" : "err"); continue; }
     if (c.product === "lotto_fee"){ portFees.push(Object.assign({}, c, { lt: 1 })); continue; }
     if (c.product === "fly_win"){ S.stats.earned += +c.coins || 0; continue; }
     if (c.product === "fly_fee" || c.product === "fly_bank"){ portFees.push(Object.assign({}, c, { fl: 1 })); continue; }
@@ -3070,7 +3072,7 @@ function portHTML(){
   const stats = `<div class="pt-stats"><span><b>${cfg.ships}</b>bateaux</span><span><b>${String(cfg.hours).replace(".", ",")} h</b>de voyage</span><span><b>${Math.round(cfg.storm * 100)} %</b>de tempête</span><span><b>×${ptX(ptMult())}</b>le cours</span></div>${mine ? "" : rgLine("port")}`;
   let panel = "";
   if (mine) panel = `<div class="b2-paper pt-own"><h2 class="b2-h2">Ton port<small>Tu prends ta commission sur chaque cargaison qui arrive à bon port. Les tiennes ne paient rien.</small></h2>
-      <div class="cz-sum" style="color:var(--ink)"><span>Commissions sur 24 h</span><b>+${COIN}${fmtN(+info.fees)}</b></div>
+      <div class="cz-sum" style="color:var(--ink)"><span>Commissions et assurance sur 24 h</span><b>${+info.fees >= 0 ? "+" : "−"}${COIN}${fmtN(Math.abs(+info.fees))}</b></div>
       <div class="b2-two"><button class="b2-btn ${open ? "red" : "gold"}" data-a="pt-toggle">${open ? "Fermer le port" : "Ouvrir le port"}</button>
       ${cfg.next ? `<button class="b2-btn" data-a="pt-up" data-cc="${cfg.next}">Niveau ${info.lvl + 1} ${price({ coins: cfg.next, wood: 0 })}</button>` : `<button class="b2-btn" disabled>Niveau max</button>`}</div>
       ${cfg.next ? `<p class="b2-note">Niveau ${info.lvl + 1} : un bateau de plus, voyages plus courts, moins de tempêtes, cales plus grandes.</p>` : ""}
@@ -3081,8 +3083,8 @@ function portHTML(){
   const send = !own ? "" : !open ? `<div class="pt-shut">🔒 Le port est fermé${mine ? "" : `<small>Seul ${esc(own.name)} peut l'ouvrir.</small>`}</div>`
     : `<button class="b2-btn big gold" data-a="pt-send" ${free ? "" : "disabled"}>${free ? `⛵ Envoyer une cargaison` : "Tous les bateaux sont en mer"}</button>
        <p class="b2-note" style="text-align:center">${free ? `${free} bateau${free > 1 ? "x" : ""} libre${free > 1 ? "s" : ""} · ta cale : ${fmtN(ptHold())} unités` : `Le prochain rentre dans ${fmtT(Math.min(...info.sea.map(ptLeft)))}`}</p>`;
-  const myRows = my.map(s => `<div class="pt-row"><span class="pt-ic">${P[s.product] ? P[s.product].e : "📦"}</span><span class="sp">${fmtN(s.qty)} ${esc(P[s.product] ? P[s.product].label.toLowerCase() : s.product)}<small>Retour prévu : ${COIN}${fmtN(s.value)}</small></span><b data-pt-left="${s.id}">${fmtT(ptLeft(s))}</b></div>`).join("");
-  const log = info.log.length ? info.log.map(s => `<div class="pt-row"><span class="pt-ic">${s.storm ? "🌊" : "⚓"}</span><span class="sp">${esc(s.pid === ME.id ? "Toi" : s.name)} · ${fmtN(s.qty)} ${P[s.product] ? P[s.product].e : ""}<small>${fmtAgo(new Date(s.at).getTime())}</small></span><b class="${s.storm ? "dn" : "up"}">${s.storm ? "Coulé" : "+" + COIN + fmtN(s.value)}</b></div>`).join("") : `<p class="cz-empty">Aucun bateau n'est encore rentré.</p>`;
+  const myRows = my.map(s => `<div class="pt-row"><span class="pt-ic">${P[s.product] ? P[s.product].e : "📦"}</span><span class="sp">${fmtN(s.qty)} ${esc(P[s.product] ? P[s.product].label.toLowerCase() : s.product)}${s.ins ? " 🛡️" : ""}<small>Retour prévu : ${COIN}${fmtN(s.value)}</small></span><b data-pt-left="${s.id}">${fmtT(ptLeft(s))}</b></div>`).join("");
+  const log = info.log.length ? info.log.map(s => `<div class="pt-row"><span class="pt-ic">${s.storm ? "🌊" : "⚓"}</span><span class="sp">${esc(s.pid === ME.id ? "Toi" : s.name)} · ${fmtN(s.qty)} ${P[s.product] ? P[s.product].e : ""}<small>${fmtAgo(new Date(s.at).getTime())}</small></span><b class="${s.storm && !s.ins ? "dn" : "up"}">${s.storm ? (s.ins ? "Coulé · remboursé 🛡️" : "Coulé") : "+" + COIN + fmtN(s.value)}</b></div>`).join("") : `<p class="cz-empty">Aucun bateau n'est encore rentré.</p>`;
   return `<div class="pt"><div class="b2-col b2-pad">
     <div class="cz-hd"><span class="cz-st ${open ? "on" : ""}">${open ? "Ouvert" : "Fermé"}</span></div>
     <h2 class="pt-ttl">Le Port</h2><div class="pt-cap">⚓ ${cap}</div>
@@ -3104,27 +3106,31 @@ function ptSendSheet(k){
     return;
   }
   const max = Math.min(Math.floor(S.stock[k]), ptHold());
-  sheetCtx = { type:"port", k };
+  const insOk = PT.info.ins && !ptMine();
+  sheetCtx = { type:"port", k, ins:false };
   sheet(`<h3>${P[k].e} Envoyer à l'étranger</h3><p>Cours du village : <b>${fmtP(BX.vPrice(k, now()))}</b>. L'étranger paie ${ptX(ptMult())} fois plus, dans ${ptX(PT.info.cfg.hours)} h. Risque de tempête : ${Math.round(PT.info.cfg.storm * 100)} %.</p>
-    ${qtyBlock(max, max, "q")}<div class="b2-sum" data-sum></div><button class="b2-btn gold big" data-a="confirm">Larguer les amarres</button>`);
+    ${qtyBlock(max, max, "q")}${insOk ? `<button class="pt-ins" data-a="pt-ins"><span class="bx"></span><span class="sp"><b>🛡️ Assurer ma cargaison</b><small>Prime de ${PT.info.ins} % · remboursée à 100 % si elle coule</small></span></button>` : ""}<div class="b2-sum" data-sum></div><button class="b2-btn gold big" data-a="confirm">Larguer les amarres</button>`);
   sheetSum();
 }
+const ptPrem = (q, k) => PT.info && PT.info.ins ? Math.ceil(Math.floor(q * BX.vPrice(k, now()) * ptMult()) * PT.info.ins / 100) : 0;
 function ptSum(q, k){
-  const v = Math.floor(q * BX.vPrice(k, now()) * ptMult()), fee = ptMine() ? 0 : Math.floor(v * ptFee());
-  return `<span>À l'arrivée${fee ? ` <small>(après ${Math.round(ptFee() * 100)} % du port)</small>` : ""}</span><span>${COIN}${fmtN(v - fee)}</span>`;
+  const v = Math.floor(q * BX.vPrice(k, now()) * ptMult()), fee = ptMine() ? 0 : Math.floor(v * ptFee()), ins = sheetCtx && sheetCtx.ins, pr = ins ? ptPrem(q, k) : 0;
+  const b = wrapEl.querySelector("[data-a=confirm]"); if (b) b.disabled = q < 1 || pr > S.coins;
+  return `<span>À l'arrivée${fee ? ` <small>(après ${Math.round(ptFee() * 100)} % du port)</small>` : ""}${ins ? `<br><small>Prime payée maintenant : ${COIN}${fmtN(pr)}</small>` : ""}</span><span>${COIN}${fmtN(v - fee)}</span>`;
 }
-async function ptSend(k, q){
+async function ptSend(k, q, ins){
   if (q < 1 || q > S.stock[k]) return;
-  const unit = BX.vPrice(k, now());
-  S.stock[k] -= q; dirty = true; closeSheet(); live();
+  const unit = BX.vPrice(k, now()), pr = ins ? ptPrem(q, k) : 0;
+  if (pr > S.coins){ toast("Pas assez de pièces pour la prime d'assurance."); return; }
+  S.stock[k] -= q; S.coins -= pr; dirty = true; closeSheet(); live();
   try{
-    const r = await queue(() => rpc("baron2_port_send", { p_token: getToken(), p_state: S, p_product: k, p_qty: q, p_unit: unit }));
+    const r = await queue(() => rpc("baron2_port_send", { p_token: getToken(), p_state: S, p_product: k, p_qty: q, p_unit: unit, p_insure: !!ins }));
     lastSave = now(); PT.info = r; applyCredits(r.credits);
-    sound("up"); buzz([20, 40, 20]); toast(`⛵ Ta cargaison de ${fmtN(q)} ${P[k].e} a pris la mer !`, "gold");
+    sound("up"); buzz([20, 40, 20]); toast(`⛵ Ta cargaison de ${fmtN(q)} ${P[k].e} a pris la mer${ins ? ", assurée 🛡️" : ""} !`, "gold");
   }catch(e){
-    S.stock[k] += q;
+    S.stock[k] += q; S.coins += pr;
     const m = String(e && e.message || "");
-    toast(m.includes("port fermé") ? "Le capitaine vient de fermer le port." : m.includes("plus de bateau") ? "Trop tard : le dernier bateau vient de partir." : m.includes("cale") ? "C'est trop pour la cale du bateau." : errText(e), "err");
+    toast(m.includes("port fermé") ? "Le capitaine vient de fermer le port." : m.includes("plus de bateau") ? "Trop tard : le dernier bateau vient de partir." : m.includes("cale") ? "C'est trop pour la cale du bateau." : m.includes("assurance") ? "Le capitaine vient de retirer l'assurance." : errText(e), "err");
     loadPort();
   }
   draw();
@@ -3564,7 +3570,9 @@ const RG_DEF = {
     { k:"fee", t:"Commission", o:[["5","5 %"],["10","10 %"],["15","15 %"],["20","20 %"]],
       h:v => +v <= 5 ? "Petite part, mais tout le monde a envie d'envoyer." : +v >= 20 ? "Grosse part par bateau, mais ça peut faire fuir." : "Un bon équilibre." },
     { k:"route", t:"Destination", o:[["cote","La Côte"],["med","Méditerranée"],["ame","Amériques"]],
-      h:v => v === "cote" ? "×1,3 le cours · voyage 2× plus court · 2× moins de tempêtes." : v === "ame" ? "×2,2 le cours · voyage 2× plus long · 2× plus de tempêtes." : "×1,6 le cours · voyage et tempêtes normaux." } ],
+      h:v => v === "cote" ? "×1,3 le cours · voyage 2× plus court · 2× moins de tempêtes." : v === "ame" ? "×2,2 le cours · voyage 2× plus long · 2× plus de tempêtes." : "×1,6 le cours · voyage et tempêtes normaux." },
+    { k:"ins", t:"Assurance", o:[["off","Aucune"],["5","5 %"],["10","10 %"],["20","20 %"],["30","30 %"]],
+      h:v => v === "off" ? "Pas d'assurance : un bateau qui coule est perdu pour son propriétaire." : `Assurer coûte ${v} % de la cargaison. Si un bateau assuré coule, c'est toi qui le rembourses à 100 %.${+v <= 5 ? " Pas cher : beaucoup assureront, attention aux tempêtes." : +v >= 30 ? " Très cher : peu assureront, mais chaque prime rapporte gros." : ""}` } ],
   lotto: [
     { k:"ticket", t:"Prix du ticket", o:[["5000000000","5 B"],["50000000000","50 B"],["250000000000","250 B"],["1000000000000","1 T"]],
       h:v => +v <= 5e9 ? "Pas cher : on joue beaucoup, la cagnotte monte doucement." : +v >= 1e12 ? "Très cher : peu de tickets, mais une cagnotte énorme et chacun te rapporte gros." : "Plus le ticket est cher, plus la cagnotte (et ta part) grossit vite." },
@@ -3586,7 +3594,7 @@ const RG_DEF = {
       h:v => v === "partage" ? "Sur le 0, les mises sur rouge, noir, pair… sont rendues à moitié. Plus attirant, moins rentable pour toi." : "Sur le 0, tout est perdu sauf la mise sur le 0. Plus rentable pour toi." } ]
 };
 function rgCur(place){
-  if (place === "port"){ const I = PT.info; return I ? { fee:String(I.fee ?? 10), route:I.route || "med", at:I.cfg_at } : null; }
+  if (place === "port"){ const I = PT.info; return I ? { fee:String(I.fee ?? 10), route:I.route || "med", ins:I.ins ? String(I.ins) : "off", at:I.cfg_at } : null; }
   if (place === "lotto"){ const I = LT.info; return I ? { fee:String(I.fee ?? 10), ticket:String(Math.round(+I.ticket)), every:String(I.every ?? 2), at:I.cfg_at } : null; }
   if (place === "fly"){ const I = FL.info; return I ? { fee:String(I.fee ?? 10), plane:I.plane || "std", max:String(I.max ? Math.round(+I.max) : 0), at:I.cfg_at } : null; }
   const I = CZ.info; return I ? { max:String(I.max ? Math.round(+I.max) : 0), zero:I.partage ? "partage" : "sec", at:I.cfg_at } : null;
@@ -3626,11 +3634,14 @@ const RG_STYLE = `
 .rg-row{padding:8px 0;border-top:1px solid rgba(127,127,127,.2)}.rg-row:first-of-type{border-top:0}
 .rg-t{font:800 14px var(--round);margin-bottom:6px}
 .rg-seg{display:grid;gap:4px;background:rgba(0,0,0,.12);padding:3px;border-radius:12px}
-.rg-seg.n2{grid-template-columns:1fr 1fr}.rg-seg.n3{grid-template-columns:1fr 1fr 1fr}.rg-seg.n4{grid-template-columns:repeat(4,1fr)}
+.rg-seg.n5{grid-template-columns:1.3fr 1fr 1fr 1fr 1fr}.rg-seg.n2{grid-template-columns:1fr 1fr}.rg-seg.n3{grid-template-columns:1fr 1fr 1fr}.rg-seg.n4{grid-template-columns:repeat(4,1fr)}
 .rg-seg button{padding:8px 2px;border-radius:9px!important;font:800 12.5px var(--round)!important;color:inherit!important;background:transparent!important;box-shadow:none!important;line-height:1.15}
 .rg-seg button.on{background:#F2B33D!important;color:#4A2C00!important;box-shadow:0 2px 0 #C98A12!important}
 .rg-seg button:disabled:not(.on){opacity:.45}
 .rg-h{font:600 12.5px/1.35 var(--round);opacity:.8;margin-top:6px}
+.pt-ins{width:100%;display:flex;align-items:center;gap:10px;margin:10px 0 4px;padding:10px 12px;border-radius:14px;background:rgba(59,31,23,.07)!important;color:var(--ink)!important;text-align:left;box-shadow:none!important}
+.pt-ins .bx{width:22px;height:22px;border-radius:7px;border:2.5px solid var(--ink);flex:none}.pt-ins.on .bx{background:#F2B33D;border-color:#C98A12;box-shadow:inset 0 0 0 3px #FFF4E0}
+.pt-ins b{display:block;font:800 14px var(--round)}.pt-ins small{font:600 12px var(--round);opacity:.7}.pt-ins.on{background:rgba(242,179,61,.25)!important}
 .rg-line{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin:8px 0}
 .rg-line span{font:700 12px var(--round);padding:4px 10px;border-radius:99px;background:rgba(127,127,127,.15)}
 .rg-line b{font-weight:900}
@@ -4279,7 +4290,7 @@ async function confirm(){
   const c = sheetCtx; if (!c) return;
   const q = qval("q"); if (q < 1) return;
   const btn = wrapEl.querySelector("[data-a=confirm]"); if (btn) btn.disabled = true;
-  if (c.type === "port"){ ptSend(c.k, q); return; }
+  if (c.type === "port"){ ptSend(c.k, q, !!c.ins); return; }
   if (c.type === "bet"){
     const b = BX.openBet(S, c.k, c.d, q, now());
     if (!b){ toast("Ce pari n'est pas possible.", "err"); closeSheet(); return; }
@@ -4396,6 +4407,7 @@ function onClick(e){
     case "ln-cancel": lnCancel(); return;
     case "ln-yes": lnYes(b.dataset.id, +b.dataset.h); return;
     case "ln-repay": lnRepay(); return;
+    case "pt-ins": if (sheetCtx && sheetCtx.type === "port"){ sheetCtx.ins = !sheetCtx.ins; b.classList.toggle("on", sheetCtx.ins); sound("tap"); sheetSum(); } return;
     case "rg-set": rgSet(b.dataset.p, b.dataset.k, b.dataset.v); return;
     case "chat": if (view === "chat"){ view = CH.back || "farm"; draw(); return; } CH.back = view; view = "chat"; closeSheet(); draw(); chPoll(); return;
     case "ch-send": chSend(); return;
