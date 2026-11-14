@@ -2857,7 +2857,7 @@ function casinoHTML(){
   if (!info) body = `<p class="cz-empty">Le croupier arrive…</p>`;
   else if (me) body = `<div class="cz-bank"><h3>Tu tiens la banque</h3><p>Tant que tu es le Baron, ce que les joueurs perdent est à toi et c'est toi qui paies leurs gains, même si tu passes en négatif. Tu ne peux pas jouer.</p>
       <div class="cz-sum"><span>Banque sur 24 h</span><b class="${+info.bank >= 0 ? "up" : "dn"}">${+info.bank >= 0 ? "+" : "−"}${COIN}${fmtN(Math.abs(+info.bank))}</b></div>
-      <button class="b2-btn big ${open ? "red" : "gold"}" data-a="cz-toggle">${open ? "Fermer le casino" : "Ouvrir le casino"}</button>${chargeNote()}</div>`;
+      <button class="b2-btn big ${open ? "red" : "gold"}" data-a="cz-toggle">${open ? "Fermer le casino" : "Ouvrir le casino"}</button>${rgPanel("casino")}${chargeNote()}</div>`;
   else body = `<div class="cz-play ${open ? "" : "shut"}">
       ${open ? "" : `<div class="cz-closed">🔒 Le casino est fermé<small>Seul le Baron peut l'ouvrir.</small></div>`}
       <div class="cz-chips">${chips.map((v, i) => `<button class="cz-tok t${i} ${CZ.chip === i ? "on" : ""}" data-a="cz-chip" data-i="${i}">${fmtN(v)}</button>`).join("")}<button class="cz-tok all ${CZ.chip === 4 ? "on" : ""}" data-a="cz-chip" data-i="4">Tapis</button></div>
@@ -2872,11 +2872,11 @@ function casinoHTML(){
     ${back("🎡 La Roulette")}
     <div class="cz-hd"><span class="cz-st ${open ? "on" : ""}">${open ? "Roulette ouverte" : "Roulette fermée"}</span></div>
     <div class="cz-banker">${CROWN}<span>La banque : <b>${bar ? esc(me ? "toi" : bar.name) : "…"}</b></span></div>
-    <div class="cz-wh">${czWheelSVG()}${res}</div>
+    ${info && !me ? rgLine("casino") : ""}<div class="cz-wh">${czWheelSVG()}${res}</div>
     <div class="cz-last">${lastN}</div>
     ${body}
     <div class="cz-feed"><h3>Derniers tours</h3>${czFeed()}</div>
-    <p class="cz-note">Roulette européenne : un numéro paie 35 fois la mise, une douzaine ou une colonne 2 fois, rouge, noir, pair, impair, 1-18 et 19-36 paient 1 fois. Le 0 fait tout perdre, sauf si tu as misé dessus.</p>
+    <p class="cz-note">Roulette européenne : un numéro paie 35 fois la mise, une douzaine ou une colonne 2 fois, rouge, noir, pair, impair, 1-18 et 19-36 paient 1 fois. ${info && info.partage ? "Sur le 0 (la partage), les mises sur rouge, noir, pair, impair, 1-18 et 19-36 sont rendues à moitié ; le reste est perdu." : "Le 0 fait tout perdre, sauf si tu as misé dessus."}${info && info.max ? ` Mise max : ${COIN}${fmtN(+info.max)} par tour.` : ""}</p>
   </div></div>`;
 }
 function czLobby(){
@@ -2894,8 +2894,8 @@ function czBet(k){
   if (CZ.spinning) return;
   if (!CZ.info || !CZ.info.open){ toast("Le casino est fermé."); return; }
   if (CZ.res){ CZ.res = null; }
-  const left = Math.floor(S.coins - czStake());
-  if (left < 1){ toast("Tu as déjà tout misé."); return; }
+  const cap = CZ.info.max ? +CZ.info.max : Infinity, left = Math.floor(Math.min(S.coins, cap) - czStake());
+  if (left < 1){ toast(cap < S.coins ? `Mise max atteinte : ${COIN}${fmtN(cap)} par tour.` : "Tu as déjà tout misé."); return; }
   const v = CZ.chip === 4 ? left : Math.min(left, czChips()[CZ.chip]);
   CZ.bets[k] = (CZ.bets[k] || 0) + v; sound("tap"); buzz(8); draw();
 }
@@ -2912,7 +2912,7 @@ async function czSpin(){
   catch(e){
     S.coins += stake; CZ.spinning = false; CZ.hold = false;
     const m = String(e && e.message || "");
-    toast(m.includes("casino fermé") ? "Le Baron vient de fermer le casino." : m.includes("tu es le baron") ? "Tu es devenu le Baron : tu tiens la banque, tu ne peux plus jouer." : errText(e));
+    toast(m.includes("casino fermé") ? "Le Baron vient de fermer le casino." : m.includes("tu es le baron") ? "Tu es devenu le Baron : tu tiens la banque, tu ne peux plus jouer." : m.includes("mise max") ? "Le Baron vient de baisser la mise max : retire des jetons." : errText(e));
     loadCasino(); draw(); return;
   }
   CZ.last = Object.assign({}, CZ.bets);
@@ -3017,11 +3017,12 @@ try{ const cst = document.createElement("style"); cst.id = "cz-style"; cst.textC
    Les autres y envoient leur stock à l'étranger (1,6× le cours du village au départ, sans faire
    baisser le cours), mais le voyage dure des heures et une tempête peut tout couler. */
 const PT = { info:null, at:0 };
-const PT_MULT = 1.6, PT_FEE = 0.10;
+const ptMult = () => PT.info && PT.info.mult ? +PT.info.mult : 1.6, ptFee = () => (PT.info && PT.info.fee != null ? +PT.info.fee : 10) / 100;
+const ptX = x => String(x).replace(".", ",");
 async function loadPort(){
   try{ PT.info = await rpc("baron2_port_get", {}); PT.at = now();
     const mine = ptMine(), was = (() => { try{ return localStorage.getItem("bn2_cap") === "1"; }catch(e){ return false; } })();
-    if (mine !== was){ try{ localStorage.setItem("bn2_cap", mine ? "1" : "0"); }catch(e){} if (mine) toast("⚓ Tu es le nouveau capitaine du port ! Ouvre-le et touche 10 % sur chaque cargaison.", "gold"); } if (view === "port" && !sheetOpen) draw(); }catch(e){}
+    if (mine !== was){ try{ localStorage.setItem("bn2_cap", mine ? "1" : "0"); }catch(e){} if (mine) toast("⚓ Tu es le nouveau capitaine du port ! Ouvre-le, règle-le et touche ta commission sur chaque cargaison.", "gold"); } if (view === "port" && !sheetOpen) draw(); }catch(e){}
 }
 const ptOwner = () => PT.info && PT.info.owner ? PT.info.owner : null;
 const ptMine = () => !!(ptOwner() && ptOwner().id === ME.id);
@@ -3057,13 +3058,14 @@ function portHTML(){
   if (!info) return `<div class="pt"><div class="b2-col b2-pad"><p class="cz-empty">Le port se réveille…</p></div></div>`;
   const cfg = info.cfg, my = info.sea.filter(s => s.pid === ME.id), free = ptFree();
   const cap = own ? `<span>Le capitaine : <b>${esc(mine ? "toi" : own.name)}</b></span>` : `<span>Le port n'a pas encore de capitaine.</span>`;
-  const stats = `<div class="pt-stats"><span><b>${cfg.ships}</b>bateaux</span><span><b>${String(cfg.hours).replace(".", ",")} h</b>de voyage</span><span><b>${Math.round(cfg.storm * 100)} %</b>de tempête</span><span><b>×${String(PT_MULT).replace(".", ",")}</b>le cours</span></div>`;
+  const stats = `<div class="pt-stats"><span><b>${cfg.ships}</b>bateaux</span><span><b>${String(cfg.hours).replace(".", ",")} h</b>de voyage</span><span><b>${Math.round(cfg.storm * 100)} %</b>de tempête</span><span><b>×${ptX(ptMult())}</b>le cours</span></div>${mine ? "" : rgLine("port")}`;
   let panel = "";
-  if (mine) panel = `<div class="b2-paper pt-own"><h2 class="b2-h2">Ton port<small>Tu prends 10 % sur chaque cargaison qui arrive à bon port. Les tiennes ne paient rien.</small></h2>
+  if (mine) panel = `<div class="b2-paper pt-own"><h2 class="b2-h2">Ton port<small>Tu prends ta commission sur chaque cargaison qui arrive à bon port. Les tiennes ne paient rien.</small></h2>
       <div class="cz-sum" style="color:var(--ink)"><span>Commissions sur 24 h</span><b>+${COIN}${fmtN(+info.fees)}</b></div>
       <div class="b2-two"><button class="b2-btn ${open ? "red" : "gold"}" data-a="pt-toggle">${open ? "Fermer le port" : "Ouvrir le port"}</button>
       ${cfg.next ? `<button class="b2-btn" data-a="pt-up" data-cc="${cfg.next}">Niveau ${info.lvl + 1} ${price({ coins: cfg.next, wood: 0 })}</button>` : `<button class="b2-btn" disabled>Niveau max</button>`}</div>
       ${cfg.next ? `<p class="b2-note">Niveau ${info.lvl + 1} : un bateau de plus, voyages plus courts, moins de tempêtes, cales plus grandes.</p>` : ""}
+      ${rgPanel("port")}
       <div class="pt-heir"><span>Ton héritier<b>${info.heir ? esc(info.heir.name) : "Personne"}</b></span><button class="b2-btn ghost" data-a="pt-who" data-m="heir">${info.heir ? "Changer" : "Choisir"}</button></div>
       <p class="b2-note">Si tu ne joues pas pendant 24 h d'affilée, le port passe à ton héritier${info.heir ? "" : " (sans héritier : au dernier du classement)"}.</p>
       <button class="b2-btn ghost pt-give" data-a="pt-who" data-m="give">Céder le port maintenant</button>${chargeNote()}</div>`;
@@ -3081,7 +3083,7 @@ function portHTML(){
     ${my.length ? `<div class="b2-paper"><h2 class="b2-h2">Tes bateaux en mer</h2>${myRows}</div>` : ""}
     ${panel}
     <div class="b2-paper"><h2 class="b2-h2">Derniers retours</h2>${log}</div>
-    <p class="pt-note">L'étranger paie ${String(PT_MULT).replace(".", ",")} fois le cours du village au moment du départ, et ta vente ne fait pas baisser le cours. Le port garde 10 %. Si la tempête frappe, la cargaison est perdue.</p>
+    <p class="pt-note">L'étranger paie ${ptX(ptMult())} fois le cours du village au moment du départ, et ta vente ne fait pas baisser le cours. Le port garde ${Math.round(ptFee() * 100)} %. Si la tempête frappe, la cargaison est perdue.</p>
   </div></div>`;
 }
 function ptSendSheet(k){
@@ -3094,13 +3096,13 @@ function ptSendSheet(k){
   }
   const max = Math.min(Math.floor(S.stock[k]), ptHold());
   sheetCtx = { type:"port", k };
-  sheet(`<h3>${P[k].e} Envoyer à l'étranger</h3><p>Cours du village : <b>${fmtP(BX.vPrice(k, now()))}</b>. L'étranger paie ${String(PT_MULT).replace(".", ",")} fois plus, dans ${String(PT.info.cfg.hours).replace(".", ",")} h. Risque de tempête : ${Math.round(PT.info.cfg.storm * 100)} %.</p>
+  sheet(`<h3>${P[k].e} Envoyer à l'étranger</h3><p>Cours du village : <b>${fmtP(BX.vPrice(k, now()))}</b>. L'étranger paie ${ptX(ptMult())} fois plus, dans ${ptX(PT.info.cfg.hours)} h. Risque de tempête : ${Math.round(PT.info.cfg.storm * 100)} %.</p>
     ${qtyBlock(max, max, "q")}<div class="b2-sum" data-sum></div><button class="b2-btn gold big" data-a="confirm">Larguer les amarres</button>`);
   sheetSum();
 }
 function ptSum(q, k){
-  const v = Math.floor(q * BX.vPrice(k, now()) * PT_MULT), fee = ptMine() ? 0 : Math.floor(v * PT_FEE);
-  return `<span>À l'arrivée${fee ? ` <small>(après 10 % du port)</small>` : ""}</span><span>${COIN}${fmtN(v - fee)}</span>`;
+  const v = Math.floor(q * BX.vPrice(k, now()) * ptMult()), fee = ptMine() ? 0 : Math.floor(v * ptFee());
+  return `<span>À l'arrivée${fee ? ` <small>(après ${Math.round(ptFee() * 100)} % du port)</small>` : ""}</span><span>${COIN}${fmtN(v - fee)}</span>`;
 }
 async function ptSend(k, q){
   if (q < 1 || q > S.stock[k]) return;
@@ -3122,7 +3124,7 @@ function ptWho(mode, kind){
   const lt = kind === "lt", fl = kind === "fl", ps = (W.players || []).filter(p => p.id !== ME.id), cur = lt ? LT.info : fl ? FL.info : PT.info, ic = lt ? "🎟️" : fl ? "✈️" : "⚓", what = lt ? "la loterie" : fl ? "l'aérodrome" : "le port";
   if (!ps.length){ toast("Personne d'autre dans le village pour l'instant."); return; }
   sheetCtx = null;
-  sheet(`<h3>${mode === "heir" ? `${ic} Choisis ton héritier` : `${ic} À qui céder ${what} ?`}</h3><p>${mode === "heir" ? `Il récupère ${what} si tu ne joues pas pendant 24 h d'affilée.` : `${lt ? "La loterie et ses 10 %" : fl ? "L'aérodrome et sa boîte noire" : "Le port, son niveau et ses bateaux"} passent tout de suite à ce joueur. Tu ne pourras pas revenir en arrière.`}</p>
+  sheet(`<h3>${mode === "heir" ? `${ic} Choisis ton héritier` : `${ic} À qui céder ${what} ?`}</h3><p>${mode === "heir" ? `Il récupère ${what} si tu ne joues pas pendant 24 h d'affilée.` : `${lt ? "La loterie et sa part" : fl ? "L'aérodrome et sa boîte noire" : "Le port, son niveau et ses bateaux"} passent tout de suite à ce joueur. Tu ne pourras pas revenir en arrière.`}</p>
     <div class="pt-who">${ps.map(p => `<button class="b2-btn ghost" data-a="pt-pickwho" data-m="${mode}" data-k="${kind || "pt"}" data-id="${esc(p.id)}">${P[p.specialty] ? P[p.specialty].e : ""} ${esc(p.name)}</button>`).join("")}
     ${mode === "heir" && cur.heir ? `<button class="b2-btn ghost" data-a="pt-pickwho" data-m="heir" data-k="${kind || "pt"}" data-id="">Aucun héritier</button>` : ""}</div>`);
 }
@@ -3230,8 +3232,9 @@ function lottoHTML(){
   const mine = ltMine(), left = new Date(L.draw_at).getTime() - now(), tk = L.mine || [], full = tk.length >= 10;
   const last = L.last ? `<div class="b2-paper lt-last"><h2 class="b2-h2">Dernier tirage</h2><div class="lt-row">${ltBall(L.last.a, "gold")}${ltBall(L.last.b, "gold")}<span class="sp">${L.last.winners.length ? `<b>${L.last.winners.map(w => esc(w.id === ME.id ? "Toi" : w.name)).join(", ")}</b> ${L.last.winners.length > 1 ? "se partagent" : "remporte"} ${COIN}${fmtN(L.last.jackpot)} !` : `Personne n'a trouvé. La cagnotte de ${COIN}${fmtN(L.last.jackpot)} est restée en jeu.`}<small>${L.last.tickets} ticket${L.last.tickets > 1 ? "s" : ""} joué${L.last.tickets > 1 ? "s" : ""}</small></span></div></div>` : "";
   const grid = Array.from({ length: 8 }, (_, i) => i + 1).map(n => `<button class="lt-n ${LT.pick.includes(n) ? "on" : ""}" data-a="lt-num" data-n="${n}">${n}</button>`).join("");
-  const panel = mine ? `<div class="b2-paper"><h2 class="b2-h2">Ta loterie<small>Tu gardes 10 % de chaque ticket acheté par les autres.</small></h2>
+  const panel = mine ? `<div class="b2-paper"><h2 class="b2-h2">Ta loterie<small>Tu gardes ta part de chaque ticket acheté par les autres.</small></h2>
       <div class="cz-sum" style="color:var(--ink)"><span>Gagné sur 24 h</span><b class="up">+${COIN}${fmtN(+L.fees)}</b></div>
+      ${rgPanel("lotto")}
       <div class="pt-heir"><span>Ton héritier<b>${L.heir ? esc(L.heir.name) : "Personne"}</b></span><button class="b2-btn ghost" data-a="pt-who" data-m="heir" data-k="lt">${L.heir ? "Changer" : "Choisir"}</button></div>
       <p class="b2-note">Si tu ne joues pas pendant 24 h d'affilée, la loterie passe à ton héritier${L.heir ? "" : " (sans héritier : au dernier du classement)"}.</p>
       <button class="b2-btn ghost pt-give" data-a="pt-who" data-m="give" data-k="lt">Céder la loterie</button>${chargeNote()}</div>` : "";
@@ -3240,13 +3243,14 @@ function lottoHTML(){
       <div class="lt-jl">Cagnotte</div><div class="lt-jp">${COIN}${fmtN(+L.jackpot)}</div>
       <div class="lt-cd">Prochain tirage à ${ltHour(L.draw_at)} · <b data-live="lt-cd">${fmtT(left)}</b></div>
       <div class="lt-meta">${L.count} ticket${L.count > 1 ? "s" : ""} en jeu · patron : ${esc(mine ? "toi" : L.owner.name)}</div></div>
+    ${mine ? "" : rgLine("lotto")}
     <div class="b2-paper"><h2 class="b2-h2">Ton ticket<small>Choisis 2 numéros entre 1 et 8. Trouve les 2 du tirage et la cagnotte est à toi (1 chance sur 28).</small></h2>
       <div class="lt-grid">${grid}</div>
       <div class="b2-two" style="margin-top:12px"><button class="b2-btn ghost" data-a="lt-rand" ${full ? "disabled" : ""}>Au hasard</button>
       <button class="b2-btn gold" data-a="lt-buy" ${LT.pick.length === 2 && !full && !LT.busy ? "" : "disabled"}>${full ? "10 tickets max" : `Jouer · ${COIN}${fmtN(+L.ticket)}`}</button></div>
       ${tk.length ? `<div class="lt-mine"><span>Tes tickets pour ce tirage (${tk.length}/10)</span><div>${tk.map(([a, b]) => `<i>${a} · ${b}</i>`).join("")}</div></div>` : ""}</div>
     ${last}${panel}
-    <p class="pt-note">Le ticket coûte ${COIN}${fmtN(+L.ticket)} : 90 % vont dans la cagnotte, 10 % au patron. S'il y a plusieurs gagnants, ils se partagent la cagnotte. Sans gagnant, elle grossit jusqu'au tirage suivant, 2 h plus tard.</p>
+    <p class="pt-note">Le ticket coûte ${COIN}${fmtN(+L.ticket)} : ${100 - (L.fee ?? 10)} % vont dans la cagnotte, ${L.fee ?? 10} % au patron. S'il y a plusieurs gagnants, ils se partagent la cagnotte. Sans gagnant, elle grossit jusqu'au tirage suivant, ${(L.every ?? 2) === 1 ? "1 h" : (L.every ?? 2) + " h"} plus tard.</p>
   </div></div>`;
 }
 function ltNum(n){
@@ -3365,7 +3369,8 @@ const flMine = () => !!(FL.info && FL.info.owner && FL.info.owner.id === ME.id);
 const flM = t => Math.max(1, Math.floor(Math.exp(0.15 * Math.max(0, t) / 1000) * 100) / 100);
 const flFmt = m => "×" + m.toFixed(2).replace(".", ",");
 const flCol = c => c < 2 ? "lo" : c < 10 ? "md" : "hi";
-const flFee = st => Math.ceil(st * 0.10);
+const flPct = () => FL.info && FL.info.fee != null ? +FL.info.fee : 10;
+const flFee = st => Math.ceil(st * flPct() / 100);
 function flStakeVal(){ const c = czChips(), max = Math.floor(Math.max(0, S.coins) / 1.1); return Math.floor(FL.chip === 4 ? max : Math.min(max, c[FL.chip])); }
 function envolHTML(){
   const I = FL.info, own = I && I.owner, mine = flMine(), f = FL.f, r = FL.res;
@@ -3382,9 +3387,10 @@ function envolHTML(){
   let ctrl;
   if (!I) ctrl = `<p class="cz-empty">La piste se prépare…</p>`;
   else if (!own) ctrl = `<p class="cz-empty">L'Aérodrome n'a pas encore de patron.</p>`;
-  else if (mine) ctrl = `<div class="cz-bank"><h3>Tu es le patron de l'Aérodrome</h3><p>Chaque vol te rapporte son billet d'embarquement (10 % de la mise), et à chaque crash la boîte noire te rapporte 10 % de la mise perdue. Les gains des joueurs sont payés par le village : tu ne perds jamais. Tu ne peux pas jouer.</p>
+  else if (mine) ctrl = `<div class="cz-bank"><h3>Tu es le patron de l'Aérodrome</h3><p>Chaque vol te rapporte son billet d'embarquement (${flPct()} % de la mise), et à chaque crash la boîte noire te rapporte 10 % de la mise perdue. Les gains des joueurs sont payés par le village : tu ne perds jamais. Tu ne peux pas jouer.</p>
       <div class="cz-sum"><span>Billets et boîte noire sur 24 h</span><b class="up">+${COIN}${fmtN(+I.fees)}</b></div>
       <button class="b2-btn big ${I.open !== false ? "red" : "gold"}" data-a="fl-toggle">${I.open !== false ? "Fermer l'aérodrome" : "Ouvrir l'aérodrome"}</button>
+      ${rgPanel("fly")}
       <div class="pt-heir" style="border-color:rgba(255,255,255,.15)"><span style="color:#E8DCC4">Ton héritier<b style="color:#FFE6B8">${I.heir ? esc(I.heir.name) : "Personne"}</b></span><button class="b2-btn ghost" data-a="pt-who" data-m="heir" data-k="fl">${I.heir ? "Changer" : "Choisir"}</button></div>
       <button class="b2-btn ghost pt-give" data-a="pt-who" data-m="give" data-k="fl">Céder l'aérodrome</button>${chargeNote()}</div>`;
   else if (I.open === false && !f) ctrl = `<div class="pt-shut fl-shut">🔒 L'Aérodrome est fermé<small>Seul ${esc(own.name)} peut l'ouvrir.</small></div>`;
@@ -3392,11 +3398,11 @@ function envolHTML(){
     const sv = flStakeVal();
     ctrl = `<div class="cz-chips">${czChips().map((v, i) => `<button class="cz-tok t${i} ${FL.chip === i ? "on" : ""}" data-a="fl-chip" data-i="${i}" ${f ? "disabled" : ""}>${fmtN(v)}</button>`).join("")}<button class="cz-tok all ${FL.chip === 4 ? "on" : ""}" data-a="fl-chip" data-i="4" ${f ? "disabled" : ""}>Tapis</button></div>
       ${f ? `<button class="b2-btn big gold fl-go cash" data-a="fl-cash" data-fl-cash>Encaisser · ${COIN}${fmtN(f.stake * flM(now() - f.t0))}</button>`
-          : `<button class="b2-btn big red fl-go" data-a="fl-start" ${sv >= 1 ? "" : "disabled"}>✈️ Décoller · ${COIN}${fmtN(sv)}</button><p class="fl-fee">+ billet d'embarquement ${COIN}${fmtN(flFee(sv))} (10 % de la mise, pour le patron)</p>`}`;
+          : `<button class="b2-btn big red fl-go" data-a="fl-start" ${sv >= 1 ? "" : "disabled"}>✈️ Décoller · ${COIN}${fmtN(sv)}</button><p class="fl-fee">+ billet d'embarquement ${COIN}${fmtN(flFee(sv))} (${flPct()} % de la mise, pour le patron)</p>`}`;
   }
   return `<div class="cz-banker">✈️<span>Le patron : <b>${own ? esc(mine ? "toi" : own.name) : "…"}</b> · billets + boîte noire</span></div>
-    ${scene}<div class="fl-hist">${hist}</div>${ctrl}
-    <p class="cz-note">L'avion peut tomber à tout moment, parfois dès le décollage, parfois très haut. Encaisse quand tu veux : tu gagnes ta mise multipliée par le chiffre affiché. Chaque vol coûte un billet de 10 % de la mise. Le village paie les gains, le patron touche les billets et 10 % des mises perdues.</p>`;
+    ${scene}<div class="fl-hist">${hist}</div>${own && !mine ? rgLine("fly") : ""}${ctrl}
+    <p class="cz-note">L'avion peut tomber à tout moment, parfois dès le décollage, parfois très haut. Encaisse quand tu veux : tu gagnes ta mise multipliée par le chiffre affiché. Chaque vol coûte un billet de ${flPct()} % de la mise. Le village paie les gains, le patron touche les billets et 10 % des mises perdues.</p>`;
 }
 function flFrame(){
   const f = FL.f; if (!f || view !== "casino" || CZ.game !== "envol"){ FL.raf = 0; return; }
@@ -3455,6 +3461,85 @@ async function flToggle(){
   draw();
 }
 function chargeNote(){ return `<p class="b2-note fl-charge">🧾 Charges : chaque matin à 8 h, tu paies 20 % de ce que ton lieu t'a rapporté sur 24 h (au moins 0,5 % de ta fortune). Elles vont dans la cagnotte de la Loterie.</p>`; }
+/* =================== Les Réglages des lieux (14 nov. 2026) ===================
+   Le propriétaire règle son lieu : chaque choix a un pour et un contre, et tout le monde voit les réglages.
+   Un changement par lieu toutes les 10 minutes. */
+const RG = { busy:false, open:{} };
+const RG_DEF = {
+  port: [
+    { k:"fee", t:"Commission", o:[["5","5 %"],["10","10 %"],["15","15 %"],["20","20 %"]],
+      h:v => +v <= 5 ? "Petite part, mais tout le monde a envie d'envoyer." : +v >= 20 ? "Grosse part par bateau, mais ça peut faire fuir." : "Un bon équilibre." },
+    { k:"route", t:"Destination", o:[["cote","La Côte"],["med","Méditerranée"],["ame","Amériques"]],
+      h:v => v === "cote" ? "×1,3 le cours · voyage 2× plus court · 2× moins de tempêtes." : v === "ame" ? "×2,2 le cours · voyage 2× plus long · 2× plus de tempêtes." : "×1,6 le cours · voyage et tempêtes normaux." } ],
+  lotto: [
+    { k:"ticket", t:"Prix du ticket", o:[["1000000000","1 B"],["5000000000","5 B"],["25000000000","25 B"],["100000000000","100 B"]],
+      h:v => +v <= 1e9 ? "Pas cher : on joue souvent, la cagnotte monte doucement." : +v >= 1e11 ? "Très cher : peu de tickets, mais chacun rapporte gros." : "Le ticket qui fait monter la cagnotte." },
+    { k:"fee", t:"Ta part", o:[["5","5 %"],["10","10 %"],["15","15 %"],["20","20 %"]],
+      h:v => +v <= 5 ? "Presque tout va dans la cagnotte : elle grossit vite et attire." : +v >= 20 ? "Tu gagnes plus par ticket, la cagnotte grossit moins." : "Le reste va dans la cagnotte." },
+    { k:"every", t:"Un tirage toutes les", o:[["1","1 h"],["2","2 h"],["4","4 h"]],
+      h:v => +v === 1 ? "Ça tourne vite, mais la cagnotte a peu le temps de grossir." : +v === 4 ? "On attend plus, pour une cagnotte énorme." : "Le rythme normal." } ],
+  fly: [
+    { k:"fee", t:"Billet", o:[["5","5 %"],["10","10 %"],["15","15 %"],["20","20 %"]],
+      h:v => +v <= 5 ? "Le billet ne coûte presque rien : on vole souvent." : +v >= 20 ? "Gros billet, chaque vol te rapporte plus, mais il en faut moins pour décourager." : "Le billet classique." },
+    { k:"plane", t:"Avion", o:[["neuf","Neuf"],["std","Normal"],["vieux","Vieux coucou"]],
+      h:v => v === "neuf" ? "Il tombe moins souvent : les joueurs adorent, ta boîte noire se remplit moins." : v === "vieux" ? "Il tombe plus souvent : la boîte noire rapporte plus, mais les joueurs se méfient." : "L'avion de base." } ],
+  casino: [
+    { k:"max", t:"Mise max par tour", o:[["10000000000","10 B"],["100000000000","100 B"],["1000000000000","1 T"],["0","Sans limite"]],
+      h:v => +v === 0 ? "Les gros joueurs peuvent tout tenter : tu peux beaucoup gagner… ou payer très cher." : +v <= 1e10 ? "Ta banque est à l'abri, mais les gros joueurs s'ennuient." : "Tu limites les coups qui peuvent te ruiner." },
+    { k:"zero", t:"Le zéro", o:[["sec","Zéro sec"],["partage","La partage"]],
+      h:v => v === "partage" ? "Sur le 0, les mises sur rouge, noir, pair… sont rendues à moitié. Plus attirant, moins rentable pour toi." : "Sur le 0, tout est perdu sauf la mise sur le 0. Plus rentable pour toi." } ]
+};
+function rgCur(place){
+  if (place === "port"){ const I = PT.info; return I ? { fee:String(I.fee ?? 10), route:I.route || "med", at:I.cfg_at } : null; }
+  if (place === "lotto"){ const I = LT.info; return I ? { fee:String(I.fee ?? 10), ticket:String(Math.round(+I.ticket)), every:String(I.every ?? 2), at:I.cfg_at } : null; }
+  if (place === "fly"){ const I = FL.info; return I ? { fee:String(I.fee ?? 10), plane:I.plane || "std", at:I.cfg_at } : null; }
+  const I = CZ.info; return I ? { max:String(I.max ? Math.round(+I.max) : 0), zero:I.partage ? "partage" : "sec", at:I.cfg_at } : null;
+}
+const rgWait = at => at ? Math.max(0, new Date(at).getTime() + 6e5 - now()) : 0;
+// le panneau du propriétaire
+function rgPanel(place){
+  const c = rgCur(place); if (!c) return "";
+  const w = rgWait(c.at);
+  return `<div class="rg"><div class="rg-hd">⚙️ Réglages${w ? `<small>prochain changement dans ${Math.ceil(w / 60000)} min</small>` : ""}</div>
+    ${RG_DEF[place].map(d => `<div class="rg-row"><div class="rg-t">${d.t}</div>
+      <div class="rg-seg n${d.o.length}">${d.o.map(([v, l]) => `<button class="${c[d.k] === v ? "on" : ""}" data-a="rg-set" data-p="${place}" data-k="${d.k}" data-v="${v}" ${w || RG.busy ? "disabled" : ""}>${l}</button>`).join("")}</div>
+      <div class="rg-h">${d.h(c[d.k])}</div></div>`).join("")}</div>`;
+}
+// ce que voient les joueurs : une ligne simple
+function rgLine(place){
+  const c = rgCur(place); if (!c) return "";
+  const lab = d => (d.o.find(o => o[0] === c[d.k]) || [, "?"])[1];
+  return `<div class="rg-line">${RG_DEF[place].map(d => `<span>${d.t} <b>${lab(d)}</b></span>`).join("")}</div>`;
+}
+async function rgSet(place, k, v){
+  if (RG.busy) return; RG.busy = true;
+  try{
+    const r = await rpc("baron2_place_cfg", { p_token: getToken(), p_place: place, p_key: k, p_val: v });
+    if (place === "port") PT.info = r; else if (place === "lotto") LT.info = r; else if (place === "fly") FL.info = r; else CZ.info = r;
+    sound("up"); buzz(10); toast("⚙️ Réglage enregistré. Tout le monde le voit déjà.");
+  }catch(e){
+    const m = String(e && e.message || "");
+    toast(m.includes("attends") ? "Un seul changement toutes les 10 minutes : " + m.replace(/.*attends/, "attends") + "." : m.includes("pas ton lieu") ? "Ce lieu n'est plus à toi." : errText(e), "err");
+  }
+  RG.busy = false; draw();
+}
+const RG_STYLE = `
+.rg{margin:12px 0 4px;padding:12px;border-radius:16px;background:rgba(127,127,127,.12)}
+.rg-hd{font:800 13px var(--round);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.rg-hd small{font:700 11px var(--round);text-transform:none;letter-spacing:0;opacity:.7}
+.rg-row{padding:8px 0;border-top:1px solid rgba(127,127,127,.2)}.rg-row:first-of-type{border-top:0}
+.rg-t{font:800 14px var(--round);margin-bottom:6px}
+.rg-seg{display:grid;gap:4px;background:rgba(0,0,0,.12);padding:3px;border-radius:12px}
+.rg-seg.n2{grid-template-columns:1fr 1fr}.rg-seg.n3{grid-template-columns:1fr 1fr 1fr}.rg-seg.n4{grid-template-columns:repeat(4,1fr)}
+.rg-seg button{padding:8px 2px;border-radius:9px!important;font:800 12.5px var(--round)!important;color:inherit!important;background:transparent!important;box-shadow:none!important;line-height:1.15}
+.rg-seg button.on{background:#F2B33D!important;color:#4A2C00!important;box-shadow:0 2px 0 #C98A12!important}
+.rg-seg button:disabled:not(.on){opacity:.45}
+.rg-h{font:600 12.5px/1.35 var(--round);opacity:.8;margin-top:6px}
+.rg-line{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin:8px 0}
+.rg-line span{font:700 12px var(--round);padding:4px 10px;border-radius:99px;background:rgba(127,127,127,.15)}
+.rg-line b{font-weight:900}
+`;
+try{ const rst = document.createElement("style"); rst.id = "rg-style"; rst.textContent = RG_STYLE; document.head.appendChild(rst); }catch(e){}
 const FL_STYLE = `
 .cz-top{display:flex;align-items:center;gap:10px;margin-bottom:6px}.cz-top span{font:400 26px var(--disp);color:#FFE6B8}
 .cz-lead{text-align:center;font:700 14px var(--round);opacity:.8;margin:2px 0 16px}
@@ -4210,6 +4295,7 @@ function onClick(e){
     case "pt-pick": ptSendSheet(b.dataset.k); return;
     case "pt-toggle": ptToggle(); return;
     case "fl-toggle": flToggle(); return;
+    case "rg-set": rgSet(b.dataset.p, b.dataset.k, b.dataset.v); return;
     case "chat": if (view === "chat"){ view = CH.back || "farm"; draw(); return; } CH.back = view; view = "chat"; closeSheet(); draw(); chPoll(); return;
     case "ch-send": chSend(); return;
     case "eg-sub": EG.sub = b.dataset.k; closeSheet(); if (view !== "eggs"){ view = "eggs"; } wrapEl.querySelector("#b2-main").scrollTop = 0; draw(); return;
