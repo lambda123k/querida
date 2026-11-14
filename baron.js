@@ -775,6 +775,9 @@ function applyCredits(list){
     if (c.product === "egg_dup") continue;
     if (c.product === "egg_fee"){ portFees.push(Object.assign({}, c, { eg: 1 })); continue; }
     if (c.product === "charge"){ toast(`🧾 Charges ${c.buyer === "Casino" ? "du casino" : c.buyer === "Port" ? "du port" : c.buyer === "Loterie" ? "de la loterie" : c.buyer === "Œufs" ? "du Maître des œufs" : "de l'aérodrome"} : −${COIN}${fmtN(-c.coins)}, versées au Baron (le Tribut)`); continue; }
+    if (c.product === "cad_sale"){ const [who, lieu] = String(c.buyer).split("|"); toast(`🏛️ ${esc(who)} a racheté ${lieu === "Port" ? "ton Port" : "ton Aérodrome"} au prix que tu avais fixé : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); loadCad(); loadPort(); loadFly(); continue; }
+    if (c.product === "cad_tax"){ toast(`🏛️ Impôt du Cadastre (${esc(c.buyer)}) : −${COIN}${fmtN(-c.coins)}, versés au Baron`); continue; }
+    if (c.product === "notice"){ toast(esc(c.buyer), "gold"); continue; }
     if (c.product === "tribut"){ toast(`👑 Le Tribut du matin : +${COIN}${fmtN(c.coins)} versés par les patrons de la ville`, "gold"); sound("coin"); continue; }
     if (c.product === "loan_in"){ toast(`🤝 ${esc(c.buyer)} t'a prêté ${COIN}${fmtN(c.coins)} ! Tu as ${c.qty} h pour rembourser (+10 %).`, "gold"); sound("coin"); loadLoans(); continue; }
     if (c.product === "loan_back"){ toast(`🤝 ${esc(c.buyer)} t'a remboursé : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); loadLoans(); continue; }
@@ -864,7 +867,7 @@ async function loadWorld(force){
     const r = await rpc("baron2_world", {});
     BX.setMarket({ press: r.press || {}, med: r.med });
     W = { res: r.reserve || null, players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
-    await loadOrders(true); await loadEtb(); loadCasino(); loadPort(); loadLotto(); loadFly(); loadLoans();
+    await loadOrders(true); await loadEtb(); loadCasino(); loadPort(); loadLotto(); loadFly(); loadLoans(); loadCad();
     if (wrapEl && (view === "market" || view === "village" || view === "atelier") && !gestOpen && !sheetOpen) draw();
   }catch(e){}
 }
@@ -1807,6 +1810,7 @@ function loop(){
     if (n % 40 === 12 && (view === "port" || view === "village")) loadPort();
     if (n % 16 === 8 && view === "casino" && !CZ.spinning) loadCasino();
     if (n % 40 === 24) loadLoans();
+    if (n % 40 === 32 && (view === "port" || view === "casino")) loadCad().then(() => { if ((view === "port" || (view === "casino" && CZ.game === "envol" && !FL.f)) && !sheetOpen) draw(); });
     if (view === "casino" && CZ.game === "bureau") lnTick();
     if (view === "chat" ? n % 12 === 6 : n % 60 === 6) chPoll();
     if (n % 4 === 2 && view === "eggs") egTick();
@@ -2896,9 +2900,9 @@ function czLobby(){
     <h2 class="cz-ttl">La Place</h2><p class="cz-lead">Tous les lieux de la ville.</p>
     ${card("bureau", "🤝", "Le Bureau du Baron", LN.info && LN.info.baron ? (lnIamBaron() ? (LN.info.asks.length ? `${LN.info.asks.length} demande${LN.info.asks.length > 1 ? "s" : ""} de prêt` : "Ton tribut et tes prêts") : (LN.info.mine && LN.info.mine.status === "live" ? `Tu dois ${COIN}${fmtN(+LN.info.mine.owed)}` : "Emprunter au Baron")) : "Prêts et tribut", lnIamBaron() && LN.info.asks.length ? `<span class="cz-st on">${LN.info.asks.length}</span>` : `<span class="go">›</span>`, "r")}
     ${card("roulette", "🎡", "La Roulette", bar ? (czIamBaron() ? "Tu tiens la banque" : "Banque : " + esc(bar.name)) : "Roulette européenne", `<span class="cz-st ${open ? "on" : ""}">${open ? "Ouverte" : "Fermée"}</span>`, "r")}
-    ${card("envol", "✈️", "L'Aérodrome", F && F.owner ? `Patron : ${esc(F.owner.id === ME.id ? "toi" : F.owner.name)}${fh ? `<span class="cz-mini">${fh}</span>` : ""}` : "Encaisse avant le crash", F && F.owner ? `<span class="cz-st ${F.open !== false ? "on" : ""}">${F.open !== false ? "Ouvert" : "Fermé"}</span>` : `<span class="go">›</span>`, "a")}
-    ${card("lotto", "🎟️", "La Loterie", L && L.owner ? `Cagnotte ${COIN}${fmtN(+L.jackpot)} · tirage à ${ltHour(L.draw_at)}` : "Bientôt…", `<span class="go">›</span>`, "l")}
-    <button class="cz-room a" data-a="tab" data-v="port"><span class="ic">⚓</span><span class="sp"><b>Le Port</b><small>${ptOwner() ? (ptMine() ? "Ton port" : "Capitaine : " + esc(ptOwner().name)) : "Vendre à l'étranger"}</small></span><span class="cz-st ${PT.info && PT.info.open ? "on" : ""}">${PT.info && PT.info.open ? "Ouvert" : "Fermé"}</span></button>
+    ${card("envol", "✈️", "L'Aérodrome", F && F.owner ? `Patron : ${esc(F.owner.id === ME.id ? "toi" : F.owner.name)}${CAD.info && CAD.info.fly ? ` · 🏛️ ${COIN}${fmtN(+CAD.info.fly.price)}` : ""}${fh ? `<span class="cz-mini">${fh}</span>` : ""}` : "Encaisse avant le crash", F && F.owner ? `<span class="cz-st ${F.open !== false ? "on" : ""}">${F.open !== false ? "Ouvert" : "Fermé"}</span>` : `<span class="go">›</span>`, "a")}
+    ${card("lotto", "🎟️", "La Loterie", L ? `Cagnotte ${COIN}${fmtN(+L.jackpot)} · tirage à ${ltHour(L.draw_at)}` : "Bientôt…", `<span class="go">›</span>`, "l")}
+    <button class="cz-room a" data-a="tab" data-v="port"><span class="ic">⚓</span><span class="sp"><b>Le Port</b><small>${ptOwner() ? (ptMine() ? "Ton port" : "Capitaine : " + esc(ptOwner().name)) : "Vendre à l'étranger"}${CAD.info && CAD.info.port && CAD.info.port.owner ? ` · 🏛️ ${COIN}${fmtN(+CAD.info.port.price)}` : ""}</small></span><span class="cz-st ${PT.info && PT.info.open ? "on" : ""}">${PT.info && PT.info.open ? "Ouvert" : "Fermé"}</span></button>
   </div></div>`;
 }
 function czBet(k){
@@ -3092,7 +3096,7 @@ function portHTML(){
     <div class="pt-sw">${ptScene()}</div>${stats}
     ${send}
     ${my.length ? `<div class="b2-paper"><h2 class="b2-h2">Tes bateaux en mer</h2>${myRows}</div>` : ""}
-    ${panel}
+    ${panel}${cadBlock("port", false)}
     <div class="b2-paper"><h2 class="b2-h2">Derniers retours</h2>${log}</div>
     <p class="pt-note">L'étranger paie ${ptX(ptMult())} fois le cours du village au moment du départ, et ta vente ne fait pas baisser le cours. Le port garde ${Math.round(ptFee() * 100)} %. Si la tempête frappe, la cargaison est perdue.</p>
   </div></div>`;
@@ -3243,7 +3247,7 @@ const ltHour = t => { const d = new Date(t); return d.getHours() + " h" + (d.get
 function ltBall(n, cls){ return `<span class="lt-b ${cls || ""}">${n}</span>`; }
 function lottoHTML(){
   const L = LT.info;
-  if (!L || !L.owner) return `<div class="lt"><div class="b2-col b2-pad"><p class="cz-empty">La loterie n'a pas encore de patron.</p></div></div>`;
+  if (!L) return `<div class="lt"><div class="b2-col b2-pad"><p class="cz-empty">La loterie se prépare…</p></div></div>`;
   const mine = ltMine(), left = new Date(L.draw_at).getTime() - now(), tk = L.mine || [], full = tk.length >= 25;
   const last = L.last ? `<div class="b2-paper lt-last"><h2 class="b2-h2">Dernier tirage</h2><div class="lt-row">${ltBall(L.last.a, "gold")}${ltBall(L.last.b, "gold")}<span class="sp">${L.last.winners.length ? `<b>${L.last.winners.map(w => esc(w.id === ME.id ? "Toi" : w.name)).join(", ")}</b> ${L.last.winners.length > 1 ? "se partagent" : "remporte"} ${COIN}${fmtN(L.last.jackpot)} !` : `Personne n'a trouvé. La cagnotte de ${COIN}${fmtN(L.last.jackpot)} est restée en jeu.`}<small>${L.last.tickets} ticket${L.last.tickets > 1 ? "s" : ""} joué${L.last.tickets > 1 ? "s" : ""}</small></span></div></div>` : "";
   const grid = Array.from({ length: 8 }, (_, i) => i + 1).map(n => `<button class="lt-n ${LT.pick.includes(n) ? "on" : ""}" data-a="lt-num" data-n="${n}">${n}</button>`).join("");
@@ -3257,15 +3261,14 @@ function lottoHTML(){
     <div class="lt-tk"><div class="lt-hd">Loterie du village</div>
       <div class="lt-jl">Cagnotte</div><div class="lt-jp">${COIN}${fmtN(+L.jackpot)}</div>
       <div class="lt-cd">Prochain tirage à ${ltHour(L.draw_at)} · <b data-live="lt-cd">${fmtT(left)}</b></div>
-      <div class="lt-meta">${L.count} ticket${L.count > 1 ? "s" : ""} en jeu · patron : ${esc(mine ? "toi" : L.owner.name)}</div></div>
-    ${mine ? "" : rgLine("lotto")}
+      <div class="lt-meta">${L.count} ticket${L.count > 1 ? "s" : ""} en jeu · tout va dans la cagnotte</div></div>
     <div class="b2-paper"><h2 class="b2-h2">Ton ticket<small>Choisis 2 numéros entre 1 et 8. Trouve les 2 du tirage et la cagnotte est à toi (1 chance sur 28).</small></h2>
       <div class="lt-grid">${grid}</div>
       <div class="b2-two" style="margin-top:12px"><button class="b2-btn ghost" data-a="lt-rand" ${full ? "disabled" : ""}>Au hasard</button>
       <button class="b2-btn gold" data-a="lt-buy" ${LT.pick.length === 2 && !full && !LT.busy ? "" : "disabled"}>${full ? "25 tickets max" : `Jouer · ${COIN}${fmtN(+L.ticket)}`}</button></div>
       ${tk.length ? `<div class="lt-mine"><span>Tes tickets pour ce tirage (${tk.length}/25)</span><div>${tk.map(([a, b]) => `<i>${a} · ${b}</i>`).join("")}</div></div>` : ""}</div>
     ${last}${panel}
-    <p class="pt-note">Le ticket coûte ${COIN}${fmtN(+L.ticket)} : ${100 - (L.fee ?? 10)} % vont dans la cagnotte, ${L.fee ?? 10} % au patron. S'il y a plusieurs gagnants, ils se partagent la cagnotte. Sans gagnant, elle grossit jusqu'au tirage suivant, ${(L.every ?? 2) === 1 ? "1 h" : (L.every ?? 2) + " h"} plus tard.</p>
+    <p class="pt-note">Le ticket coûte ${COIN}${fmtN(+L.ticket)}, et tout va dans la cagnotte : la Loterie appartient au village. S'il y a plusieurs gagnants, ils se partagent la cagnotte. Sans gagnant, elle grossit jusqu'au tirage suivant, ${(L.every ?? 2) === 1 ? "1 h" : (L.every ?? 2) + " h"} plus tard.</p>
   </div></div>`;
 }
 function ltNum(n){
@@ -3286,7 +3289,7 @@ async function ltBuy(){
   LT.busy = false; draw();
 }
 function lottoBtn(){
-  const L = LT.info; if (!L || !L.owner) return "";
+  const L = LT.info; if (!L) return "";
   return `<button class="lt-card" data-a="tab" data-v="lotto"><span class="i">🎟️</span><span class="sp"><b>La Loterie</b><small>Cagnotte ${COIN}${fmtN(+L.jackpot)} · tirage à ${ltHour(L.draw_at)}</small></span><span class="go">›</span></button>`;
 }
 /* ---------- le faux bug : volontairement hors du style du jeu, pour faire « vrai » ---------- */
@@ -3416,7 +3419,7 @@ function envolHTML(){
           : `<button class="b2-btn big red fl-go" data-a="fl-start" ${sv >= 1 ? "" : "disabled"}>✈️ Décoller · ${COIN}${fmtN(sv)}</button><p class="fl-fee">+ billet d'embarquement ${COIN}${fmtN(flFee(sv))} (${flPct()} % de la mise, pour le patron)</p>`}`;
   }
   return `<div class="cz-banker">✈️<span>Le patron : <b>${own ? esc(mine ? "toi" : own.name) : "…"}</b> · tient la banque</span></div>
-    ${scene}<div class="fl-hist">${hist}</div>${own && !mine ? rgLine("fly") : ""}${ctrl}
+    ${scene}<div class="fl-hist">${hist}</div>${own && !mine ? rgLine("fly") : ""}${ctrl}${cadBlock("fly", true)}
     <p class="cz-note">L'avion peut tomber à tout moment, parfois dès le décollage, parfois très haut. Encaisse quand tu veux : tu gagnes ta mise multipliée par le chiffre affiché. Chaque vol coûte un billet de ${flPct()} % de la mise.${I && I.max ? ` Mise max : ${COIN}${fmtN(+I.max)} par vol.` : ""} Le patron tient la banque : il paie les gains et garde les mises perdues.</p>`;
 }
 function flFrame(){
@@ -3476,6 +3479,63 @@ async function flToggle(){
   draw();
 }
 function chargeNote(){ return `<p class="b2-note fl-charge">🧾 Charges : chaque matin à 8 h, tu paies 20 % de ce que ton lieu t'a rapporté sur 24 h. C'est le Tribut : il va au Baron.</p>`; }
+/* =================== Le Cadastre (15 nov. 2026) ===================
+   Le patron annonce le prix de son lieu (Port, Aérodrome). N'importe qui peut le racheter à ce prix.
+   Impôt : 2 % par jour du prix le plus haut annoncé dans la journée, versé au Baron. */
+const CAD = { info:null, at:0, arm:"", busy:false };
+const CAD_NAME = { port:"le Port", fly:"l'Aérodrome" };
+async function loadCad(){ try{ CAD.info = await rpc("baron2_cad_get", {}); CAD.at = now(); }catch(e){} }
+function cadBlock(place, dark){
+  const I = CAD.info && CAD.info[place]; if (!I || !I.owner) return "";
+  const mine = I.owner.id === ME.id, pr = +I.price, safe = I.safe && new Date(I.safe).getTime() > now();
+  const tax = Math.floor(pr * 0.02), cls = `cad ${dark ? "dk" : ""}`;
+  if (mine) return `<div class="${cls}"><div class="cad-hd">🏛️ Cadastre</div>
+      <div class="cad-pr"><span>Prix de ton lieu</span><b>${COIN}${fmtN(pr)}</b></div>
+      <div class="cad-btns">${[[0.5, "÷2"], [0.8, "−20 %"], [1.25, "+25 %"], [2, "×2"]].map(([f, l]) => `<button class="b2-btn ${f > 1 ? "gold" : "ghost"}" data-a="cad-set" data-p="${place}" data-f="${f}" ${CAD.busy ? "disabled" : ""}>${l}</button>`).join("")}</div>
+      <p class="cad-tx">N'importe qui peut racheter ${CAD_NAME[place]} à ce prix. Plus il est haut, plus tu es protégé, mais plus l'impôt est lourd : <b>${COIN}${fmtN(tax)} par jour</b> (2 %), versés au Baron à 8 h.${safe ? ` Protégé encore <b data-cad-safe="${I.safe}">${fmtT(new Date(I.safe).getTime() - now())}</b>.` : ""}</p></div>`;
+  const C = CAD.info, isBaron = C.baron === ME.id;
+  const hasOther = ["port", "fly"].some(k => k !== place && C[k] && C[k].owner && C[k].owner.id === ME.id);
+  const why = isBaron ? "Le Baron tient déjà la Roulette." : hasOther ? "Tu as déjà un lieu : un seul par personne." : safe ? `Lieu protégé encore ${fmtT(new Date(I.safe).getTime() - now())}.` : S.coins < pr ? `Il te manque ${COIN}${fmtN(pr - S.coins)}.` : "";
+  const armed = CAD.arm === place;
+  return `<div class="${cls}"><div class="cad-hd">🏛️ Cadastre</div>
+      <div class="cad-pr"><span>${esc(I.owner.name)} l'estime à</span><b>${COIN}${fmtN(pr)}</b></div>
+      <button class="b2-btn big ${armed ? "red" : "gold"}" data-a="cad-buy" data-p="${place}" ${why || CAD.busy ? "disabled" : ""}>${armed ? `Confirmer le rachat · ${COIN}${fmtN(pr)}` : `Racheter ${CAD_NAME[place]}`}</button>
+      ${why ? `<p class="cad-why">${why}</p>` : `<p class="cad-tx">${esc(I.owner.name)} touche le prix et tu deviens le patron tout de suite.</p>`}</div>`;
+}
+async function cadSet(place, f){
+  const I = CAD.info && CAD.info[place]; if (!I || CAD.busy) return;
+  const np = Math.max(1e9, Math.round(+I.price * f)); CAD.busy = true;
+  try{ CAD.info = await rpc("baron2_cad_set", { p_token: getToken(), p_place: place, p_price: np }); sound("tap"); toast(`🏛️ Nouveau prix : ${COIN}${fmtN(np)} · impôt ${COIN}${fmtN(Math.floor(np * 0.02))} par jour.`); }
+  catch(e){ toast(String(e && e.message || "").includes("pas ton lieu") ? "Ce lieu n'est plus à toi." : errText(e), "err"); loadCad(); }
+  CAD.busy = false; draw();
+}
+async function cadBuy(place){
+  const I = CAD.info && CAD.info[place]; if (!I || CAD.busy) return;
+  if (CAD.arm !== place){ CAD.arm = place; sound("tap"); draw(); setTimeout(() => { if (CAD.arm === place){ CAD.arm = ""; draw(); } }, 5000); return; }
+  CAD.arm = ""; const pr = +I.price;
+  if (S.coins < pr){ toast("Pas assez de pièces."); return; }
+  CAD.busy = true; S.coins -= pr; dirty = true; live();
+  try{
+    const r = await queue(() => rpc("baron2_cad_buy", { p_token: getToken(), p_state: S, p_place: place, p_price: pr })); lastSave = now();
+    CAD.info = r; applyCredits(r.credits);
+    sound("up"); buzz([40, 30, 80]); toast(`🏛️ ${place === "port" ? "Le Port" : "L'Aérodrome"} est à toi ! Pense à fixer ton prix.`, "gold");
+    if (place === "port") loadPort(); else loadFly();
+  }catch(e){
+    S.coins += pr; const m = String(e && e.message || "");
+    toast(m.includes("prix changé") ? "Le patron vient de changer son prix : regarde le nouveau." : m.includes("protégé") ? "Ce lieu est encore protégé." : m.includes("déjà un lieu") ? "Tu as déjà un lieu." : m.includes("tu es le baron") ? "Le Baron tient déjà la Roulette." : errText(e), "err");
+    loadCad();
+  }
+  CAD.busy = false; draw();
+}
+const CAD_STYLE = `
+.cad{margin:12px 0;padding:14px;border-radius:18px;background:#FFF4E0;color:var(--ink);box-shadow:0 3px 0 #E2C9A3}
+.cad.dk{background:rgba(0,0,0,.25);color:#F5ECD6;box-shadow:none;border:1.5px solid rgba(217,180,106,.45)}
+.cad-hd{font:800 12px var(--round);text-transform:uppercase;letter-spacing:.06em;opacity:.7;margin-bottom:6px}
+.cad-pr{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:10px}.cad-pr span{font:700 14px var(--round)}.cad-pr b{font:400 26px var(--disp)}
+.cad-btns{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.cad-btns .b2-btn{padding:9px 0!important;font-size:14px!important}
+.cad-tx{font:600 12.5px/1.4 var(--round);opacity:.8;margin:10px 0 0}.cad-why{font:700 12.5px var(--round);text-align:center;opacity:.75;margin:8px 0 0}
+`;
+try{ const cst = document.createElement("style"); cst.id = "cad-style"; cst.textContent = CAD_STYLE; document.head.appendChild(cst); }catch(e){}
 /* =================== Le Bureau du Baron (14 nov. 2026) ===================
    Le parrain de la ville : il touche le Tribut (les charges des lieux) et fait des prêts.
    On demande, il accepte en fixant le délai ; on rembourse 10 % de plus. Délai dépassé : il se sert (dû + 20 %). */
@@ -4408,6 +4468,8 @@ function onClick(e){
     case "ln-yes": lnYes(b.dataset.id, +b.dataset.h); return;
     case "ln-repay": lnRepay(); return;
     case "pt-ins": if (sheetCtx && sheetCtx.type === "port"){ sheetCtx.ins = !sheetCtx.ins; b.classList.toggle("on", sheetCtx.ins); sound("tap"); sheetSum(); } return;
+    case "cad-set": cadSet(b.dataset.p, +b.dataset.f); return;
+    case "cad-buy": cadBuy(b.dataset.p); return;
     case "rg-set": rgSet(b.dataset.p, b.dataset.k, b.dataset.v); return;
     case "chat": if (view === "chat"){ view = CH.back || "farm"; draw(); return; } CH.back = view; view = "chat"; closeSheet(); draw(); chPoll(); return;
     case "ch-send": chSend(); return;
