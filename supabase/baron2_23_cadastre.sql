@@ -1,4 +1,4 @@
--- Le Baron : le Cadastre + la Loterie du village (15 nov. 2026)
+-- Le Baron : les Titres de propriété (« cadastre ») + la Loterie du village (15 nov. 2026)
 -- Cadastre (Port, Aérodrome) : le patron annonce le prix de son lieu ; n'importe qui peut le racheter à ce prix.
 -- Impôt foncier : 2 % par jour du prix le plus haut annoncé sur la journée, versé au Baron avec le Tribut.
 -- Un seul lieu du cadastre par joueur ; le Baron (qui tient la Roulette) ne peut pas racheter.
@@ -11,16 +11,17 @@ alter table baron2_port add column if not exists price numeric not null default 
 alter table baron2_fly  add column if not exists price numeric not null default 10000000000000,
                        add column if not exists price_max numeric not null default 10000000000000,
                        add column if not exists safe_until timestamptz;
-update baron2_port set safe_until = now() + interval '2 hours' where id = 1;
-update baron2_fly  set safe_until = now() + interval '2 hours' where id = 1;
+-- pas à vendre tant que le patron n'a pas fixé son prix une première fois (et pas d'impôt non plus)
+alter table baron2_port add column if not exists priced boolean not null default false;
+alter table baron2_fly  add column if not exists priced boolean not null default false;
 
 create or replace function public.baron2_cad_get() returns jsonb
 language sql stable security definer set search_path = public as $$
   select jsonb_build_object(
     'port', (select jsonb_build_object('owner', (select jsonb_build_object('id', p.id, 'name', p.name) from baron2_players p where p.id = x.owner_id),
-              'price', x.price, 'tax', floor(x.price_max * 0.02), 'safe', x.safe_until) from baron2_port x where id = 1),
+              'price', x.price, 'priced', x.priced, 'tax', floor(x.price_max * 0.02), 'safe', x.safe_until) from baron2_port x where id = 1),
     'fly',  (select jsonb_build_object('owner', (select jsonb_build_object('id', p.id, 'name', p.name) from baron2_players p where p.id = x.owner_id),
-              'price', x.price, 'tax', floor(x.price_max * 0.02), 'safe', x.safe_until) from baron2_fly x where id = 1),
+              'price', x.price, 'priced', x.priced, 'tax', floor(x.price_max * 0.02), 'safe', x.safe_until) from baron2_fly x where id = 1),
     'baron', _baron2_top(), 'now', now());
 $$;
 
@@ -31,10 +32,10 @@ begin
   if pr < 1e9 or pr > 1e18 then raise exception 'prix invalide'; end if;
   if p_place = 'port' then
     if (select owner_id from baron2_port where id = 1) is distinct from v then raise exception 'pas ton lieu'; end if;
-    update baron2_port set price = pr, price_max = greatest(price_max, pr) where id = 1;
+    update baron2_port set price = pr, price_max = case when priced then greatest(price_max, pr) else pr end, priced = true where id = 1;
   elsif p_place = 'fly' then
     if (select owner_id from baron2_fly where id = 1) is distinct from v then raise exception 'pas ton lieu'; end if;
-    update baron2_fly set price = pr, price_max = greatest(price_max, pr) where id = 1;
+    update baron2_fly set price = pr, price_max = case when priced then greatest(price_max, pr) else pr end, priced = true where id = 1;
   else raise exception 'lieu inconnu'; end if;
   return baron2_cad_get();
 end $$;
@@ -42,12 +43,13 @@ end $$;
 -- le client a déjà retiré p_price de ses pièces ; si le prix a changé entre-temps, on refuse
 create or replace function public.baron2_cad_buy(p_token uuid, p_state jsonb, p_place text, p_price numeric) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare v text := baron2_pid(p_token); own text; pr numeric; safe timestamptz; nm text; lbl text;
+declare v text := baron2_pid(p_token); own text; pr numeric; safe timestamptz; nm text; lbl text; ok boolean;
 begin
-  if p_place = 'port' then select owner_id, price, safe_until into own, pr, safe from baron2_port where id = 1 for update; lbl := 'Port';
-  elsif p_place = 'fly' then select owner_id, price, safe_until into own, pr, safe from baron2_fly where id = 1 for update; lbl := 'Aérodrome';
+  if p_place = 'port' then select owner_id, price, safe_until, priced into own, pr, safe, ok from baron2_port where id = 1 for update; lbl := 'Port';
+  elsif p_place = 'fly' then select owner_id, price, safe_until, priced into own, pr, safe, ok from baron2_fly where id = 1 for update; lbl := 'Aérodrome';
   else raise exception 'lieu inconnu'; end if;
   if own = v then raise exception 'déjà à toi'; end if;
+  if own is not null and not ok then raise exception 'pas à vendre'; end if;
   if v = _baron2_top() then raise exception 'tu es le baron'; end if;
   if v in (select owner_id from baron2_port where owner_id is not null union select owner_id from baron2_fly where owner_id is not null) then raise exception 'déjà un lieu'; end if;
   if safe is not null and safe > now() then raise exception 'protégé'; end if;
@@ -59,9 +61,9 @@ begin
     insert into baron2_credits(player_id, coins, product, qty, buyer) values (own, pr, 'cad_sale', 0, nm || '|' || lbl);
   end if;
   if p_place = 'port' then
-    update baron2_port set prev_id = owner_id, owner_id = v, heir_id = null, since = now(), safe_until = now() + interval '30 minutes', price_max = price, cfg_at = null where id = 1;
+    update baron2_port set prev_id = owner_id, owner_id = v, heir_id = null, since = now(), safe_until = now() + interval '30 minutes', price_max = price, priced = true, cfg_at = null where id = 1;
   else
-    update baron2_fly set prev_id = owner_id, owner_id = v, heir_id = null, since = now(), safe_until = now() + interval '30 minutes', price_max = price, cfg_at = null where id = 1;
+    update baron2_fly set prev_id = owner_id, owner_id = v, heir_id = null, since = now(), safe_until = now() + interval '30 minutes', price_max = price, priced = true, cfg_at = null where id = 1;
   end if;
   return baron2_cad_get() || jsonb_build_object('credits', _baron2_credits(v, p_state));
 end $$;
@@ -87,8 +89,8 @@ begin
     tot := tot + amt;
   end loop;
   for r in
-    select 'Port' place, owner_id pid, price_max pm from baron2_port where id = 1
-    union all select 'Aérodrome', owner_id, price_max from baron2_fly where id = 1
+    select 'Port' place, owner_id pid, price_max pm from baron2_port where id = 1 and priced
+    union all select 'Aérodrome', owner_id, price_max from baron2_fly where id = 1 and priced
   loop
     if r.pid is null or r.pid = top then continue; end if;
     amt := floor(0.02 * r.pm);
