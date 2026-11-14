@@ -2797,7 +2797,7 @@ function villageHTML(){
 const CZ_ORDER = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
 const CZ_RED = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
 const czCol = n => n === 0 ? "g" : CZ_RED.has(n) ? "r" : "k";
-const CZ = { game:"lobby", info:null, at:0, bets:{}, last:null, chip:1, spinning:false, hold:false, wheel:0, ball:0, res:null, seen:0 };
+const CZ = { game:"lobby", info:null, at:0, bets:{}, last:null, chip:2, spinning:false, hold:false, wheel:0, ball:0, res:null, seen:0 };
 const CZ_LABEL = { rouge:"Rouge", noir:"Noir", pair:"Pair", impair:"Impair", manque:"1 à 18", passe:"19 à 36", d1:"1 à 12", d2:"13 à 24", d3:"25 à 36", c1:"Colonne", c2:"Colonne", c3:"Colonne" };
 async function loadCasino(){
   try{
@@ -2811,8 +2811,12 @@ const czStake = () => Object.values(CZ.bets).reduce((a, b) => a + b, 0);
 function czChips(){
   const c = Math.max(0, S.coins);
   const down = x => { if (x < 10) return Math.max(1, Math.floor(x)); const p = Math.pow(10, Math.floor(Math.log10(x))), m = x / p; return (m >= 5 ? 5 : m >= 2 ? 2 : 1) * p; };
-  if (c < 100) return [1, 5, 10, 25];
-  return [down(c * .01), down(c * .05), down(c * .2), down(c * .5)];
+  if (c < 100) return [1, 2, 5, 10, 25, 50];
+  // jusqu'à 8 jetons ronds (1, 2, 5…), du tout petit (pour s'amuser) à la moitié de ta fortune
+  const lo = Math.max(1, c * .0001), hi = c * .5, all = [];
+  for (let p = Math.pow(10, Math.floor(Math.log10(lo))); p <= hi; p *= 10) for (const m of [1, 2, 5]) { const x = m * p; if (x >= lo * .99 && x <= hi) all.push(x); }
+  if (all.length <= 8) return all.length ? all : [down(c * .01)];
+  return Array.from({ length: 8 }, (_, i) => all[Math.round(i * (all.length - 1) / 7)]);
 }
 function czWheelSVG(){
   const a = 360 / 37, R = 100, r1 = 66;
@@ -2872,7 +2876,7 @@ function casinoHTML(){
       <button class="b2-btn big ${open ? "red" : "gold"}" data-a="cz-toggle">${open ? "Fermer le casino" : "Ouvrir le casino"}</button>${rgPanel("casino")}<p class="b2-note fl-charge">👑 Tu es le Baron : tu ne paies pas de charges, c'est toi qui touches le Tribut.</p></div>`;
   else body = `<div class="cz-play ${open ? "" : "shut"}">
       ${open ? "" : `<div class="cz-closed">🔒 Le casino est fermé<small>Seul le Baron peut l'ouvrir.</small></div>`}
-      <div class="cz-chips">${chips.map((v, i) => `<button class="cz-tok t${i} ${CZ.chip === i ? "on" : ""}" data-a="cz-chip" data-i="${i}">${fmtN(v)}</button>`).join("")}<button class="cz-tok all ${CZ.chip === 4 ? "on" : ""}" data-a="cz-chip" data-i="4">Tapis</button></div>
+      <div class="cz-chips">${chips.map((v, i) => `<button class="cz-tok t${i} ${CZ.chip === i ? "on" : ""}" data-a="cz-chip" data-i="${i}">${fmtN(v)}</button>`).join("")}<button class="cz-tok all ${CZ.chip === 99 ? "on" : ""}" data-a="cz-chip" data-i="99">Tapis</button></div>
       ${czTable()}
       <div class="cz-acts"><button class="b2-btn ghost" data-a="cz-clear" ${stake ? "" : "disabled"}>Effacer</button><button class="b2-btn ghost" data-a="cz-again" ${CZ.last && !stake ? "" : "disabled"}>Rejouer</button></div>
       <button class="b2-btn big gold cz-go" data-a="cz-spin" ${stake && open && !CZ.spinning ? "" : "disabled"}>${stake ? `Lancer · ${COIN}${fmtN(stake)}` : "Pose tes jetons"}</button></div>`;
@@ -2911,7 +2915,7 @@ function czBet(k){
   if (CZ.res){ CZ.res = null; }
   const cap = CZ.info.max ? +CZ.info.max : Infinity, left = Math.floor(Math.min(S.coins, cap) - czStake());
   if (left < 1){ toast(cap < S.coins ? `Mise max atteinte : ${COIN}${fmtN(cap)} par tour.` : "Tu as déjà tout misé."); return; }
-  const v = CZ.chip === 4 ? left : Math.min(left, czChips()[CZ.chip]);
+  const v = CZ.chip === 99 ? left : Math.min(left, (c => c[Math.min(CZ.chip, c.length - 1)])(czChips()));
   CZ.bets[k] = (CZ.bets[k] || 0) + v; sound("tap"); buzz(8); draw();
 }
 async function czSpin(){
@@ -2997,9 +3001,9 @@ const CZ_STYLE = `
 .cz-play.shut .cz-tab,.cz-play.shut .cz-chips,.cz-play.shut .cz-acts,.cz-play.shut .cz-go{opacity:.3;pointer-events:none}
 .cz-closed{position:absolute;z-index:3;left:50%;top:130px;transform:translateX(-50%);background:#3B1F17;color:#FFE6B8;padding:14px 20px;border-radius:16px;font:800 16px var(--round);text-align:center;box-shadow:0 6px 16px rgba(0,0,0,.4);white-space:nowrap}
 .cz-closed small{display:block;font:600 12px var(--round);opacity:.8;margin-top:3px}
-.cz-chips{display:flex;justify-content:center;gap:7px;margin:4px 0 12px}
-.cz-tok{width:54px;height:54px;border-radius:50%;font:800 11px var(--round)!important;color:#fff!important;border:4px dashed rgba(255,255,255,.75)!important;box-shadow:0 3px 0 rgba(0,0,0,.35);transition:transform .15s}
-.cz-tok.t0{background:#2E6FD8!important}.cz-tok.t1{background:#C8312A!important}.cz-tok.t2{background:#2F9E57!important;border-color:rgba(255,255,255,.6)!important}.cz-tok.t3{background:#1C1C1C!important}.cz-tok.all{background:linear-gradient(135deg,#F2D58A,#C98A12)!important;color:#4A2C00!important}
+.cz-chips{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 7px;margin:4px 0 12px}
+.cz-tok{width:50px;height:50px;border-radius:50%;font:800 11px var(--round)!important;color:#fff!important;border:4px dashed rgba(255,255,255,.75)!important;box-shadow:0 3px 0 rgba(0,0,0,.35);transition:transform .15s}
+.cz-tok.t0{background:#2E6FD8!important}.cz-tok.t1{background:#C8312A!important}.cz-tok.t2{background:#2F9E57!important;border-color:rgba(255,255,255,.6)!important}.cz-tok.t3{background:#1C1C1C!important}.cz-tok.t4{background:#7B3FC4!important}.cz-tok.t5{background:#E07A1F!important}.cz-tok.t6{background:#178A8A!important}.cz-tok.t7{background:#C2367A!important}.cz-tok.all{background:linear-gradient(135deg,#F2D58A,#C98A12)!important;color:#4A2C00!important}
 .cz-tok.on{transform:translateY(-6px) scale(1.06);box-shadow:0 0 0 3px #FFE6B8,0 6px 10px rgba(0,0,0,.4)}
 .cz-tab{display:grid;grid-template-columns:50px 46px 1fr 1fr 1fr;grid-template-rows:repeat(14,32px);gap:3px;background:#0B4229;padding:6px;border-radius:12px;border:2px solid #D9B46A}
 .cz-tab>div{display:flex}
@@ -3379,7 +3383,7 @@ try{ const lst = document.createElement("style"); lst.textContent = LT_STYLE; do
    Chacun son avion : on mise, le multiplicateur grimpe (×e^(0,15 t)), on encaisse avant le crash.
    Le crash est tiré par le serveur. Le village paie les gains ; le patron touche la boîte noire
    (10 % des mises perdues) et ne peut pas jouer. */
-const FL = { info:null, at:0, chip:1, stake:0, f:null, raf:0, poll:0, res:null };
+const FL = { info:null, at:0, chip:2, stake:0, f:null, raf:0, poll:0, res:null };
 async function loadFly(){
   try{ FL.info = await rpc("baron2_fly_get", { p_token: getToken() }); FL.at = now(); if (view === "casino" && (CZ.game === "envol" || CZ.game === "lobby") && !FL.f && !sheetOpen && !CZ.spinning) draw(); }catch(e){}
 }
@@ -3389,7 +3393,7 @@ const flFmt = m => "×" + m.toFixed(2).replace(".", ",");
 const flCol = c => c < 2 ? "lo" : c < 10 ? "md" : "hi";
 const flPct = () => FL.info && FL.info.fee != null ? +FL.info.fee : 10;
 const flFee = st => Math.ceil(st * flPct() / 100);
-function flStakeVal(){ const c = czChips(), max = Math.floor(Math.min(Math.max(0, S.coins) / (1 + flPct() / 100), FL.info && FL.info.max ? +FL.info.max : Infinity)); return Math.floor(FL.chip === 4 ? max : Math.min(max, c[FL.chip])); }
+function flStakeVal(){ const c = czChips(), max = Math.floor(Math.min(Math.max(0, S.coins) / (1 + flPct() / 100), FL.info && FL.info.max ? +FL.info.max : Infinity)); return Math.floor(FL.chip === 99 ? max : Math.min(max, c[Math.min(FL.chip, c.length - 1)])); }
 function envolHTML(){
   const I = FL.info, own = I && I.owner, mine = flMine(), f = FL.f, r = FL.res;
   if (f && !FL.raf) setTimeout(() => { if (FL.f && !FL.raf) FL.raf = requestAnimationFrame(flFrame); });
@@ -3414,7 +3418,7 @@ function envolHTML(){
   else if (I.open === false && !f) ctrl = `<div class="pt-shut fl-shut">🔒 L'Aérodrome est fermé<small>Seul ${esc(own.name)} peut l'ouvrir.</small></div>`;
   else {
     const sv = flStakeVal();
-    ctrl = `<div class="cz-chips">${czChips().map((v, i) => `<button class="cz-tok t${i} ${FL.chip === i ? "on" : ""}" data-a="fl-chip" data-i="${i}" ${f ? "disabled" : ""}>${fmtN(v)}</button>`).join("")}<button class="cz-tok all ${FL.chip === 4 ? "on" : ""}" data-a="fl-chip" data-i="4" ${f ? "disabled" : ""}>Tapis</button></div>
+    ctrl = `<div class="cz-chips">${czChips().map((v, i) => `<button class="cz-tok t${i} ${FL.chip === i ? "on" : ""}" data-a="fl-chip" data-i="${i}" ${f ? "disabled" : ""}>${fmtN(v)}</button>`).join("")}<button class="cz-tok all ${FL.chip === 99 ? "on" : ""}" data-a="fl-chip" data-i="99" ${f ? "disabled" : ""}>Tapis</button></div>
       ${f ? `<button class="b2-btn big gold fl-go cash" data-a="fl-cash" data-fl-cash>Encaisser · ${COIN}${fmtN(f.stake * flM(now() - f.t0))}</button>`
           : `<button class="b2-btn big red fl-go" data-a="fl-start" ${sv >= 1 ? "" : "disabled"}>✈️ Décoller · ${COIN}${fmtN(sv)}</button><p class="fl-fee">+ billet d'embarquement ${COIN}${fmtN(flFee(sv))} (${flPct()} % de la mise, pour le patron)</p>`}`;
   }
