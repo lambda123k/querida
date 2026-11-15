@@ -42,27 +42,27 @@ create table if not exists baron2_recipes (
 alter table baron2_recipes enable row level security;
 
 insert into baron2_recipes(k, ord, name, e, city, riddle, grid) values
- ('zabaione', 1,  'Sabayon',         '🥂', 'Venise',     'Une crème de Venise : du sucre, des œufs battus et un vin de miel. Forme : Une diagonale, d''un coin à l''autre.',
+ ('zabaione', 1,  'Sabayon',         '🥂', 'Venise',     'Une crème de Venise : de quoi sucrer, quelque chose qui sort du poulailler, et un vin très doux. Forme : Une diagonale, d''un coin à l''autre.',
     '["sucre",null,null, null,"oeufs",null, null,null,"hydromel"]'),
- ('loukoum',  2,  'Loukoums',        '🌹', 'Istanbul',   'Des cubes sucrés d''Istanbul : du sucre, de la farine de blé et des fruits. Forme : Une ligne de 3.',
+ ('loukoum',  2,  'Loukoums',        '🌹', 'Istanbul',   'Des cubes moelleux d''Istanbul : une douceur, une farine, et un goût de verger. Forme : Une ligne de 3.',
     '[null,null,null, "sucre","ble","fruits", null,null,null]'),
- ('baklava',  3,  'Baklava',         '🥮', 'Damas',      'Des feuilles de pâte fines comme une crêpe, des noix, et deux fois du miel. Forme : Un L (3 cases en colonne, plus une à droite en bas).',
+ ('baklava',  3,  'Baklava',         '🥮', 'Damas',      'Des feuilles de pâte très fines, des fruits secs, et le trésor des abeilles… en double. Forme : Un L (3 cases en colonne, plus une à droite en bas).',
     '["crepes",null,null, "noyaux",null,null, "miel","miel",null]'),
- ('basbousa', 4,  'Basbousa',        '🟨', 'Le Caire',   'Un gâteau de semoule de blé, sucré, aux noix, mouillé de lait. Forme : Un carré de 2×2.',
+ ('basbousa', 4,  'Basbousa',        '🟨', 'Le Caire',   'Un gâteau de semoule : une céréale, de quoi le sucrer, des fruits secs, et quelque chose de blanc qui vient de l''étable. Forme : Un carré de 2×2.',
     '["ble","sucre",null, "noyaux","lait",null, null,null,null]'),
- ('rhumarr',  5,  'Rhum arrangé',    '🍹', 'Zanzibar',   'Une bouteille de rhum, et dessous : des fruits de chaque côté de la mélasse. Forme : Un T à l''envers (1 case en haut, une ligne de 3 dessous).',
+ ('rhumarr',  5,  'Rhum arrangé',    '🍹', 'Zanzibar',   'Un alcool des îles qui fait mûrir des fruits, avec le sirop noir qui reste quand on fait le sucre. Forme : Un T à l''envers (1 case en haut, une ligne de 3 dessous).',
     '[null,"rhum",null, "fruits","melasse","fruits", null,null,null]'),
- ('chai',     6,  'Thé chaï',        '🫖', 'Bombay',     'Une boisson chaude d''Inde : du miel, du lait et du sucre, l''un sur l''autre. Forme : Une colonne de 3.',
+ ('chai',     6,  'Thé chaï',        '🫖', 'Bombay',     'Une boisson chaude d''Inde, lactée et bien sucrée. Forme : Une colonne de 3.',
     '[null,"miel",null, null,"lait",null, null,"sucre",null]'),
- ('encens',   7,  'Encens',          '🪔', 'Bagdad',     'De la cire au cœur, du miel à gauche, des plumes à droite, de la sciure en haut et en bas. Forme : Une croix +.',
+ ('encens',   7,  'Encens',          '🪔', 'Bagdad',     'Une fumée de palais : au cœur, ce qui fait briller les bougies, entouré de la ruche, du poulailler et de la forêt. Forme : Une croix +.',
     '[null,"sciure",null, "miel","cire","plumes", null,"sciure",null]'),
- ('halva',    8,  'Halva',           '🟫', 'Samarcande', 'Des noix et du lait en haut, du sucre au centre, du miel en bas. Forme : Un Y.',
+ ('halva',    8,  'Halva',           '🟫', 'Samarcande', 'Une pâte de graines broyées, adoucie, liée avec quelque chose de l''étable et une touche dorée. Forme : Un Y.',
     '["noyaux",null,"lait", null,"sucre",null, null,"miel",null]'),
- ('nan',      9,  'Nan aux noix',    '🫓', 'Kachgar',    'Un pain rond : du pain, des noix, des œufs et du miel tout autour d''un trou. Forme : Un losange (les 4 bords, le centre vide).',
+ ('nan',      9,  'Nan aux noix',    '🫓', 'Kachgar',    'Un pain rond autour d''un trou, garni de fruits secs, doré au poulailler, avec une touche des abeilles. Forme : Un losange (les 4 bords, le centre vide).',
     '[null,"pain",null, "noyaux",null,"oeufs", null,"miel",null]'),
- ('mochi',    10, 'Mochi',           '🍡', 'Kyoto',      'Du riz (le blé), une confiture rouge et du sucre. Forme : Une diagonale, dans l''autre sens.',
+ ('mochi',    10, 'Mochi',           '🍡', 'Kyoto',      'Une pâte de céréale collante, fourrée d''une douceur de fruits cuits, et roulée dans quelque chose de blanc et sucré. Forme : Une diagonale, dans l''autre sens.',
     '[null,null,"ble", null,"confiture",null, "sucre",null,null]'),
- ('elixir',   11, 'Élixir d''Orient', '⚗️', 'Partout',   'Les cinq trésors : hydromel, rhum, miel, cire et fromage. Forme : Un X (les 4 coins et le centre).',
+ ('elixir',   11, 'Élixir d''Orient', '⚗️', 'Partout',   'Cinq trésors : deux alcools qui ont vieilli, l''or des abeilles, ce dont on fait les bougies, et un produit de l''étable affiné en cave. Forme : Un X (les 4 coins et le centre).',
     '["hydromel",null,"rhum", null,"miel",null, "cire",null,"fromage"]')
 on conflict (k) do nothing;
 
