@@ -2904,9 +2904,9 @@ function czLobby(){
     <h2 class="cz-ttl">La Place</h2><p class="cz-lead">Tous les lieux de la ville.</p>
     ${card("bureau", "🤝", "Le Bureau du Baron", LN.info && LN.info.baron ? (lnIamBaron() ? (LN.info.asks.length ? `${LN.info.asks.length} demande${LN.info.asks.length > 1 ? "s" : ""} de prêt` : "Ton tribut et tes prêts") : (LN.info.mine && LN.info.mine.status === "live" ? `Tu dois ${COIN}${fmtN(+LN.info.mine.owed)}` : "Emprunter au Baron")) : "Prêts et tribut", lnIamBaron() && LN.info.asks.length ? `<span class="cz-st on">${LN.info.asks.length}</span>` : `<span class="go">›</span>`, "r")}
     ${card("roulette", "🎡", "La Roulette", bar ? (czIamBaron() ? "Tu tiens la banque" : "Banque : " + esc(bar.name)) : "Roulette européenne", `<span class="cz-st ${open ? "on" : ""}">${open ? "Ouverte" : "Fermée"}</span>`, "r")}
-    ${card("envol", "✈️", "L'Aérodrome", F && F.owner ? `Patron : ${esc(F.owner.id === ME.id ? "toi" : F.owner.name)}${CAD.info && CAD.info.fly ? (CAD.info.fly.priced ? ` · 📜 ${COIN}${fmtN(+CAD.info.fly.price)}` : "") : ""}${fh ? `<span class="cz-mini">${fh}</span>` : ""}` : "Encaisse avant le crash", F && F.owner ? `<span class="cz-st ${F.open !== false ? "on" : ""}">${F.open !== false ? "Ouvert" : "Fermé"}</span>` : `<span class="go">›</span>`, "a")}
+    ${card("envol", "✈️", "L'Aérodrome", F && F.owner ? `Patron : ${esc(F.owner.id === ME.id ? "toi" : F.owner.name)}${CAD.info && CAD.info.open && CAD.info.fly ? (CAD.info.fly.priced ? ` · 📜 ${COIN}${fmtN(+CAD.info.fly.price)}` : "") : ""}${fh ? `<span class="cz-mini">${fh}</span>` : ""}` : "Encaisse avant le crash", F && F.owner ? `<span class="cz-st ${F.open !== false ? "on" : ""}">${F.open !== false ? "Ouvert" : "Fermé"}</span>` : `<span class="go">›</span>`, "a")}
     ${card("lotto", "🎟️", "La Loterie", L ? `Cagnotte ${COIN}${fmtN(+L.jackpot)} · tirage à ${ltHour(L.draw_at)}` : "Bientôt…", `<span class="go">›</span>`, "l")}
-    <button class="cz-room a" data-a="tab" data-v="port"><span class="ic">⚓</span><span class="sp"><b>Le Port</b><small>${ptOwner() ? (ptMine() ? "Ton port" : "Capitaine : " + esc(ptOwner().name)) : "Vendre à l'étranger"}${CAD.info && CAD.info.port && CAD.info.port.owner ? (CAD.info.port.priced ? ` · 📜 ${COIN}${fmtN(+CAD.info.port.price)}` : "") : ""}</small></span><span class="cz-st ${PT.info && PT.info.open ? "on" : ""}">${PT.info && PT.info.open ? "Ouvert" : "Fermé"}</span></button>
+    <button class="cz-room a" data-a="tab" data-v="port"><span class="ic">⚓</span><span class="sp"><b>Le Port</b><small>${ptOwner() ? (ptMine() ? "Ton port" : "Capitaine : " + esc(ptOwner().name)) : "Vendre à l'étranger"}${CAD.info && CAD.info.open && CAD.info.port && CAD.info.port.owner ? (CAD.info.port.priced ? ` · 📜 ${COIN}${fmtN(+CAD.info.port.price)}` : "") : ""}</small></span><span class="cz-st ${PT.info && PT.info.open ? "on" : ""}">${PT.info && PT.info.open ? "Ouvert" : "Fermé"}</span></button>
   </div></div>`;
 }
 function czBet(k){
@@ -3490,7 +3490,8 @@ const CAD = { info:null, at:0, arm:"", busy:false };
 const CAD_NAME = { port:"le Port", fly:"l'Aérodrome" };
 async function loadCad(){ try{ CAD.info = await rpc("baron2_cad_get", {}); CAD.at = now(); }catch(e){} }
 function cadBlock(place, dark){
-  const I = CAD.info && CAD.info[place]; if (!I || !I.owner) return "";
+  if (!CAD.info || !CAD.info.open) return "";   // titres de propriété fermés pour le moment
+  const I = CAD.info[place]; if (!I || !I.owner) return "";
   const mine = I.owner.id === ME.id, pr = +I.price, safe = I.safe && new Date(I.safe).getTime() > now();
   const tax = Math.floor(pr * 0.02), cls = `cad ${dark ? "dk" : ""}`;
   if (mine) return `<div class="${cls}"><div class="cad-hd">📜 Titre de propriété</div>
