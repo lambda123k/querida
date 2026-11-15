@@ -12,38 +12,45 @@ try{
    Toute la ferme est simulée sur le téléphone, puis sauvegardée sur le serveur.
    Flux façon Idle Miner : parcelles → dépôt de chaque parcelle → monte-charge → quai → charrette → grange. */
 const BX = (function(){
-const RAW = ["ble","oeufs","lait","fruits","miel","bois"];
-const CRAFT = ["pain","crepes","tarte","confiture","gateau"];
+const RAW = ["ble","oeufs","lait","fruits","miel","bois","sucre"];
+const CRAFT = ["pain","crepes","tarte","confiture","gateau","caramel","bonbons","meringue","brioche"];
 // sous-produits : chaque ferme en sort un peu en plus de sa ressource (inutile pour elle, utile aux autres pour leurs outils)
-const SUB = ["paille","plumes","cuir","noyaux","cire","sciure"];
-const SUBOF = { ble:"paille", oeufs:"plumes", lait:"cuir", fruits:"noyaux", miel:"cire", bois:"sciure" };
+const SUB = ["paille","plumes","cuir","noyaux","cire","sciure","melasse"];
+const SUBOF = { ble:"paille", oeufs:"plumes", lait:"cuir", fruits:"noyaux", miel:"cire", bois:"sciure", sucre:"melasse" };
 // produits de luxe : faits au cellier (une ressource brute vieillit en tonneau, puis on la met en bouteille)
-const AGED = ["biere","cidre","fromage","hydromel"];
+const AGED = ["biere","cidre","fromage","hydromel","rhum"];
 const ALL = RAW.concat(CRAFT, SUB, AGED);
-const AGEDOF = { ble:"biere", lait:"fromage", fruits:"cidre", miel:"hydromel" };
+const AGEDOF = { ble:"biere", lait:"fromage", fruits:"cidre", miel:"hydromel", sucre:"rhum" };
 const P = {
   ble:    { label:"Blé",    e:"🌾", floor:10, place:"Champ de blé", short:"Champ", who:"Céréalier·ère",  act:{ id:"arroser",  label:"Arroser",         e:"💧", txt:"Le blé arrosé pousse 2× plus vite" } },
   oeufs:  { label:"Œufs",   e:"🥚", floor:10, place:"Poulailler", short:"Poulailler",   who:"Éleveur·se",     act:{ id:"grain",    label:"Donner du grain", e:"🌽", txt:"Les poules bien nourries pondent 2× plus" } },
   lait:   { label:"Lait",   e:"🥛", floor:10, place:"Étable", short:"Étable",       who:"Vacher·ère",     act:{ id:"traire",   label:"Traire",          e:"🪣", txt:"Traire à la main double le lait" } },
   fruits: { label:"Fruits", e:"🍎", floor:10, place:"Verger", short:"Verger",       who:"Arboriculteur·rice", act:{ id:"tailler", label:"Tailler",        e:"✂️", txt:"Des arbres taillés donnent 2× plus de fruits" } },
   miel:   { label:"Miel",   e:"🍯", floor:10, place:"Rucher", short:"Rucher",       who:"Apiculteur·rice", act:{ id:"enfumer",  label:"Enfumer",         e:"💨", txt:"Des abeilles calmes laissent récolter 2× plus" } },
+  sucre:  { label:"Sucre",  e:"🍬", floor:10, place:"Champ de betteraves", short:"Betteraves", who:"Sucrier·ère", act:{ id:"biner", label:"Biner", e:"⛏️", txt:"Des betteraves binées donnent 2× plus de sucre" } },
   bois:   { label:"Bois",   e:"🪵", floor:10, place:"Forêt", short:"Coupe",        who:"Bûcheron·ne",    act:{ id:"affuter",  label:"Affûter les haches", e:"🪓", txt:"Des haches affûtées coupent 2× plus vite" } },
   pain:      { label:"Pain",             e:"🍞", floor:30, rec:{ ble:1, lait:1 },                   t:60 },
   crepes:    { label:"Crêpes",           e:"🥞", floor:45, rec:{ ble:1, oeufs:1, lait:1 },          t:90 },
   tarte:     { label:"Tarte aux fruits", e:"🥧", floor:45, rec:{ ble:1, fruits:1, oeufs:1 },        t:120 },
   confiture: { label:"Confiture",        e:"🫙", floor:30, rec:{ fruits:1, miel:1 },                t:90 },
   gateau:    { label:"Gâteau",           e:"🍰", floor:65, rec:{ ble:1, oeufs:1, lait:1, miel:1 },  t:180 },
+  caramel:   { label:"Caramel",          e:"🍮", floor:30, rec:{ lait:1, sucre:1 },                 t:60 },
+  bonbons:   { label:"Bonbons",          e:"🍭", floor:30, rec:{ miel:1, sucre:1 },                 t:90 },
+  meringue:  { label:"Meringue",         e:"🧁", floor:30, rec:{ oeufs:1, sucre:1 },                t:75 },
+  brioche:   { label:"Brioche",          e:"🥐", floor:45, rec:{ ble:1, oeufs:1, sucre:1 },         t:120 },
   paille: { label:"Paille", e:"🌿", floor:20, sub:true, of:"ble" },
   plumes: { label:"Plumes", e:"🪶", floor:20, sub:true, of:"oeufs" },
   cuir:   { label:"Cuir",   e:"🥾", floor:20, sub:true, of:"lait" },
   noyaux: { label:"Noyaux", e:"🌰", floor:20, sub:true, of:"fruits" },
   cire:   { label:"Cire",   e:"🕯️", floor:20, sub:true, of:"miel" },
   sciure: { label:"Sciure", e:"🍂", floor:20, sub:true, of:"bois" },
+  melasse:{ label:"Mélasse",e:"🫗", floor:20, sub:true, of:"sucre" },
   // produits de luxe : même quantité que la matière première, mais une prime sur son cours (plus c'est long, plus ça vaut)
   biere:    { label:"Bière",    e:"🍺", floor:12.5, aged:true, src:"ble",  prem:1.25, h:2 },
   cidre:    { label:"Cidre",    e:"🍾", floor:14, aged:true, src:"fruits", prem:1.4, h:4 },
   fromage:  { label:"Fromage",  e:"🧀", floor:15.5, aged:true, src:"lait", prem:1.55, h:6 },
   hydromel: { label:"Hydromel", e:"🍷", floor:17, aged:true, src:"miel",   prem:1.7, h:8 },
+  rhum:     { label:"Rhum",     e:"🥃", floor:20, aged:true, src:"sucre",  prem:2,   h:12 },
 };
 
 /* ---------- Outils de l'atelier ----------
@@ -54,7 +61,7 @@ const TQ = [
   { id:"solide", label:"Solide", mul:1.6, h:3, qty:4,  need:2 },
   { id:"dore",   label:"Doré",   mul:2,   h:8, qty:12, need:3 },
 ];
-const TOOLP = { ble:["Faux","🌙"], oeufs:["Mangeoire","🥣"], lait:["Trayeuse","🪣"], fruits:["Sécateur","✂️"], miel:["Enfumoir","💨"], bois:["Scie","🪚"] };
+const TOOLP = { ble:["Faux","🌙"], oeufs:["Mangeoire","🥣"], lait:["Trayeuse","🪣"], fruits:["Sécateur","✂️"], miel:["Enfumoir","💨"], bois:["Scie","🪚"], sucre:["Binette","⛏️"] };
 const TOOLK = {
   parcel: { where:"Parcelles",    txt:"Tes fermiers récoltent plus" },
   elev:   { where:"Monte-charge", txt:"Le monte-charge porte plus", name:"Poulie", e:"⚙️", subs:["cuir","sciure"] },
@@ -145,10 +152,12 @@ function fixFarm(f){
   return f;
 }
 // bonus des outils en ce moment (uniquement sur la ferme principale)
+// + le coup de pouce du nouveau venu : ×2 partout sur sa spécialité tant qu'il est sous la fortune moyenne des autres
 function tmOf(s, key, now){
-  if (!s || key !== s.spec || !s.tools) return { p:1, e:1, c:1 };
+  const cu = s && s.catchup && key === s.spec ? 2 : 1;
+  if (!s || key !== s.spec || !s.tools) return { p:cu, e:cu, c:cu };
   const m = k => { const t = s.tools[k]; return t && t.until > now && TQ[t.q] ? TQ[t.q].mul : 1; };
-  return { p: m("parcel"), e: m("elev"), c: m("cart") };
+  return { p: m("parcel") * cu, e: m("elev") * cu, c: m("cart") * cu };
 }
 const TM1 = { p:1, e:1, c:1 };
 const stockUnits = s => ALL.reduce((a, k) => a + (s.stock[k] || 0), 0);
@@ -305,7 +314,7 @@ const toolIcon = (s, kind) => kind === "parcel" ? TOOLP[s.spec][1] : TOOLK[kind]
 // ingrédients : les sous-produits des autres fermes (pour les parcelles : 2 fermes voisines dans le cercle)
 function toolSubs(s, kind){
   if (kind !== "parcel") return TOOLK[kind].subs;
-  const i = RAW.indexOf(s.spec); return [SUB[(i + 1) % 6], SUB[(i + 3) % 6]];
+  const i = RAW.indexOf(s.spec); return [SUB[(i + 1) % RAW.length], SUB[(i + 3) % RAW.length]];
 }
 function toolRecipe(s, kind, qi){
   const q = Math.max(5, nice(effRate(s, 0) * BAL.subRatio * BAL.toolSecs * TQ[qi].qty));
@@ -375,12 +384,13 @@ const hash = str => { let h = 2166136261; for (let i = 0; i < str.length; i++){ 
 const CHARS = {
   boulanger:  { name:"Le boulanger",   e:"👨‍🍳", wants:["pain","ble"] },
   aubergiste: { name:"L'aubergiste",   e:"🧔", wants:["crepes","oeufs","lait"] },
-  patissiere: { name:"La pâtissière",  e:"👩‍🍳", wants:["gateau","tarte"] },
+  patissiere: { name:"La pâtissière",  e:"👩‍🍳", wants:["gateau","tarte","brioche"] },
+  confiseur:  { name:"Le confiseur",   e:"🍭", wants:["caramel","bonbons","meringue","sucre"] },
   epiciere:   { name:"L'épicière",     e:"👵", wants:["confiture","fruits","miel"] },
   charpentier:{ name:"Le charpentier", e:"👷", wants:["bois"] },
   maire:      { name:"Le maire",       e:"🎩", wants:[] },
   // visiteurs des demandes surprises (ils débarquent entre deux créneaux)
-  tavernier:  { name:"Le tavernier",   e:"🍻", wants:["biere","cidre","hydromel"] },
+  tavernier:  { name:"Le tavernier",   e:"🍻", wants:["biere","cidre","hydromel","rhum"] },
   fromager:   { name:"Le fromager",    e:"🧀", wants:["fromage"] },
   colporteur: { name:"Le marchand",  e:"🧳", wants:[], lines:["Il passe en coup de vent et repart ce soir", "Il a une charrette vide et des poches pleines", "Il revend tout en ville, il lui en faut vite"] },
   chatelaine: { name:"La châtelaine",  e:"👑", wants:[], lines:["Elle donne un bal ce soir au château", "Ses invités de marque arrivent, rien n'est prêt", "Elle ne mange que ce qu'il y a de meilleur"] },
@@ -462,7 +472,7 @@ function setMarket(o){ if (o.press) MK.press = o.press; if (o.med) MK.med = +o.m
 const SEASONS = [{ id:"printemps", label:"Printemps", e:"🌸" }, { id:"ete", label:"Été", e:"☀️" }, { id:"automne", label:"Automne", e:"🍂" }, { id:"hiver", label:"Hiver", e:"❄️" }];
 const SEASON_MS = 90 * MIN;
 // effet de chaque saison sur le prix (de -2 : abondant, pas cher, à +2 : recherché, cher)
-const SEASONV = { ble:[1, -2, 0, 1], oeufs:[-2, 0, 1, 1], lait:[-1, 1, -1, 1], fruits:[1, -1, -2, 2], miel:[1, -2, 0, 1], bois:[-1, -2, 2, 1] };
+const SEASONV = { ble:[1, -2, 0, 1], oeufs:[-2, 0, 1, 1], lait:[-1, 1, -1, 1], fruits:[1, -1, -2, 2], miel:[1, -2, 0, 1], bois:[-1, -2, 2, 1], sucre:[-1, 1, -2, 2] };
 function seasonAt(t){ const n = Math.floor(t / SEASON_MS); return { i: ((n % 4) + 4) % 4, left: (n + 1) * SEASON_MS - t, next: (((n + 1) % 4) + 4) % 4 }; }
 function seasonLog(k, t){
   const v = SEASONV[k]; if (!v) return 0;
@@ -481,6 +491,7 @@ const NEWS = {
   miel:   { up:["Les abeilles ont essaimé","Un ours a visité les ruches","Les apothicaires s'arrachent le miel"], down:["Les fleurs sont partout","Les ruches débordent","Un colporteur brade son miel"] },
   bois:   { up:["Le pont du village s'est effondré","L'hiver s'annonce rude","Le seigneur construit une tour"], down:["Une tempête a couché la forêt","Les bûcherons de la vallée arrivent","Le chantier du château est fini"] },
 };
+NEWS.sucre = { up:["Les betteraves ont pourri","Le confiseur du château dévalise tout","Les fourmis ont attaqué la sucrerie"], down:["Récolte de betteraves record","La sucrerie tourne à plein","Un bateau de sucre arrive des îles"] };
 const NEWS_MS = 30 * MIN;
 const newsCache = {};
 function newsOf(slot){
@@ -514,7 +525,7 @@ function pressAt(k, t){
   for (let j = h.length - 1; j >= 0; j--) if (h[j][0] <= t){ e = h[j]; break; }
   return e ? e[1] * Math.pow(0.5, (t - e[0]) / HALF) : 0;
 }
-const DEPTH = { pain:0.5, confiture:0.5, crepes:0.34, tarte:0.34, gateau:0.25 };
+const DEPTH = { pain:0.5, confiture:0.5, crepes:0.34, tarte:0.34, gateau:0.25, caramel:0.5, bonbons:0.5, meringue:0.5, brioche:0.34 };
 const depth = k => Math.max(1, MK.med * 1800 * (P[k].sub ? 0.1 : DEPTH[k] || 1));
 function pushLocal(k, units, t){
   const r = MK.press[k] || { p:0, t, h:[] }, p = Math.max(-4, Math.min(4, pressAt(k, t) + units / depth(k)));
@@ -541,7 +552,7 @@ function bubbleAt(k, t){
   return null;
 }
 // les liens entre produits (cachés) : qui entraîne qui
-const LINKS = { oeufs:[["lait", 0.35]], lait:[["oeufs", 0.35]], fruits:[["miel", 0.3]], miel:[["fruits", 0.3]], ble:[["bois", -0.3]], bois:[["ble", -0.3]] };
+const LINKS = { oeufs:[["lait", 0.35]], lait:[["oeufs", 0.35]], fruits:[["miel", 0.3]], miel:[["fruits", 0.3], ["sucre", -0.25]], sucre:[["miel", -0.25]], ble:[["bois", -0.3]], bois:[["ble", -0.3]] };
 function fundLog(k, t){ return waveLog(k, t) + seasonLog(k, t) + newsLog(k, t) + phareLog(k, t) + LN2 * pressAt(k, t); }
 function linkLog(k, t){
   if (P[k].rec){ const ks = Object.keys(P[k].rec); return 0.7 * ks.reduce((a, x) => a + fundLog(x, t), 0) / ks.length; }
@@ -828,7 +839,7 @@ function fixState(s){
   s.seen = s.seen || {}; s.oven = s.oven || { lvl:0, slots:[] }; s.orders = s.orders || { slot:0, list:[], prog:{} };
   s.reserve = s.reserve || { slot:0, used:{} }; s.vsold = s.vsold || {};
   if (!s.ord2){ s.ord2 = 1; s.orders = { slot:0, list:[], prog:{} }; }
-  s.ord3 = 1; s.v4 = 1; s.v5 = 1;                                                  // atelier, sous-produits, cellier
+  s.ord3 = 1; s.v4 = 1; s.v5 = 1; s.v6 = 1;                                                 // atelier, sous-produits, cellier
   s.etb = Object.assign({ rep:0, job:null, inv:{} }, s.etb || {}); s.etb.inv = s.etb.inv || {};
   s.bets = s.bets || []; s.tools = s.tools || {}; s.atelier = s.atelier || 0; s.cellar = s.cellar || { lvl:0, slots:[] };                                                            // demandes surprises (11 nov. 2026)   // commandes du village en course (11 nov. 2026)
   s.claims = (s.claims || []).map(c => ({ id: c.id, slot: c.slot })); s.wonIds = s.wonIds || [];
@@ -1558,7 +1569,7 @@ const seedR = n => { let a = n * 9301 + 49297; return () => { a = (a * 9301 + 49
 function plotArt(k, i, lvl){
   const r = seedR(i * 7 + 3), n = Math.min(9, 3 + Math.floor((lvl || 1) / 6));
   const sky = `<rect width="240" height="96" fill="url(#b2s${k})"/>`;
-  const grad = { ble:["#FCE7B5","#F4CF7A"], oeufs:["#FCE3C9","#F3C79E"], lait:["#E3F2D8","#C3E2A8"], fruits:["#E6F3D6","#BFE09A"], miel:["#FFF0C7","#F8D98A"], bois:["#D9EDD9","#A9D3A4"] }[k] || ["#eee","#ddd"];
+  const grad = { ble:["#FCE7B5","#F4CF7A"], oeufs:["#FCE3C9","#F3C79E"], lait:["#E3F2D8","#C3E2A8"], fruits:["#E6F3D6","#BFE09A"], miel:["#FFF0C7","#F8D98A"], bois:["#D9EDD9","#A9D3A4"], sucre:["#F6E9F2","#E6C9DC"] }[k] || ["#eee","#ddd"];
   let g = `<defs><linearGradient id="b2s${k}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${grad[0]}"/><stop offset="1" stop-color="${grad[1]}"/></linearGradient></defs>${sky}`;
   const ground = c => `<path d="M0 74 Q60 68 120 72 T240 70 V96 H0Z" fill="${c}"/>`;
   if (k === "ble"){
@@ -1612,6 +1623,17 @@ function plotArt(k, i, lvl){
     g += `<g transform="translate(196 80)"><ellipse cx="0" cy="-2" rx="14" ry="5" fill="#C98F55"/><ellipse cx="0" cy="-4" rx="12" ry="4" fill="#E2B27A"/><circle cx="0" cy="-4" r="2" fill="none" stroke="#B07D4A"/></g>`;
     g += `<g transform="translate(180 64)"><g class="b2-chop"><path d="M0 0 L18 16" stroke="#7C4A24" stroke-width="3" stroke-linecap="round"/><path d="M-4 -5 l9 -2 -2 9z" fill="#9AA6AE"/></g></g>`;
     g += `<g transform="translate(222 84)"><rect x="-14" y="-6" width="28" height="6" rx="3" fill="#A86B3C"/><rect x="-11" y="-12" width="22" height="6" rx="3" fill="#B87A46"/><circle cx="-14" cy="-3" r="3" fill="#E2B27A"/><circle cx="-11" cy="-9" r="3" fill="#E2B27A"/></g>`;
+  }
+  else if (k === "sucre"){
+    g += ground("#9C6B43");
+    for (let row = 0; row < 2; row++) g += `<path d="M0 ${80 + row * 7} H240" stroke="#7E5232" stroke-width="2" stroke-dasharray="6 5"/>`;
+    const cnt = 6 + n;
+    for (let j = 0; j < cnt; j++){
+      const x = 10 + j * (170 / cnt) + r() * 6, y = 79 + (j % 2) * 6, d = (r() * 2).toFixed(2);
+      g += `<g transform="translate(${x.toFixed(1)} ${y})"><ellipse cx="0" cy="0" rx="6" ry="4.5" fill="#B73A6A" stroke="#7E1E46" stroke-width="1"/>
+        <g class="b2-sway" style="animation-delay:-${d}s"><path d="M0 -3 q-9 -10 -5 -20 q6 6 5 20z" fill="#4E9A3E"/><path d="M0 -3 q9 -10 5 -20 q-6 6 -5 20z" fill="#5FAE4A"/><path d="M0 -3 l0 -16" stroke="#3B7A2E" stroke-width="1"/></g></g>`;
+    }
+    g += `<g transform="translate(204 64)"><rect x="-18" y="-4" width="36" height="20" rx="3" fill="#E9E4EC" stroke="#9C8FA8" stroke-width="1.2"/><path d="M-20 -4 L0 -16 L20 -4z" fill="#B73A6A"/><rect x="-5" y="4" width="10" height="12" fill="#7E5232"/><rect x="10" y="-22" width="5" height="12" fill="#9C8FA8"/></g>`;
   }
   return `<svg viewBox="0 0 240 96" preserveAspectRatio="xMidYMax slice" aria-hidden="true">${g}</svg>`;
 }
@@ -1707,6 +1729,10 @@ const PIC = {
   tarte: `<ellipse cx="16" cy="19" rx="13" ry="9" fill="#D9903F" stroke="#9E5E1E" stroke-width="1.2"/><ellipse cx="16" cy="18" rx="10" ry="6.5" fill="#C0392B"/><path d="M8 15.5 l16 5 M8 20.5 l16 -5 M12 12.5 l1 11 M20 12.5 l-1 11" stroke="#F0B562" stroke-width="2.2" stroke-linecap="round"/>`,
   confiture: `<rect x="8" y="11" width="16" height="17" rx="4" fill="#C2263A" stroke="#8E1828" stroke-width="1.2"/><path d="M6 10 q10 -6 20 0 l-2 4 q-8 -3 -16 0z" fill="#fff" stroke="#E2DCCF"/><path d="M8.5 9 l3 1.5 M13 7.5 l3 1.5 M18 7.5 l3 1.5 M22 9 l2.5 1.5" stroke="#E0392B" stroke-width="1.6"/><path d="M8 13.5 h16" stroke="#7C4A24" stroke-width="1.2"/><rect x="11" y="17" width="10" height="6" rx="1.5" fill="#FFF0C7"/><ellipse cx="11" cy="20" rx="1" ry="3" fill="#E85A6B" opacity=".7"/>`,
   gateau: `<rect x="5" y="17" width="22" height="10" rx="2.5" fill="#F4A9B8" stroke="#C26A7E" stroke-width="1.2"/><rect x="5" y="20.5" width="22" height="2.5" fill="#FFF3E0"/><path d="M5 17 q2.75 3 5.5 0 q2.75 3 5.5 0 q2.75 3 5.5 0 q2.75 3 5.5 0 v-3 q-11 -4 -22 0z" fill="#FFFFFF" stroke="#E2DCCF"/><circle cx="16" cy="10.5" r="3" fill="#E0392B"/><path d="M16 7.5 q1 -3 3.5 -3.5" stroke="#5FAE4A" stroke-width="1.3" fill="none"/><rect x="4" y="27" width="24" height="2.5" rx="1.2" fill="#C7D3DC"/>`,
+  caramel: `<path d="M7 26 L10 12 h12 L25 26z" fill="#E8A04A" stroke="#A86414" stroke-width="1.2" stroke-linejoin="round"/><path d="M10 12 q6 -4 12 0 q-1 4 -6 4 q-5 0 -6 -4z" fill="#8E4A12"/><path d="M12 14 q1 4 0 6 M18 14 q1 3 0 5" stroke="#8E4A12" stroke-width="1.6" stroke-linecap="round"/><ellipse cx="16" cy="27" rx="11" ry="2" fill="#E8EEF2" stroke="#B9C7D2"/>`,
+  bonbons: `<path d="M3 11 l5 3 l-5 3z M29 11 l-5 3 l5 3z" fill="#F2B33D" stroke="#B87A10" stroke-width="1"/><ellipse cx="16" cy="14" rx="8" ry="6" fill="#E85A8E" stroke="#A8305E" stroke-width="1.2"/><path d="M11 11 q5 6 10 0" stroke="#FFF" stroke-width="1.6" fill="none" opacity=".8"/><path d="M5 23 l4 2.5 l-4 2.5z M27 23 l-4 2.5 l4 2.5z" fill="#7BC4E8" stroke="#3E87AE" stroke-width="1"/><ellipse cx="16" cy="25.5" rx="7" ry="4.5" fill="#58A8D8" stroke="#2E6E98" stroke-width="1.2"/>`,
+  meringue: `<path d="M5 27 q-2 -6 5 -8 q-2 -7 6 -8 q1 -6 5 -7 q-1 5 3 7 q5 2 3 8 q6 2 3 8z" fill="#FFF8F2" stroke="#D9C3B0" stroke-width="1.3" stroke-linejoin="round"/><path d="M10 19 q6 2 13 0 M12 12 q4 1 8 0" stroke="#E7D3C2" stroke-width="1.2" fill="none"/>`,
+  brioche: `<ellipse cx="16" cy="22" rx="12" ry="6" fill="#D98A35" stroke="#9E5E1E" stroke-width="1.2"/><circle cx="16" cy="13" r="6" fill="#E39A45" stroke="#9E5E1E" stroke-width="1.2"/><path d="M8 20 q8 4 16 0" stroke="#F3C27A" stroke-width="1.6" fill="none"/><circle cx="14" cy="11" r="1.6" fill="#F6D9A8"/>`,
   // sous-produits
   paille: `<path d="M7 9 l-1 -4 M11 9 l0 -5 M16 9 l1 -5 M21 9 l1 -4 M25 9 l2 -3" stroke="#D9B04A" stroke-width="1.4" stroke-linecap="round"/><rect x="4" y="9" width="24" height="17" rx="3.5" fill="#EBC761" stroke="#B88A2B" stroke-width="1.3"/><path d="M6 13.5 h20 M6 17.5 h20 M6 21.5 h20" stroke="#C9A04A" stroke-width="1"/><path d="M11 9 v17 M21 9 v17" stroke="#A0522D" stroke-width="2"/>`,
   plumes: `<path d="M25 3 C 13 5, 6 15, 8 26 C 19 23, 27 14, 25 3z" fill="#FBF7EE" stroke="#B9AE98" stroke-width="1.3"/><path d="M5 29 L 21 9" stroke="#8C7F68" stroke-width="1.5" stroke-linecap="round"/><path d="M12 19 l-3 -2 M15 15 l-3 -3 M18 12 l-2 -4 M14 21 l4 1 M17 17 l5 0 M20 13 l4 -1" stroke="#CFC4AE" stroke-width="1" stroke-linecap="round"/>`,
@@ -1714,12 +1740,15 @@ const PIC = {
   noyaux: `<ellipse cx="11.5" cy="17" rx="6" ry="9" transform="rotate(-18 11.5 17)" fill="#B9773E" stroke="#7A4A20" stroke-width="1.2"/><path d="M9 10 q2 7 4.5 14" stroke="#7A4A20" stroke-width="1" fill="none"/><ellipse cx="21.5" cy="18" rx="5.5" ry="8.5" transform="rotate(20 21.5 18)" fill="#C98A50" stroke="#7A4A20" stroke-width="1.2"/><path d="M23.5 11 q-2 7 -4 13.5" stroke="#7A4A20" stroke-width="1" fill="none"/>`,
   cire: `${[[11,11],[21,11],[16,19.5],[6,19.5],[26,19.5]].map(([x,y]) => `<path d="M${x} ${y-5.5} l4.8 2.75 v5.5 l-4.8 2.75 l-4.8 -2.75 v-5.5z" fill="#F7DC86" stroke="#C99A2E" stroke-width="1.2"/>`).join("")}<path d="M16 15 l4.8 2.75 v5.5 l-4.8 2.75 l-4.8 -2.75 v-5.5z" fill="#F2C24B"/>`,
   sciure: `<path d="M3 27 q4 -13 13 -14 q9 1 13 14z" fill="#E2BC86" stroke="#A8794A" stroke-width="1.3"/>${[[10,22],[14,18],[18,21],[21,24],[13,25],[17,16],[23,20],[8,25]].map(([x,y]) => `<circle cx="${x}" cy="${y}" r="0.9" fill="#A8794A"/>`).join("")}<path d="M6 10 l2 -2 M24 8 l2 1 M14 7 l1 -2" stroke="#C99A62" stroke-width="1.3" stroke-linecap="round"/>`,
+  melasse: `<path d="M9 9 h14 l-1 3 v12 a4 4 0 0 1 -4 4 h-4 a4 4 0 0 1 -4 -4 v-12z" fill="#4A2412" stroke="#2A1208" stroke-width="1.2"/><rect x="8" y="6" width="16" height="4" rx="1.5" fill="#C9A16E" stroke="#8C6A3C"/><path d="M12 15 q2 6 0 9" stroke="#7A3E1C" stroke-width="1.6" stroke-linecap="round"/>`,
   // cellier
   biere: `<rect x="6" y="10" width="15" height="18" rx="2.5" fill="#F2A93B" stroke="#B5701A" stroke-width="1.3"/><path d="M21 13 h3 a3 3 0 0 1 3 3 v4 a3 3 0 0 1 -3 3 h-3" fill="none" stroke="#B5701A" stroke-width="2"/><path d="M5 11 q0 -5 5 -4 q2 -3 5 -1 q4 -2 6 2 q2 1 1 3z" fill="#FFFDF5" stroke="#D9CDB4" stroke-width="1.1"/><path d="M10 15 v9 M15 15 v9" stroke="#F8C870" stroke-width="1.4" stroke-linecap="round"/>`,
   fromage: `<path d="M3 21 L26 9 L29 15 V25 H3z" fill="#F6D04D" stroke="#C9971C" stroke-width="1.3" stroke-linejoin="round"/><path d="M3 21 H29" stroke="#C9971C" stroke-width="1.1"/><circle cx="10" cy="23.5" r="1.4" fill="#D9A52A"/><circle cx="20" cy="23" r="1.8" fill="#D9A52A"/><circle cx="25.5" cy="17.5" r="1.3" fill="#D9A52A"/><circle cx="17" cy="16.5" r="1.1" fill="#D9A52A"/>`,
   cidre: `<path d="M13 3 h6 v6 q5 3 5 9 v9 a2 2 0 0 1 -2 2 h-12 a2 2 0 0 1 -2 -2 v-9 q0 -6 5 -9z" fill="#4F9A4A" stroke="#2E6A2A" stroke-width="1.3"/><rect x="12.5" y="2" width="7" height="3.5" rx="1" fill="#C98A50" stroke="#7A4A20" stroke-width="1"/><rect x="10" y="16" width="12" height="7" rx="1.5" fill="#FFF4D8" stroke="#D9C39A" stroke-width=".8"/><circle cx="16" cy="19.5" r="2" fill="#E0392B"/>`,
   hydromel: `<path d="M9 5 h14 q0 10 -7 12 q-7 -2 -7 -12z" fill="#E8A33A" stroke="#A86A12" stroke-width="1.3"/><path d="M9.6 8 h12.8" stroke="#F8D690" stroke-width="1.3"/><path d="M16 17 v8 M11 27 h10" stroke="#A86A12" stroke-width="2" stroke-linecap="round"/>`,
 };
+PIC.sucre = `${[[8,18],[17,18],[12.5,10],[21.5,10]].map(([x,y]) => `<rect x="${x}" y="${y}" width="8.5" height="8.5" rx="1.6" fill="#FFFFFF" stroke="#BFC3CF" stroke-width="1.2"/><path d="M${x + 1.5} ${y + 2} h3" stroke="#E6E8EF" stroke-width="1.2"/>`).join("")}<path d="M4 28 h24" stroke="#BFC3CF" stroke-width="1.2" stroke-linecap="round"/>`;
+PIC.rhum = `<path d="M13 3 h6 v5 q5 3 5 10 v9 a2 2 0 0 1 -2 2 h-12 a2 2 0 0 1 -2 -2 v-9 q0 -7 5 -10z" fill="#8E3E12" stroke="#5A2408" stroke-width="1.3"/><rect x="9" y="16" width="14" height="7" rx="1" fill="#F2D58A" stroke="#B5701A"/><path d="M12 19.5 h8" stroke="#8E3E12" stroke-width="1.4"/><rect x="12.5" y="1.5" width="7" height="3" rx="1" fill="#2B1D14"/>`;
 for (const k in PIC) P[k].e = `<i class="b2-ic"><svg viewBox="0 0 32 32" aria-hidden="true">${PIC[k]}</svg></i>`;
 
 
@@ -1809,6 +1838,10 @@ function loop(){
     if (n % 40 === 30 && (view === "lotto" || view === "casino")) loadLotto();
     if (n % 40 === 12 && (view === "port" || view === "village")) loadPort();
     if (n % 16 === 8 && view === "casino" && !CZ.spinning) loadCasino();
+    if (n % 20 === 4 && S.catchup && W.players && W.players.length > 1){
+      const o = W.players.filter(p => p.id !== ME.id), avg = o.reduce((a, p) => a + (+p.stats?.fortune || 0), 0) / Math.max(1, o.length);
+      if (avg > 0 && BX.fortune(S) >= avg){ delete S.catchup; dirty = true; toast("🚀 Tu as rattrapé la moyenne du village : fin du coup de pouce. À toi de jouer !", "gold"); draw(); }
+    }
     if (n % 40 === 24) loadLoans();
     if (n % 40 === 32 && (view === "port" || view === "casino")) loadCad().then(() => { if ((view === "port" || (view === "casino" && CZ.game === "envol" && !FL.f)) && !sheetOpen) draw(); });
     if (view === "casino" && CZ.game === "bureau") lnTick();
@@ -2067,7 +2100,7 @@ function farmHTML(){
       <button class="b2-cartlane" data-a="tap-cart" aria-label="Faire rouler la charrette"><div class="b2-cart"><span class="ld">0</span>${CART}<span class="pusher">${BODY.cart}</span><span class="b2-point" data-hint="cart">${HAND}</span></div></button>
     </div>
     ${farmsK.length > 1 ? `<div class="b2-farmsw">${farmsK.map(k => `<button class="${k === key ? "on" : ""}" data-a="farm" data-k="${k}">${P[k].e} ${P[k].label}</button>`).join("")}</div>` : ""}
-    ${tip}
+    ${S.catchup ? `<div class="b2-tip"><span class="i">🚀</span><span><b>Coup de pouce du village</b> : ta ferme produit 2× plus tant que tu es sous la fortune moyenne des autres.</span></div>` : ""}${tip}
     <div class="b2-shaft">
       <button class="b2-rail" data-a="tap-elev" aria-label="Faire monter le monte-charge"><div class="rope"></div><div class="b2-cab"><span class="ld">0</span>${CABIN}</div></button>
       ${plots}
@@ -2103,7 +2136,7 @@ function stationInner(){
 function refreshStation(){ const sh = wrapEl && wrapEl.querySelector(".b2-sheet"); if (sh && sheetCtx && sheetCtx.type === "station"){ sh.innerHTML = stationInner(); live(); } }
 function farm2HTML(){
   if (!BX.unlocked(S, "farm2") || S.cur !== S.spec) return "";
-  const free = BX.RAW.filter(k => !S.farms[k]); if (!free.length) return "";
+  const free = BX.RAW.filter(k => !S.farms[k] && k !== "sucre"); if (!free.length) return "";
   const c = BX.costs.farm(S);
   return `<div style="padding:0 10px 14px"><div class="b2-locked" style="background:#3B2414"><span class="palier">Concurrence</span><h3>Ouvrir une autre exploitation</h3>
     <p>Une seule possible. Elle produit 4× moins que ta spécialité, mais assez pour concurrencer un voisin.</p><button class="b2-btn gold" data-a="farm2" data-cc="${c.coins}" data-cw="${c.wood}">Choisir ${price(c)}</button></div></div>`;
@@ -2208,6 +2241,8 @@ const ETB = {
     bougies:  { label:"Bougies parfumées", e:"🕯️", subs:["cire","noyaux"],           g:["cut","polish"],        q:"Des bougies qui sentent bon le fruit." },
     collier:  { label:"Collier",           e:"📿", subs:["noyaux","cuir"],           g:["cut","build"],         q:"Un collier de noyaux polis, pour le bal de ce soir." },
     eventail: { label:"Éventail",          e:"🪭", subs:["plumes","sciure"],         g:["build","polish"],      q:"Un éventail de plumes, il fait si chaud à la cour." },
+    torches:  { label:"Torches",           e:"🔥", subs:["melasse","cire","sciure"], g:["build","polish"],      q:"Des torches qui brûlent toute la nuit pour le bal." },
+    epices:   { label:"Pain d'épices",     e:"🍪", subs:["melasse","noyaux"],        g:["cut","polish"],        q:"Un pain d'épices géant pour la fête du village." },
   },
   CLI: [{ n:"La Duchesse", e:"👒", f:1 }, { n:"Le Notaire", e:"🎩" }, { n:"L'Aubergiste", e:"🧔" }, { n:"Le Comte", e:"🤵" }, { n:"La Capitaine", e:"⚓", f:1 }, { n:"L'Abbesse", e:"⛪", f:1 }],
   KING: { n:"Le Roi", e:"👑" },
@@ -2635,7 +2670,7 @@ function linksText(k){
 }
 function ficheSheet(k){
   sheetCtx = null;
-  const v = BX.SEASONV[k], s = BX.seasonAt(now()), nw = BX.newsOf ? (k in { ble:1, oeufs:1, lait:1, fruits:1, miel:1, bois:1 }) : false;
+  const v = BX.SEASONV[k], s = BX.seasonAt(now()), nw = BX.newsOf ? (k in { ble:1, oeufs:1, lait:1, fruits:1, miel:1, bois:1, sucre:1 }) : false;
   const sea = v ? `<div class="b2-seas">${BX.SEASONS.map((c, i) => `<span class="${i === s.i ? "on" : ""}">${c.e} ${c.label}<b class="${seaCls(v[i])}">${seaWord(v[i])}</b></span>`).join("")}</div>`
     : `<p class="b2-note" style="margin:0 0 6px">Pas de saison à lui.</p>`;
   const nowRows = forcesRows(k);
@@ -4229,7 +4264,7 @@ async function showPick(err){
 function drawPick(err){
   const main = wrapEl && wrapEl.querySelector("#b2-main"); if (!main) return;
   const me = Q.me(), taken = Object.fromEntries(pickData.map(p => [p.specialty, p])), mine = pickData.find(p => p.id === me.id);
-  const full = pickData.length >= 6;
+  const full = pickData.length >= 7;
   main.innerHTML = `<div class="b2-pick"><div class="b2-col b2-pad">
     <h1>Le Baron</h1>
     <p>Monte ta ferme, vends au village et à tes amis, deviens le plus riche du groupe. Une seule place par spécialité : choisis la tienne.</p>
@@ -4240,10 +4275,20 @@ function drawPick(err){
     <div style="margin-top:14px"><button class="b2-btn big" data-a="join" ${picking && !taken[picking] && !full && !mine ? "" : "disabled"}>${picking ? `Ouvrir mon ${esc(P[picking].place.toLowerCase())}` : "Choisis une spécialité"}</button></div>
   </div></div>`;
 }
+// un nouveau venu qui arrive en cours de partie : ferme déjà montée (≈ la moitié de la production du village), 800B pour démarrer, coup de pouce ×2
+function lateStart(s){
+  const f = s.farms[s.spec], lv = [45, 45, 42, 40, 40, 40, 40, 50];
+  f.parcels = lv.map(l => Object.assign(BX.newParcel(), { lvl: l, mgr: true }));
+  f.elev.lvl = 80; f.elev.mgr = true; f.cart.lvl = 80; f.cart.mgr = true; f.gates = [3, 6];
+  s.barn = 20; s.oven = { lvl: 4, slots: [] }; s.coins = 8e11; s.stock.bois = 5e6; s.catchup = true;
+  s.stats.produced = 1; s.stats.earned = 1e6;
+  return s;
+}
 async function join(){
   const btn = wrapEl.querySelector('[data-a="join"]'); if (!btn || btn.disabled) return; btn.disabled = true; btn.textContent = "Installation…";
   try{
     const me = Q.me(), s0 = BX.newState(picking, now());
+    if (pickData.length >= 6) lateStart(s0);
     const token = await rpc("baron2_join", { p_profile: String(me.id), p_name: String(me.name || "Ami").slice(0, 30), p_spec: picking, p_state: s0 });
     setToken(token); await start();
   }catch(e){ if (String(e.message || "").includes("spécialité prise")) picking = null; await showPick(errText(e)); }
@@ -4345,7 +4390,7 @@ function bakeSheet(k){
   sheetSum();
 }
 function farm2Sheet(){
-  const c = BX.costs.farm(S), free = BX.RAW.filter(k => !S.farms[k]);
+  const c = BX.costs.farm(S), free = BX.RAW.filter(k => !S.farms[k] && k !== "sucre");
   sheetCtx = null;
   sheet(`<h3>Nouvelle exploitation</h3><p>Une seule exploitation en plus, pour toute la partie : choisis bien. Elle produit 4× moins que ta spécialité et livre dans la même grange. Coût : ${price(c)}.</p>
     <div class="b2-specs">${free.map(k => `<button class="b2-spec" data-a="farm2-go" data-k="${k}"><div class="art">${plotArt(k, 0, 6)}</div><div class="tx"><b>${P[k].e} ${esc(P[k].label)}</b><small>${esc((W.players.find(p => p.specialty === k) || {}).name ? "Concurrence " + (W.players.find(p => p.specialty === k)).name : "Personne n'en produit")}</small></div></button>`).join("")}</div>`);
