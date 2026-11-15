@@ -97,6 +97,19 @@ ne sont volontairement pas écrits ici : les demander à Naim.
   Règle validée : la caravane et ses villes ne demandent/affichent JAMAIS un plat pas encore découvert (déjà le cas : `_baron2_cara_cat` et `exoOf` filtrent `found`) ; à garder pour les nouvelles villes.
   Prototype validé : artefact « Le Laboratoire · essai » (https://claude.ai/artifact/L29tUHTUapQuo97cwkfDib).
   Attribution plus tard : `update baron2_labo set owner_id = '<id>'`, `update baron2_cara set owner_id = '<id>'`.
+- À CODER (décidé le 16 nov. 2026, sur la branche `baron-labo`, rien en ligne) — le Réseau d'espions, dernier des 4 nouveaux lieux :
+  · Le maître espion vend des « dossiers » sur un joueur (argent exact, stock, paris en cours, lots de caravane, bateaux,
+    essais et recettes secrètes au Laboratoire). C'est LUI qui fixe le prix de chaque type de dossier ; il a 10 dossiers gratuits par jour.
+    La victime ne sait JAMAIS rien (pas de contre-espionnage, aucun message).
+  · Il voit toutes les commandes du village du prochain créneau 20 min avant tout le monde (et peut vendre l'info).
+  · Classement flou : partout, les fortunes des autres sont arrondies à 2 chiffres significatifs (352B → 350B) ; seule un dossier donne la vraie.
+  · Avec lui, changements du jeu pour que l'info ait de la valeur :
+    - Laboratoire en mélange libre (voir plus haut) ouvert à TOUS ; seul le chercheur a les indices (🟢/🎯 et indices des cartes),
+      les autres cherchent à l'aveugle. Brevet cher. Un dossier sur le chercheur montre ses essais et ses recettes non brevetées.
+    - Caravane qui sature : plus il y a de lots du même produit sur un voyage, moins les villes le paient.
+  · Refusés par Naim : appels d'offres secrets, nouvelles du village en avance, « grosses positions » (déjà visibles), contre-espionnage.
+  · Ensuite : attribution des 4 lieux (Destin, Laboratoire, Caravane, Espions) — chacun choisit, tirage au sort si deux veulent le même ;
+    le Casino reste au Baron ; mise en ligne de tout en même temps, seulement avec l'accord de Naim.
 - Coups de malice (Cartes Chance, Almanach, prête-nom, contrats) : codés sur la branche `baron-malice`, mis de côté par Naim.
 
 ## Tests
