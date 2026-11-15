@@ -789,6 +789,7 @@ function applyCredits(list){
     if (c.product === "cad_sale"){ const [who, lieu] = String(c.buyer).split("|"); toast(`📜 ${esc(who)} a racheté ${lieu === "Port" ? "ton Port" : "ton Aérodrome"} au prix que tu avais fixé : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); loadCad(); loadPort(); loadFly(); continue; }
     if (c.product === "cad_tax"){ toast(`📜 Impôt sur ${c.buyer === "Port" ? "ton Port" : "ton Aérodrome"} : −${COIN}${fmtN(-c.coins)}, versés au Baron`); continue; }
     if (c.product === "notice"){ toast(esc(c.buyer), "gold"); continue; }
+    if (c.product === "gift_farm"){ giftFarm2(); continue; }
     if (c.product === "tribut"){ toast(`👑 Le Tribut du matin : +${COIN}${fmtN(c.coins)} versés par les patrons de la ville`, "gold"); sound("coin"); continue; }
     if (c.product === "loan_in"){ toast(`🤝 ${esc(c.buyer)} t'a prêté ${COIN}${fmtN(c.coins)} ! Tu as ${c.qty} h pour rembourser (+10 %).`, "gold"); sound("coin"); loadLoans(); continue; }
     if (c.product === "loan_back"){ toast(`🤝 ${esc(c.buyer)} t'a remboursé : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); loadLoans(); continue; }
@@ -2139,7 +2140,7 @@ function farm2HTML(){
   const free = BX.RAW.filter(k => !S.farms[k] && k !== "sucre"); if (!free.length) return "";
   const c = BX.costs.farm(S);
   return `<div style="padding:0 10px 14px"><div class="b2-locked" style="background:#3B2414"><span class="palier">Concurrence</span><h3>Ouvrir une autre exploitation</h3>
-    <p>Une seule possible. Elle produit 4× moins que ta spécialité, mais assez pour concurrencer un voisin.</p><button class="b2-btn gold" data-a="farm2" data-cc="${c.coins}" data-cw="${c.wood}">Choisir ${price(c)}</button></div></div>`;
+    <p>Une seule possible. Elle produit 4× moins que ta spécialité, mais assez pour concurrencer un voisin.</p>${S.giftFarm ? `<button class="b2-btn gold" data-a="farm2">Choisir · 🎁 Offerte</button>` : `<button class="b2-btn gold" data-a="farm2" data-cc="${c.coins}" data-cw="${c.wood}">Choisir ${price(c)}</button>`}</div></div>`;
 }
 function dockHTML(){
   const f = S.farms[S.cur], all = f.parcels.every(p => p.mgr) && f.elev.mgr && f.cart.mgr;
@@ -4389,10 +4390,24 @@ function bakeSheet(k){
     ${qtyBlock(max, max, "q")}<div class="b2-sum" data-sum></div><button class="b2-btn big" data-a="confirm" ${max < 1 ? "disabled" : ""}>🔥 Lancer la cuisson</button>`);
   sheetSum();
 }
+// cadeau du village : une 2e exploitation déjà montée (6 parcelles avec contremaîtres, monte-charge et charrette niv 60)
+function giftLevels(f){
+  const lv = [30, 30, 28, 26, 26, 30];
+  while (f.parcels.length < lv.length) f.parcels.push(BX.newParcel());
+  f.parcels.forEach((p, i) => { if (i < lv.length && p.lvl < lv[i]) p.lvl = lv[i]; p.mgr = true; });
+  f.elev.lvl = Math.max(f.elev.lvl, 60); f.cart.lvl = Math.max(f.cart.lvl, 60); f.elev.mgr = f.cart.mgr = true;
+  f.gates = Array.from(new Set([...(f.gates || []), 3]));
+}
+function giftFarm2(){
+  const extra = Object.keys(S.farms).find(k => k !== S.spec);
+  if (extra){ giftLevels(S.farms[extra]); toast(`🎁 Le village améliore ta 2e exploitation (${P[extra].label.toLowerCase()}) : 6 parcelles et contremaîtres partout !`, "gold"); }
+  else { S.giftFarm = true; toast("🎁 Le village t'offre une 2e exploitation déjà montée ! Choisis-la en bas de ta ferme.", "gold"); }
+  dirty = true; save(true);
+}
 function farm2Sheet(){
-  const c = BX.costs.farm(S), free = BX.RAW.filter(k => !S.farms[k] && k !== "sucre");
+  const c = S.giftFarm ? { coins: 0, wood: 0 } : BX.costs.farm(S), free = BX.RAW.filter(k => !S.farms[k] && k !== "sucre");
   sheetCtx = null;
-  sheet(`<h3>Nouvelle exploitation</h3><p>Une seule exploitation en plus, pour toute la partie : choisis bien. Elle produit 4× moins que ta spécialité et livre dans la même grange. Coût : ${price(c)}.</p>
+  sheet(`<h3>Nouvelle exploitation</h3><p>Une seule exploitation en plus, pour toute la partie : choisis bien. Elle produit 4× moins que ta spécialité et livre dans la même grange. ${S.giftFarm ? "<b>🎁 Offerte par le village, déjà montée.</b>" : `Coût : ${price(c)}.`}</p>
     <div class="b2-specs">${free.map(k => `<button class="b2-spec" data-a="farm2-go" data-k="${k}"><div class="art">${plotArt(k, 0, 6)}</div><div class="tx"><b>${P[k].e} ${esc(P[k].label)}</b><small>${esc((W.players.find(p => p.specialty === k) || {}).name ? "Concurrence " + (W.players.find(p => p.specialty === k)).name : "Personne n'en produit")}</small></div></button>`).join("")}</div>`);
 }
 
@@ -4646,8 +4661,8 @@ function onClick(e){
     case "up-oven": { const c = BX.costs.oven(S); if (!paid(c, b)) return; S.oven.lvl++; sound("done"); draw(); toast(S.oven.lvl === 1 ? "🔥 Le four est construit" : `Four niveau ${S.oven.lvl}`); return; }
     case "farm2": farm2Sheet(); return;
     case "farm2-go": {
-      const k = b.dataset.k, c = BX.costs.farm(S); if (S.farms[k] || !paid(c, b)) return;
-      S.farms[k] = BX.newFarm(); S.cur = k; closeSheet(); sound("done"); draw(); toast(`${P[k].e} Nouvelle exploitation : ${P[k].place.toLowerCase()}`); save(true); return;
+      const k = b.dataset.k, gift = !!S.giftFarm, c = BX.costs.farm(S); if (S.farms[k] || (!gift && !paid(c, b))) return;
+      S.farms[k] = BX.newFarm(); if (gift){ giftLevels(S.farms[k]); delete S.giftFarm; } S.cur = k; closeSheet(); sound("done"); draw(); toast(`${P[k].e} Nouvelle exploitation : ${P[k].place.toLowerCase()}`); save(true); return;
     }
     case "prod": prodSheet(b.dataset.k); return;
     case "sell": sellSheet(b.dataset.k); return;
