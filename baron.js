@@ -153,12 +153,28 @@ function fixFarm(f){
 }
 // bonus des outils en ce moment (uniquement sur la ferme principale)
 // + le coup de pouce du nouveau venu : ×2 partout sur sa spécialité tant qu'il est sous la fortune moyenne des autres
+// + le ciel du Destin : gel (×0,5), rayon de soleil (×2) sur un joueur, pluie bienfaitrice (×1,5) sur tout le village
 function tmOf(s, key, now){
-  const cu = s && s.catchup && key === s.spec ? 2 : 1;
+  const cu = (s && s.catchup && key === s.spec ? 2 : 1) * wxMul(now);
   if (!s || key !== s.spec || !s.tools) return { p:cu, e:cu, c:cu };
   const m = k => { const t = s.tools[k]; return t && t.until > now && TQ[t.q] ? TQ[t.q].mul : 1; };
   return { p: m("parcel") * cu, e: m("elev") * cu, c: m("cart") * cu };
 }
+/* ---------- Le ciel du Destin (15 nov. 2026) : effets venus du serveur ---------- */
+const WX = { fx: [], shifts: [], me: null };
+const WX_MUL = { gel:.5, soleil:2, pluie:1.5 };
+function setWeather(d, me){ WX.fx = (d && d.fx) || []; WX.shifts = (d && d.shifts) || []; WX.me = me || null; }
+const wxOn = (x, t) => t >= +x.start && t < +x.end;
+const wxMine = x => !x.target || x.target === WX.me;
+function wxMul(t){
+  if (!t || !WX.fx.length) return 1;
+  let m = 1; for (const x of WX.fx) if (WX_MUL[x.kind] && wxOn(x, t) && wxMine(x)) m *= WX_MUL[x.kind];
+  return m;
+}
+// les effets en cours qui me concernent (gel, soleil, brouillard sur moi ; pluie, tempête, mer d'huile pour tous)
+const wxActive = t => WX.fx.filter(x => wxOn(x, t) && wxMine(x));
+const wxFog = t => WX.fx.some(x => x.kind === "brouillard" && wxOn(x, t) && wxMine(x));
+const seasonShift = t => { let a = 0; for (const [at, ms] of WX.shifts) if (+at <= t) a += +ms; return a; };
 const TM1 = { p:1, e:1, c:1 };
 const stockUnits = s => ALL.reduce((a, k) => a + (s.stock[k] || 0), 0);
 const barnCap = s => BAL.barnCap(s.barn);
@@ -473,7 +489,8 @@ const SEASONS = [{ id:"printemps", label:"Printemps", e:"🌸" }, { id:"ete", la
 const SEASON_MS = 90 * MIN;
 // effet de chaque saison sur le prix (de -2 : abondant, pas cher, à +2 : recherché, cher)
 const SEASONV = { ble:[1, -2, 0, 1], oeufs:[-2, 0, 1, 1], lait:[-1, 1, -1, 1], fruits:[1, -1, -2, 2], miel:[1, -2, 0, 1], bois:[-1, -2, 2, 1], sucre:[-1, 1, -2, 2] };
-function seasonAt(t){ const n = Math.floor(t / SEASON_MS); return { i: ((n % 4) + 4) % 4, left: (n + 1) * SEASON_MS - t, next: (((n + 1) % 4) + 4) % 4 }; }
+// les « saisons pressées » du Destin font sauter le calendrier à partir du moment du vœu (le passé ne bouge pas)
+function seasonAt(t){ const u = t + seasonShift(t), n = Math.floor(u / SEASON_MS); return { i: ((n % 4) + 4) % 4, left: (n + 1) * SEASON_MS - u, next: (((n + 1) % 4) + 4) % 4 }; }
 function seasonLog(k, t){
   const v = SEASONV[k]; if (!v) return 0;
   const s = seasonAt(t), blend = 20 * MIN, f = s.left < blend ? 1 - s.left / blend : 0;   // les 20 dernières minutes, on glisse vers la suivante
@@ -656,6 +673,7 @@ return { SUB, SUBOF, AGED, AGEDOF, TQ, TOOLK, tmOf, toolName, toolIcon, toolReci
   RAW, CRAFT, ALL, P, BAL, gateOf, gateState, newParcel, fixFarm, quaiCap, pendTotal, elevRate, cartRate, startParcel, startElev, startCart, CHARS, MILES, isPalier, newState, newFarm, step, catchUp, farmRates, effRate, prodValue,
   stockUnits, barnCap, barnFree, costs, canPay, pay, bulk, nextParcelCost, nice, ovenTick, ovenBatch, ovenDur, canBake,
   ensureOrders, genOrders, deliver, bigOf, fullBonus, reserveLeft, reservePrice, fortune, unlocked, bottleneck, farmMul, pRate, vMul, vPrice, vMyPrice, vValue, vSell,
+  setWeather, wxMul, wxActive, wxFog,
   setMarket, MK, SEASONS, SEASONV, seasonAt, newsOf, bubbleAt, LINKS, depth, vAsk, vBuyCost, vBuyMax, pushLocal, SPREAD, BET, betCap, betValue, betLimit, openBet, closeBet, checkBets };
 })();
 
@@ -789,6 +807,11 @@ function applyCredits(list){
     if (c.product === "cad_sale"){ const [who, lieu] = String(c.buyer).split("|"); toast(`📜 ${esc(who)} a racheté ${lieu === "Port" ? "ton Port" : "ton Aérodrome"} au prix que tu avais fixé : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); loadCad(); loadPort(); loadFly(); continue; }
     if (c.product === "cad_tax"){ toast(`📜 Impôt sur ${c.buyer === "Port" ? "ton Port" : "ton Aérodrome"} : −${COIN}${fmtN(-c.coins)}, versés au Baron`); continue; }
     if (c.product === "notice"){ toast(esc(c.buyer), "gold"); continue; }
+    if (c.product === "destin_pay") continue;
+    if (c.product === "destin_back"){ toast(+c.qty === 2 ? `✨ Le Destin a refusé ton vœu (${dsW(c.buyer).label}) : +${COIN}${fmtN(c.coins)} remboursés` : +c.qty === 1 ? `✨ Vœu retiré : +${COIN}${fmtN(c.coins)} remboursés` : `✨ Le Destin n'a pas répondu à ton vœu : +${COIN}${fmtN(c.coins)} remboursés`); loadDestin(); continue; }
+    if (c.product === "destin_gain"){ const [k, who] = String(c.buyer).split("|"); toast(`✨ Vœu de ${esc(who)} exaucé (${dsW(k).e} ${dsW(k).label}) : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); continue; }
+    if (c.product === "destin_ok"){ const [k, who] = String(c.buyer).split("|"); toast(`✨ Le Destin a exaucé ton vœu : ${dsW(k).e} ${dsW(k).label}${who ? ` sur ${esc(who)}` : ""} !`, "gold"); sound("up"); loadDestin(); continue; }
+    if (c.product === "destin_hit"){ const [k, who] = String(c.buyer).split("|"), w = dsW(k); toast(`${w.e} ${esc(who)} a fait un vœu au Destin : ${w.label} sur toi ! ${w.txt}`, k === "soleil" ? "gold" : "err"); buzz([40, 30, 40]); loadDestin(); continue; }
     if (c.product === "gift_farm"){ giftFarm2(); continue; }
     if (c.product === "tribut"){ toast(`👑 Le Tribut du matin : +${COIN}${fmtN(c.coins)} versés par les patrons de la ville`, "gold"); sound("coin"); continue; }
     if (c.product === "loan_in"){ toast(`🤝 ${esc(c.buyer)} t'a prêté ${COIN}${fmtN(c.coins)} ! Tu as ${c.qty} h pour rembourser (+10 %).`, "gold"); sound("coin"); loadLoans(); continue; }
@@ -879,7 +902,7 @@ async function loadWorld(force){
     const r = await rpc("baron2_world", {});
     BX.setMarket({ press: r.press || {}, med: r.med });
     W = { res: r.reserve || null, players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
-    await loadOrders(true); await loadEtb(); loadCasino(); loadPort(); loadLotto(); loadFly(); loadLoans(); loadCad();
+    await loadOrders(true); await loadEtb(); loadCasino(); loadPort(); loadLotto(); loadFly(); loadLoans(); loadCad(); loadDestin();
     if (wrapEl && (view === "market" || view === "village" || view === "atelier") && !gestOpen && !sheetOpen) draw();
   }catch(e){}
 }
@@ -1844,6 +1867,8 @@ function loop(){
       if (avg > 0 && BX.fortune(S) >= avg){ delete S.catchup; dirty = true; toast("🚀 Tu as rattrapé la moyenne du village : fin du coup de pouce. À toi de jouer !", "gold"); draw(); }
     }
     if (n % 40 === 24) loadLoans();
+    if (n % 40 === 16 || (n % 12 === 4 && view === "casino" && CZ.game === "destin")) loadDestin();
+    if (n % 4 === 1) dsTick();
     if (n % 40 === 32 && (view === "port" || view === "casino")) loadCad().then(() => { if ((view === "port" || (view === "casino" && CZ.game === "envol" && !FL.f)) && !sheetOpen) draw(); });
     if (view === "casino" && CZ.game === "bureau") lnTick();
     if (view === "chat" ? n % 12 === 6 : n % 60 === 6) chPoll();
@@ -2085,7 +2110,7 @@ function farmHTML(){
     </div></div>`;
   } else plots += `<div class="b2-locked"><span class="lock">${LOCK}</span>
     <button class="b2-btn gold" data-a="unlock" data-cc="${nc.coins}" data-cw="${nc.wood}">${price(nc)}</button></div>`;
-  return `<div class="b2-farm"><div class="b2-col">
+  return `<div class="b2-farm"><div class="b2-col">${wxBanner(["gel", "soleil", "pluie"]).replace('class="ds-band"', 'class="ds-band fl"')}
     <div class="b2-sky">
       <div class="sun"></div><div class="b2-cloud" style="top:92px;width:58px;animation-duration:70s;animation-delay:-20s"></div><div class="b2-cloud" style="top:120px;width:44px;animation-duration:95s;animation-delay:-60s"></div>
       <svg class="b2-hills" viewBox="0 0 400 70" preserveAspectRatio="none" aria-hidden="true"><path d="M0 50 Q60 10 130 38 T260 30 T400 34 V70 H0Z" fill="#A9D47D"/><path d="M0 60 Q90 34 180 54 T400 50 V70 H0Z" fill="#94C66A"/></svg>
@@ -2767,6 +2792,7 @@ function casksHTML(k){
       : free ? `<button class="b2-btn big" style="margin-top:10px" data-a="cellar" data-k="${src}" ${S.stock[src] < 1 ? "disabled" : ""}>Mettre ${P[src].e} à vieillir</button>` : `<p class="b2-note" style="color:var(--chalk2)">Ton cellier est plein.</p>`}`;
 }
 function marketHTML(){
+  if (BX.wxFog(now())) return fogHTML();
   if (!mkt.open || !mkt.k) return marketListHTML();
   const k = mkt.k, qv = quote(k);
   const offers = W.listings.filter(l => l.product === k).sort((a, b) => a.price - b.price || a.id - b.id);
@@ -2921,6 +2947,7 @@ function casinoHTML(){
   if (CZ.game === "lotto") return `<div class="cz cz-lt"><div class="b2-col b2-pad" style="padding-bottom:0">${back("🎟️ La Loterie")}</div>${lottoHTML()}</div>`;
   if (CZ.game === "envol") return `<div class="cz"><div class="b2-col b2-pad">${back("✈️ L'Aérodrome")}${envolHTML()}</div></div>`;
   if (CZ.game === "bureau") return `<div class="cz"><div class="b2-col b2-pad">${back("🤝 Le Bureau du Baron")}${bureauHTML()}</div></div>`;
+  if (CZ.game === "destin") return `<div class="cz ds"><div class="b2-col b2-pad">${back("✨ Le Destin")}${destinHTML()}</div></div>`;
   return `<div class="cz"><div class="b2-col b2-pad">
     ${back("🎡 La Roulette")}
     <div class="cz-hd"><span class="cz-st ${open ? "on" : ""}">${open ? "Roulette ouverte" : "Roulette fermée"}</span></div>
@@ -2941,7 +2968,10 @@ function czLobby(){
     ${card("bureau", "🤝", "Le Bureau du Baron", LN.info && LN.info.baron ? (lnIamBaron() ? (LN.info.asks.length ? `${LN.info.asks.length} demande${LN.info.asks.length > 1 ? "s" : ""} de prêt` : "Ton tribut et tes prêts") : (LN.info.mine && LN.info.mine.status === "live" ? `Tu dois ${COIN}${fmtN(+LN.info.mine.owed)}` : "Emprunter au Baron")) : "Prêts et tribut", lnIamBaron() && LN.info.asks.length ? `<span class="cz-st on">${LN.info.asks.length}</span>` : `<span class="go">›</span>`, "r")}
     ${card("roulette", "🎡", "La Roulette", bar ? (czIamBaron() ? "Tu tiens la banque" : "Banque : " + esc(bar.name)) : "Roulette européenne", `<span class="cz-st ${open ? "on" : ""}">${open ? "Ouverte" : "Fermée"}</span>`, "r")}
     ${card("envol", "✈️", "L'Aérodrome", F && F.owner ? `Patron : ${esc(F.owner.id === ME.id ? "toi" : F.owner.name)}${CAD.info && CAD.info.open && CAD.info.fly ? (CAD.info.fly.priced ? ` · 📜 ${COIN}${fmtN(+CAD.info.fly.price)}` : "") : ""}${fh ? `<span class="cz-mini">${fh}</span>` : ""}` : "Encaisse avant le crash", F && F.owner ? `<span class="cz-st ${F.open !== false ? "on" : ""}">${F.open !== false ? "Ouvert" : "Fermé"}</span>` : `<span class="go">›</span>`, "a")}
-    ${card("lotto", "🎟️", "La Loterie", L ? `Cagnotte ${COIN}${fmtN(+L.jackpot)} · tirage à ${ltHour(L.draw_at)}` : "Bientôt…", `<span class="go">›</span>`, "l")}
+    ${card("destin", "✨", "Le Destin", (() => { const D = DS.info, o = D && D.owner, n = D && D.asks ? D.asks.length : 0, sky = D ? (D.fx || []).filter(x => now() >= +x.start && now() < +x.end) : [];
+      return !D ? "La météo du village" : dsIamDestin() ? (n ? `${n} vœu${n > 1 ? "x" : ""} en attente` : "Tu tiens le ciel") : o ? `${esc(o.name)} tient le ciel${sky.length ? ` · ${sky.map(x => dsW(x.kind).e).join(" ")}` : ""}` : "Bientôt…"; })(),
+      dsIamDestin() && DS.info.asks.length ? `<span class="cz-st on">${DS.info.asks.length}</span>` : `<span class="go">›</span>`, "d")}
+    ${card("lotto", "🎟️", "La Loterie", L ?`Cagnotte ${COIN}${fmtN(+L.jackpot)} · tirage à ${ltHour(L.draw_at)}` : "Bientôt…", `<span class="go">›</span>`, "l")}
     <button class="cz-room a" data-a="tab" data-v="port"><span class="ic">⚓</span><span class="sp"><b>Le Port</b><small>${ptOwner() ? (ptMine() ? "Ton port" : "Capitaine : " + esc(ptOwner().name)) : "Vendre à l'étranger"}${CAD.info && CAD.info.open && CAD.info.port && CAD.info.port.owner ? (CAD.info.port.priced ? ` · 📜 ${COIN}${fmtN(+CAD.info.port.price)}` : "") : ""}</small></span><span class="cz-st ${PT.info && PT.info.open ? "on" : ""}">${PT.info && PT.info.open ? "Ouvert" : "Fermé"}</span></button>
   </div></div>`;
 }
@@ -3131,7 +3161,7 @@ function portHTML(){
   const log = info.log.length ? info.log.map(s => `<div class="pt-row"><span class="pt-ic">${s.storm ? "🌊" : "⚓"}</span><span class="sp">${esc(s.pid === ME.id ? "Toi" : s.name)} · ${fmtN(s.qty)} ${P[s.product] ? P[s.product].e : ""}<small>${fmtAgo(new Date(s.at).getTime())}</small></span><b class="${s.storm && !s.ins ? "dn" : "up"}">${s.storm ? (s.ins ? "Coulé · remboursé 🛡️" : "Coulé") : "+" + COIN + fmtN(s.value)}</b></div>`).join("") : `<p class="cz-empty">Aucun bateau n'est encore rentré.</p>`;
   return `<div class="pt"><div class="b2-col b2-pad">
     <div class="cz-hd"><span class="cz-st ${open ? "on" : ""}">${open ? "Ouvert" : "Fermé"}</span></div>
-    <h2 class="pt-ttl">Le Port</h2><div class="pt-cap">⚓ ${cap}</div>
+    <h2 class="pt-ttl">Le Port</h2><div class="pt-cap">⚓ ${cap}</div>${wxBanner(["tempete", "mer"])}
     ${info.prev && own && info.prev.id !== own.id && now() - new Date(info.since).getTime() < 864e5 ? `<div class="pt-news">Le port est passé de <b>${esc(info.prev.id === ME.id ? "toi" : info.prev.name)}</b> à <b>${esc(mine ? "toi" : own.name)}</b> ${fmtAgo(new Date(info.since).getTime())}.</div>` : ""}
     <div class="pt-sw">${ptScene()}</div>${stats}
     ${send}
@@ -3663,6 +3693,180 @@ const LN_STYLE = `
 .cz-row b small{display:block;font:700 11px var(--round);opacity:.7;text-align:right}
 `;
 try{ const lst = document.createElement("style"); lst.id = "ln-style"; lst.textContent = LN_STYLE; document.head.appendChild(lst); }catch(e){}
+/* =================== Le Destin (15 nov. 2026) ===================
+   Une force supérieure : il agit sur la météo et les tempêtes, jamais directement sur les cours.
+   Les joueurs achètent des vœux tout faits (payés tout de suite, rendus si refus ou sans réponse dans l'heure) ;
+   le Destin exauce ou refuse : 70 % pour lui, 30 % dans la cagnotte de la Loterie. 10 vœux exaucés par jour.
+   Un joueur n'est visé par un vœu néfaste qu'une fois par heure. Le Destin ne fait pas de vœux, mais subit son ciel. */
+const DS = { info:null, at:0, seenAsk:0, busy:false, sig:"" };
+const WISH = {
+  gel:        { e:"❄️", label:"Gel",               txt:"Sa ferme produit 2× moins pendant 5 min.",                   target:true,  bad:true },
+  soleil:     { e:"☀️", label:"Rayon de soleil",   txt:"Sa ferme produit 2× plus pendant 5 min. Pour toi ou un ami.", target:true,  bad:false },
+  brouillard: { e:"🌫️", label:"Brouillard",        txt:"Il ne voit plus les cours du marché pendant 5 min.",          target:true,  bad:true },
+  vent:       { e:"🌪️", label:"Coup de vent",      txt:"Ses bateaux en mer ont 2× plus de risque de tempête.",        target:true,  bad:true },
+  pluie:      { e:"🌧️", label:"Pluie bienfaitrice", txt:"Toutes les fermes produisent 1,5× plus pendant 20 min.",     target:false },
+  tempete:    { e:"🌊", label:"Grande tempête",    txt:"2× plus de tempêtes pour les bateaux qui partent, pendant 30 min.", target:false },
+  mer:        { e:"🌈", label:"Mer d'huile",       txt:"Aucune tempête pour les bateaux qui partent, pendant 30 min.", target:false },
+  saison:     { e:"⏩", label:"Saison pressée",    txt:"On passe tout de suite à la saison suivante.",               target:false }
+};
+const dsW = k => WISH[k] || { e:"✨", label:k, txt:"" };
+const dsOwner = () => DS.info && DS.info.owner ? DS.info.owner : null;
+const dsIamDestin = () => !!(dsOwner() && dsOwner().id === ME.id);
+async function loadDestin(){
+  try{
+    const r = await rpc("baron2_destin_get", { p_token: getToken() }); DS.info = r; DS.at = now();
+    BX.setWeather(r, ME.id);
+    const top = r.asks && r.asks.length ? Math.max(...r.asks.map(a => +a.id)) : 0;
+    if (top > DS.seenAsk){ if (DS.seenAsk){ const a = r.asks[r.asks.length - 1]; toast(`✨ ${esc(a.from)} fait un vœu : ${dsW(a.kind).e} ${dsW(a.kind).label}. Va sur La Place, au Destin.`, "gold"); } DS.seenAsk = top; }
+    if (view === "casino" && (CZ.game === "destin" || CZ.game === "lobby") && !sheetOpen && !CZ.spinning && !FL.f) draw();
+  }catch(e){}
+}
+// le ciel en ce moment, pour tout le monde (le vœu, sa cible, le temps qui reste)
+function dsSky(){
+  const t = now(), fx = ((DS.info && DS.info.fx) || []).filter(x => t >= +x.start && t < +x.end);
+  if (!fx.length) return `<p class="cz-empty">Ciel calme. Aucun vœu en cours.</p>`;
+  return fx.map(x => `<div class="cz-row"><span class="ds-ic">${dsW(x.kind).e}</span><span class="sp">${dsW(x.kind).label}${x.target ? ` sur ${esc(x.target === ME.id ? "toi" : x.tname)}` : ""}<small>vœu de ${esc(x.from)}</small></span><b data-ds-end="${x.end}">${fmtT(+x.end - t)}</b></div>`).join("");
+}
+function dsLog(){
+  const L = (DS.info && DS.info.log) || [];
+  if (!L.length) return "";
+  return `<div class="cz-feed"><h3>Derniers vœux</h3>${L.map(w => `<div class="cz-row"><span class="ds-ic">${dsW(w.kind).e}</span><span class="sp">${esc(w.from)} · ${dsW(w.kind).label}${w.tname ? ` sur ${esc(w.tname)}` : ""}<small>${fmtAgo(new Date(w.done_at).getTime())}</small></span><b class="${w.status === "done" ? "up" : "dn"}">${w.status === "done" ? "Exaucé" : "Refusé"}</b></div>`).join("")}</div>`;
+}
+function dsPriceOf(k){
+  const I = DS.info; if (!I) return 0;
+  if (!WISH[k].target) return +(I.village || {})[k] || 0;
+  const pr = (I.players || []).map(p => +(p.price || {})[k] || 0).filter(x => x > 0);
+  return pr.length ? Math.min(...pr) : 0;
+}
+function destinHTML(){
+  const I = DS.info;
+  if (!I) return `<p class="cz-empty">Les nuages se rassemblent…</p>`;
+  const own = dsOwner(), me = dsIamDestin(), full = +I.today >= +I.max;
+  const head = `<div class="ds-hd"><div class="ds-orb">✨</div><p>${own ? `Le Destin : <b>${esc(me ? "toi" : own.name)}</b>` : "Le Destin n'a pas encore de maître."}</p>
+    <div class="ds-cnt"><span>${+I.today} / ${+I.max}</span>vœux exaucés aujourd'hui</div></div>`;
+  const sky = `<div class="cz-feed"><h3>Le ciel en ce moment</h3>${dsSky()}</div>`;
+  const rule = `<p class="cz-note">Le vœu est payé tout de suite, et rendu si le Destin refuse ou ne répond pas dans l'heure. Vœu exaucé : 70 % pour le Destin, 30 % dans la cagnotte de la Loterie. Un joueur ne peut subir un vœu néfaste qu'une fois par heure. Le Destin ne fait pas de vœux, mais il subit son propre ciel.</p>`;
+  if (me){
+    const t = now();
+    const asks = I.asks.length ? I.asks.map(a => { const w = dsW(a.kind), safe = a.safe && new Date(a.safe).getTime() > t;
+      return `<div class="ds-ask"><div class="ln-who"><b>${esc(a.from)}</b> souhaite ${w.e} <b>${w.label}</b>${a.tname ? ` sur <b>${esc(a.target === ME.id ? "toi" : a.tname)}</b>` : " pour tout le village"}
+        <small>${w.txt} · tu gagnes ${COIN}${fmtN(Math.floor(+a.price * .7))}</small></div>
+        ${safe ? `<small class="ln-poor">${esc(a.tname)} est protégé encore ${fmtMin(new Date(a.safe).getTime() - t)} : tu ne peux que refuser.</small>` : ""}
+        <div class="ds-yn"><button class="b2-btn gold" data-a="ds-yes" data-id="${a.id}" data-y="1" ${DS.busy || full || safe ? "disabled" : ""}>Exaucer</button><button class="b2-btn ghost" data-a="ds-yes" data-id="${a.id}" data-y="0" ${DS.busy ? "disabled" : ""}>Refuser</button></div></div>`; }).join("")
+      : `<p class="cz-empty">Personne ne fait de vœu pour l'instant.</p>`;
+    return `${head}<div class="cz-bank"><h3>Tu es le Destin</h3>
+      <div class="cz-sum"><span>Gains sur 24 h</span><b class="up">+${COIN}${fmtN(+I.gains)}</b></div>
+      <p>Les joueurs paient leurs vœux. Tu choisis ceux que tu exauces${full ? ". Tu as exaucé tes 10 vœux du jour : reviens demain." : ", 10 par jour au maximum."}</p></div>
+      <div class="cz-feed"><h3>Vœux en attente</h3>${asks}</div>${sky}${dsLog()}${rule}`;
+  }
+  const m = I.mine;
+  let box = "";
+  if (m && m.status === "ask") box = `<div class="cz-bank"><h3>Vœu envoyé</h3><p>${dsW(m.kind).e} ${dsW(m.kind).label}${m.tname ? ` sur ${esc(m.tname)}` : ""}, payé ${COIN}${fmtN(+m.price)}. ${own ? esc(own.name) : "Le Destin"} a 1 h pour l'exaucer, sinon tu es remboursé.</p><button class="b2-btn ghost" data-a="ds-cancel" ${DS.busy ? "disabled" : ""}>Retirer mon vœu</button></div>`;
+  else if (m && m.status === "done") box = `<p class="ln-res up">✨ Ton dernier vœu a été exaucé.</p>`;
+  else if (m && m.status === "refused") box = `<p class="ln-res dn">Le Destin a refusé ton dernier vœu. Tu as été remboursé.</p>`;
+  const pending = m && m.status === "ask", off = !own || pending || full;
+  const why = !own ? "Le Destin n'a pas encore de maître : les vœux ouvriront bientôt." : full ? "Le Destin a exaucé ses 10 vœux du jour. Reviens demain." : pending ? "Un vœu à la fois." : "";
+  const list = keys => keys.map(k => { const w = WISH[k], p = dsPriceOf(k);
+    return `<button class="ds-w" data-a="ds-pick" data-k="${k}" ${off ? "disabled" : ""}><span class="ds-ic">${w.e}</span><span class="sp"><b>${w.label}</b><small>${w.txt}</small></span><span class="pr">${w.target ? "dès " : ""}${COIN}${fmtN(p)}</span></button>`; }).join("");
+  return `${head}${box}${sky}
+    <div class="cz-feed"><h3>Sur un joueur</h3>${why ? `<p class="ln-tip">${why}</p>` : ""}${list(["gel", "soleil", "brouillard", "vent"])}</div>
+    <div class="cz-feed"><h3>Pour tout le village</h3>${list(["pluie", "tempete", "mer", "saison"])}</div>${dsLog()}${rule}`;
+}
+// choisir la cible (vœux sur un joueur) ou confirmer (vœux pour le village)
+function dsPick(k){
+  const w = WISH[k], I = DS.info; if (!w || !I) return;
+  const t = now();
+  if (!w.target){
+    const p = +(I.village || {})[k] || 0;
+    sheet(`<div class="ds-big">${w.e}</div><h3 style="text-align:center">${w.label}</h3><p style="text-align:center">${w.txt}</p>
+      <div class="b2-sum"><span>Prix du vœu</span><span>${COIN}${fmtN(p)}</span></div>
+      <button class="b2-btn gold big" data-a="ds-go" data-k="${k}" ${S.coins >= p ? "" : "disabled"}>${S.coins >= p ? "Faire ce vœu" : "Pas assez de pièces"}</button>`);
+    return;
+  }
+  const rows = (I.players || []).filter(p => !(w.bad && p.id === ME.id)).map(p => {
+    const pr = +(p.price || {})[k] || 0, safe = w.bad && p.safe && new Date(p.safe).getTime() > t, ok = !safe && S.coins >= pr;
+    return `<button class="ds-tg" data-a="ds-go" data-k="${k}" data-t="${esc(p.id)}" ${ok ? "" : "disabled"}><span class="sp"><b>${esc(p.id === ME.id ? "Toi" : p.name)}</b>${safe ? `<small>Protégé encore ${fmtMin(new Date(p.safe).getTime() - t)}</small>` : p.id === (dsOwner() || {}).id ? `<small>Le Destin subit aussi son ciel</small>` : ""}</span><span class="pr">${COIN}${fmtN(pr)}</span></button>`;
+  }).join("");
+  sheet(`<div class="ds-big">${w.e}</div><h3 style="text-align:center">${w.label}</h3><p style="text-align:center">${w.txt}</p>
+    <p class="b2-note">Le prix dépend de la fortune du joueur visé.</p><div class="ds-tgs">${rows}</div>`);
+}
+async function dsGo(k, target){
+  if (DS.busy) return; DS.busy = true; closeSheet();
+  try{
+    const r = await queue(() => rpc("baron2_destin_wish", { p_token: getToken(), p_state: S, p_kind: k, p_target: target || null }));
+    DS.info = r; BX.setWeather(r, ME.id); if (r.credits) applyCredits(r.credits);
+    sound("up"); toast(`✨ Vœu envoyé au Destin : ${dsW(k).e} ${dsW(k).label}. Payé ${COIN}${fmtN(+(r.mine || {}).price || 0)}.`);
+  }catch(e){
+    const m = String(e && e.message || "");
+    toast(m.includes("protégé") ? "Ce joueur vient de subir un vœu : il est protégé pendant 1 h." : m.includes("déjà un vœu") ? "Tu as déjà un vœu en attente." : m.includes("plus de vœux") ? "Le Destin a exaucé ses 10 vœux du jour."
+      : m.includes("tu es le destin") ? "Tu es le Destin : tu ne fais pas de vœux." : m.includes("pas de destin") ? "Le Destin n'a pas encore de maître." : m.includes("pas sur toi") ? "Pas ce vœu-là sur toi-même." : m.includes("pas assez") ? "Pas assez de pièces pour ce vœu." : errText(e), "err");
+    loadDestin();
+  }
+  DS.busy = false; draw();
+}
+async function dsCancel(){
+  if (DS.busy) return; DS.busy = true;
+  try{ const r = await queue(() => rpc("baron2_destin_cancel", { p_token: getToken(), p_state: S })); DS.info = r; if (r.credits) applyCredits(r.credits); }
+  catch(e){ toast(errText(e), "err"); }
+  DS.busy = false; draw();
+}
+async function dsYes(id, yes){
+  const a = DS.info && DS.info.asks.find(x => String(x.id) === String(id)); if (!a || DS.busy) return;
+  DS.busy = true; draw();
+  try{
+    const r = await queue(() => rpc("baron2_destin_answer", { p_token: getToken(), p_state: S, p_id: +id, p_yes: !!yes }));
+    DS.info = r; BX.setWeather(r, ME.id); if (r.credits) applyCredits(r.credits);
+    if (yes){ sound("up"); buzz([30, 30, 60]); } else sound("tap");
+    if (!yes) toast(`Tu as refusé le vœu de ${esc(a.from)}. Il est remboursé.`);
+  }catch(e){
+    const m = String(e && e.message || "");
+    toast(m.includes("expiré") ? "Ce vœu n'est plus valable." : m.includes("protégé") ? "Ce joueur est encore protégé : tu ne peux que refuser." : m.includes("plus de vœux") ? "Tu as déjà exaucé 10 vœux aujourd'hui." : m.includes("pas le destin") ? "Tu n'es plus le Destin." : errText(e), "err");
+    loadDestin();
+  }
+  DS.busy = false; draw();
+}
+function dsTick(){
+  if (!wrapEl) return;
+  wrapEl.querySelectorAll("[data-ds-end]").forEach(el => { const l = +el.dataset.dsEnd - now(); el.textContent = l > 0 ? fmtT(l) : "fini"; });
+  // le ciel a changé (un vœu commence ou se termine) : on redessine l'écran concerné
+  const sig = BX.wxActive(now()).map(x => x.id).join(",");
+  if (sig !== DS.sig){ DS.sig = sig; if ((view === "farm" || view === "market" || view === "port" || (view === "casino" && CZ.game === "destin")) && !sheetOpen && !gestOpen) draw(); }
+}
+// un petit bandeau quand le ciel du Destin touche l'écran (ferme, port)
+function wxBanner(kinds){
+  const t = now(), on = BX.wxActive(t).filter(x => kinds.includes(x.kind));
+  if (!on.length) return "";
+  return `<div class="ds-band">${on.map(x => `<span>${dsW(x.kind).e} <b>${dsW(x.kind).label}</b> · <i data-ds-end="${x.end}">${fmtT(+x.end - t)}</i></span>`).join("")}</div>`;
+}
+function fogHTML(){
+  const x = BX.wxActive(now()).find(y => y.kind === "brouillard");
+  return `<div class="b2-board ds-fog"><div class="b2-col b2-pad"><div class="ds-big">🌫️</div><h2>Brouillard sur le marché</h2>
+    <p>${x ? `${esc(x.from)} a demandé au Destin de te cacher les cours.` : "Le Destin te cache les cours."} Ils reviennent dans <b data-ds-end="${x ? x.end : 0}">${x ? fmtT(+x.end - now()) : ""}</b>.</p></div></div>`;
+}
+const DS_STYLE = `
+.cz.ds{background:radial-gradient(120% 70% at 50% 0,#4B3A8C,#231A52 55%,#120C2E)}
+.cz-room.d{background:linear-gradient(135deg,#5B44A8,#221650)!important;border:2px solid #C9B6FF!important}
+.ds-hd{text-align:center;margin:4px 0 14px}.ds-hd p{font:700 15px var(--round);margin:6px 0 10px}
+.ds-orb{font-size:46px;line-height:1;filter:drop-shadow(0 0 14px rgba(201,182,255,.8));animation:ds-glow 3s ease-in-out infinite}
+@keyframes ds-glow{50%{transform:translateY(-4px);filter:drop-shadow(0 0 22px rgba(255,230,160,.9))}}
+.ds-cnt{display:inline-flex;align-items:baseline;gap:6px;background:rgba(0,0,0,.25);padding:6px 14px;border-radius:99px;font:700 12px var(--round);opacity:.95}.ds-cnt span{font:900 16px var(--round);color:#FFE6B8}
+.ds-ic{font-size:24px;width:30px;text-align:center}
+.ds-w{width:100%;display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid rgba(255,255,255,.08);text-align:left;color:#F5ECD6!important}
+.ds-w:disabled{opacity:.45}.ds-w .sp{flex:1;min-width:0}.ds-w b{display:block;font:800 15px var(--round)}.ds-w small{display:block;font:600 12px/1.3 var(--round);opacity:.7}
+.ds-w .pr{font:800 13px var(--round);white-space:nowrap;color:#FFE6B8}
+.ds-ask{padding:10px 0;border-top:1px solid rgba(255,255,255,.08)}
+.ds-yn{display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-top:8px}
+.ds-big{font-size:52px;line-height:1;text-align:center;margin:2px 0 6px}
+.ds-tgs{display:flex;flex-direction:column;gap:8px}
+.ds-tg{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:var(--paper2)!important;text-align:left}
+.ds-tg:disabled{opacity:.45}.ds-tg .sp{flex:1}.ds-tg b{display:block;font:800 15px var(--round)}.ds-tg small{display:block;font:600 12px var(--round);color:var(--ink2)}.ds-tg .pr{font:800 14px var(--round)}
+.ds-band{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin:6px 12px 8px}
+.ds-band.fl{position:absolute;left:0;right:0;top:92px;z-index:6;pointer-events:none}
+.ds-band span{background:rgba(35,26,82,.88);color:#F5ECD6;font:700 12px var(--round);padding:5px 11px;border-radius:99px;box-shadow:0 2px 6px rgba(0,0,0,.2)}.ds-band i{font-style:normal;opacity:.8}
+.ds-fog{min-height:100%;text-align:center;background:linear-gradient(#9AA3AE,#C9CED4)!important;color:#2E3440}
+.ds-fog h2{font:400 32px var(--disp);margin:8px 0}.ds-fog p{font:700 15px/1.45 var(--round)}
+`;
+try{ const dst = document.createElement("style"); dst.id = "ds-style"; dst.textContent = DS_STYLE; document.head.appendChild(dst); }catch(e){}
 /* =================== Les Réglages des lieux (14 nov. 2026) ===================
    Le propriétaire règle son lieu : chaque choix a un pour et un contre, et tout le monde voit les réglages.
    Un changement par lieu toutes les 10 minutes. */
@@ -4519,7 +4723,7 @@ function onClick(e){
     }
     case "cz-spin": czSpin(); return;
     case "cz-game": if (FL.f) return; CZ.game = b.dataset.g; CZ.res = null; LT.pick = []; sound("tap"); wrapEl.querySelector("#b2-main").scrollTop = 0; draw();
-      if (CZ.game === "envol") loadFly(); if (CZ.game === "lotto") loadLotto(); if (CZ.game === "roulette" || CZ.game === "lobby") loadCasino(); if (CZ.game === "bureau" || CZ.game === "lobby") loadLoans(); return;
+      if (CZ.game === "envol") loadFly(); if (CZ.game === "lotto") loadLotto(); if (CZ.game === "roulette" || CZ.game === "lobby") loadCasino(); if (CZ.game === "bureau" || CZ.game === "lobby") loadLoans(); if (CZ.game === "destin" || CZ.game === "lobby") loadDestin(); return;
     case "fl-chip": FL.chip = +b.dataset.i; FL.res = null; sound("tap"); draw(); return;
     case "fl-start": flStart(); return;
     case "fl-cash": flCash(); return;
@@ -4529,6 +4733,10 @@ function onClick(e){
     case "pt-toggle": ptToggle(); return;
     case "fl-toggle": flToggle(); return;
     case "ln-pick": LN.pick = +b.dataset.i; sound("tap"); draw(); return;
+    case "ds-pick": sound("tap"); dsPick(b.dataset.k); return;
+    case "ds-go": dsGo(b.dataset.k, b.dataset.t); return;
+    case "ds-cancel": dsCancel(); return;
+    case "ds-yes": dsYes(b.dataset.id, b.dataset.y === "1"); return;
     case "ln-ask": lnAsk(); return;
     case "ln-cancel": lnCancel(); return;
     case "ln-yes": lnYes(b.dataset.id, +b.dataset.h); return;
