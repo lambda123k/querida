@@ -77,11 +77,17 @@ ne sont volontairement pas écrits ici : les demander à Naim.
 - Commandes en course (11 nov.) : les mêmes commandes pour tout le village, générées par le serveur
   (`baron2_orders`, table `baron2_orders`, `supabase/baron2_04_commandes.sql`) ; chacun livre (payé au prix de base),
   la prime va au premier qui termine (`baron2_order_win`). Plus de carton plein. Garde-fou `ord2` contre les anciennes versions.
-- Le Destin (15 nov., branche `baron-destin`, PAS en ligne) : lieu « sacré » sur La Place, vœux tout faits payés par les joueurs
+- Nouveaux lieux (15 nov., branche `baron-lieux`, PAS en ligne, à mettre en ligne ensemble, les amis choisiront leur lieu) :
+- Le Destin : lieu « sacré » sur La Place, vœux tout faits payés par les joueurs
   (gel, rayon de soleil, brouillard, coup de vent ; pluie, grande tempête, mer d'huile, saison pressée), exaucés ou refusés par le Destin
   (70 % pour lui, 30 % dans la cagnotte de la Loterie, 10 par jour, protection 1 h contre les vœux néfastes). Serveur :
   `supabase/baron2_27_destin.sql` (à lancer à la mise en ligne ; le lieu n'a pas de maître tant que `baron2_destin.owner_id` est vide).
   Moteur : `BX.setWeather` (effets dans `tmOf`, saisons décalées dans `seasonAt`). À mettre en ligne avec les autres nouveaux lieux.
+- Le Laboratoire et le Voyageur (même branche) : 10 plats exotiques cachés côté serveur (1 recette + 1 luxe + 1 sous-produit,
+  table `baron2_exo`) ; le chercheur tente des mélanges (ingrédients détruits + prix de l'essai, indice = nombre de bons ingrédients),
+  dépose un brevet payant, le plat devient une recette du four (enregistrée dans `P` par `exoReg`, stock dans `S.stock`, hors marché et hors fortune).
+  Le Voyageur (3 caravanes, 8 h, sans tempête) achète recettes et luxe ×1,8 le cours, exotiques ×3,5 la valeur des ingrédients sans limite ;
+  10 % au voyageur, 5 % au brevet. Serveur : `supabase/baron2_28_labo_voyageur.sql` (redéfinit aussi `_baron2_credits` et `_baron2_charges`).
 - Coups de malice (Cartes Chance, Almanach, prête-nom, contrats) : codés sur la branche `baron-malice`, mis de côté par Naim.
 
 ## Tests

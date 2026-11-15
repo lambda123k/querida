@@ -386,7 +386,7 @@ function ovenTick(s, now){
   const o = s.oven; if (!o.lvl) return [];
   const done = [];
   o.slots.forEach((sl, i) => {
-    if (sl && now >= sl.t0 + sl.dur){ s.stock[sl.rec] += sl.qty; s.stats.baked += sl.qty; done.push(sl); o.slots[i] = null; }
+    if (sl && now >= sl.t0 + sl.dur){ s.stock[sl.rec] = (s.stock[sl.rec] || 0) + sl.qty; s.stats.baked += sl.qty; done.push(sl); o.slots[i] = null; }
   });
   return done;
 }
@@ -803,11 +803,15 @@ function applyCredits(list){
     if (c.product === "fly_fee" || c.product === "fly_bank"){ portFees.push(Object.assign({}, c, { fl: 1 })); continue; }
     if (c.product === "egg_dup") continue;
     if (c.product === "egg_fee"){ portFees.push(Object.assign({}, c, { eg: 1 })); continue; }
-    if (c.product === "charge"){ toast(`🧾 Charges ${c.buyer === "Casino" ? "du casino" : c.buyer === "Port" ? "du port" : c.buyer === "Loterie" ? "de la loterie" : c.buyer === "Œufs" ? "du Maître des œufs" : "de l'aérodrome"} : −${COIN}${fmtN(-c.coins)}, versées au Baron (le Tribut)`); continue; }
+    if (c.product === "charge"){ toast(`🧾 Charges ${c.buyer === "Casino" ? "du casino" : c.buyer === "Port" ? "du port" : c.buyer === "Loterie" ? "de la loterie" : c.buyer === "Œufs" ? "du Maître des œufs" : c.buyer === "Voyageur" ? "du voyageur" : c.buyer === "Laboratoire" ? "du laboratoire" : "de l'aérodrome"} : −${COIN}${fmtN(-c.coins)}, versées au Baron (le Tribut)`); continue; }
     if (c.product === "cad_sale"){ const [who, lieu] = String(c.buyer).split("|"); toast(`📜 ${esc(who)} a racheté ${lieu === "Port" ? "ton Port" : "ton Aérodrome"} au prix que tu avais fixé : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); loadCad(); loadPort(); loadFly(); continue; }
     if (c.product === "cad_tax"){ toast(`📜 Impôt sur ${c.buyer === "Port" ? "ton Port" : "ton Aérodrome"} : −${COIN}${fmtN(-c.coins)}, versés au Baron`); continue; }
     if (c.product === "notice"){ toast(esc(c.buyer), "gold"); continue; }
-    if (c.product === "destin_pay") continue;
+    if (c.product === "destin_pay" || c.product === "lab_try" || c.product === "lab_patent") continue;
+    if (c.product === "lab_new"){ const [e, lbl, who] = String(c.buyer).split("|"); toast(`📜 ${esc(who)} a breveté un plat exotique : ${e} ${esc(lbl)} ! Il se cuit au four et seul le Voyageur l'achète.`, "gold"); loadLab(); continue; }
+    if (c.product === "lab_roy"){ const [k, who] = String(c.buyer).split("|"); toast(`📜 Brevet : ${esc(who)} a vendu ${fmtN(c.qty)} ${P[k] ? P[k].e : ""} au Voyageur, +${COIN}${fmtN(c.coins)} pour toi`, "gold"); S.stats.earned += +c.coins || 0; continue; }
+    if (c.product === "voy_back"){ S.stats.earned += +c.coins || 0; toast(`🐪 Ta caravane est rentrée : ${fmtN(c.qty)} ${P[c.buyer] ? P[c.buyer].e : ""} vendus +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); loadVoy(); continue; }
+    if (c.product === "voy_fee"){ toast(`🧭 Commission du voyageur (${esc(c.buyer)}) : +${COIN}${fmtN(c.coins)}`, "gold"); continue; }
     if (c.product === "destin_back"){ toast(+c.qty === 2 ? `✨ Le Destin a refusé ton vœu (${dsW(c.buyer).label}) : +${COIN}${fmtN(c.coins)} remboursés` : +c.qty === 1 ? `✨ Vœu retiré : +${COIN}${fmtN(c.coins)} remboursés` : `✨ Le Destin n'a pas répondu à ton vœu : +${COIN}${fmtN(c.coins)} remboursés`); loadDestin(); continue; }
     if (c.product === "destin_gain"){ const [k, who] = String(c.buyer).split("|"); toast(`✨ Vœu de ${esc(who)} exaucé (${dsW(k).e} ${dsW(k).label}) : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); continue; }
     if (c.product === "destin_ok"){ const [k, who] = String(c.buyer).split("|"); toast(`✨ Le Destin a exaucé ton vœu : ${dsW(k).e} ${dsW(k).label}${who ? ` sur ${esc(who)}` : ""} !`, "gold"); sound("up"); loadDestin(); continue; }
@@ -902,7 +906,7 @@ async function loadWorld(force){
     const r = await rpc("baron2_world", {});
     BX.setMarket({ press: r.press || {}, med: r.med });
     W = { res: r.reserve || null, players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
-    await loadOrders(true); await loadEtb(); loadCasino(); loadPort(); loadLotto(); loadFly(); loadLoans(); loadCad(); loadDestin();
+    await loadOrders(true); await loadEtb(); loadCasino(); loadPort(); loadLotto(); loadFly(); loadLoans(); loadCad(); loadDestin(); loadLab(); loadVoy();
     if (wrapEl && (view === "market" || view === "village" || view === "atelier") && !gestOpen && !sheetOpen) draw();
   }catch(e){}
 }
@@ -1839,7 +1843,7 @@ function frame(){
   if (dt > 3){ BX.catchUp(S, t); }
   else if (dt > 0){
     const ev = [], done = BX.step(S, dt, t, ev) || []; S.last = t;
-    if (done.length){ const d = done[0]; toast(`${P[d.rec].e} ${fmtN(d.qty)} ${P[d.rec].label.toLowerCase()} sorti${d.qty > 1 ? "s" : ""} du four`, "gold"); sound("done"); if (view === "barn") draw(); }
+    if (done.length){ const d = done[0], dp = P[d.rec] || { e:"🍲", label:"Plat" }; toast(`${dp.e} ${fmtN(d.qty)} ${dp.label.toLowerCase()} sorti${d.qty > 1 ? "s" : ""} du four`, "gold"); sound("done"); if (view === "barn") draw(); }
     if (view === "farm" && ev.length) showEvents(ev);
   }
   if (view === "farm") animate();
@@ -1869,6 +1873,9 @@ function loop(){
     if (n % 40 === 24) loadLoans();
     if (n % 40 === 16 || (n % 12 === 4 && view === "casino" && CZ.game === "destin")) loadDestin();
     if (n % 4 === 1) dsTick();
+    if (n % 80 === 56 || (n % 20 === 8 && view === "casino" && CZ.game === "lab")) loadLab();
+    if (n % 80 === 64 || (n % 20 === 12 && view === "casino" && CZ.game === "voyage")) loadVoy();
+    if (n % 4 === 3 && view === "casino" && CZ.game === "voyage") vyTick();
     if (n % 40 === 32 && (view === "port" || view === "casino")) loadCad().then(() => { if ((view === "port" || (view === "casino" && CZ.game === "envol" && !FL.f)) && !sheetOpen) draw(); });
     if (view === "casino" && CZ.game === "bureau") lnTick();
     if (view === "chat" ? n % 12 === 6 : n % 60 === 6) chPoll();
@@ -2236,7 +2243,8 @@ function ovenHTML(){
     const sl = o.slots[i];
     if (!sl) return `<button class="b2-slot free" data-a="bake" data-slot="-1">＋ Place libre · cuisiner quelque chose</button>`;
     const k = Math.min(1, (now() - sl.t0) / sl.dur);
-    return `<div class="b2-slot" data-slot="${i}"><span class="ic">${P[sl.rec].e}</span><div class="sp"><b>${fmtN(sl.qty)} ${esc(P[sl.rec].label)}</b><div class="pb"><i style="width:${k * 100}%"></i></div></div><span class="t">${fmtT(sl.t0 + sl.dur - now())}</span></div>`;
+    const sp = P[sl.rec] || { e:"🍲", label:"Plat exotique" };
+    return `<div class="b2-slot" data-slot="${i}"><span class="ic">${sp.e}</span><div class="sp"><b>${fmtN(sl.qty)} ${esc(sp.label)}</b><div class="pb"><i style="width:${k * 100}%"></i></div></div><span class="t">${fmtT(sl.t0 + sl.dur - now())}</span></div>`;
   }).join("");
   const recs = BX.CRAFT.map(k => {
     const can = BX.canBake(S, k);
@@ -2248,9 +2256,17 @@ function ovenHTML(){
   return `<div class="b2-paper"><div class="b2-oven ${hot ? "" : "cold"}"><div class="art">${ovenArt(hot)}</div><div style="flex:1"><h2 class="b2-h2">Le four<small>Niveau ${o.lvl} · ${nS} place${nS > 1 ? "s" : ""} · fournées de ${fmtN(BX.ovenBatch(S))} max</small></h2>
     ${o.lvl < BAL.ovenMax ? `<button class="b2-btn" data-a="up-oven" data-cc="${c.coins}" data-cw="${c.wood}">Améliorer ${price(c)}</button><p class="b2-note">${next}</p>` : ""}</div></div>
     <div class="b2-slots">${slots}</div></div>
-    <div class="b2-paper"><h2 class="b2-h2">Recettes<small>En vert : tu as l'ingrédient. En rouge : il te manque.</small></h2>${recs}</div>`;
+    <div class="b2-paper"><h2 class="b2-h2">Recettes<small>En vert : tu as l'ingrédient. En rouge : il te manque.</small></h2>${recs}</div>${exoRecs()}`;
 }
 
+// les plats exotiques brevetés par le Laboratoire : ils se cuisent ici et seul le Voyageur les achète
+function exoRecs(){
+  const ks = exoList(); if (!ks.length) return "";
+  return `<div class="b2-paper"><h2 class="b2-h2">Plats exotiques<small>Brevetés par le Laboratoire. Seul le Voyageur les achète, très cher.</small></h2>${ks.map(k => {
+    const can = BX.canBake(S, k), ing = Object.keys(P[k].rec).map(x => `<span class="${S.stock[x] >= 1 ? "ok" : "ko"}">${P[x].e} ${fmtN(S.stock[x])}</span>`).join("");
+    return `<div class="b2-rec"><span class="ic">${P[k].e}</span><div class="sp"><b>${esc(P[k].label)} <small style="font-weight:600;opacity:.7">· ${fmtN(S.stock[k] || 0)} en stock</small></b><div class="b2-ing">${ing}</div></div>
+      ${can >= 1 ? `<button class="b2-btn gold" data-a="bake" data-k="${k}">Cuire</button>` : ""}</div>`; }).join("")}</div>`;
+}
 /* ---------- L'Établi (12 nov. 2026) ----------
    Un grand client pour tout le village toutes les 30 min (même tirage sur tous les téléphones).
    Il veut un objet sur mesure fait de sous-produits de plusieurs fermes. On le fabrique en 2-3 gestes à faire soi-même
@@ -2947,6 +2963,8 @@ function casinoHTML(){
   if (CZ.game === "lotto") return `<div class="cz cz-lt"><div class="b2-col b2-pad" style="padding-bottom:0">${back("🎟️ La Loterie")}</div>${lottoHTML()}</div>`;
   if (CZ.game === "envol") return `<div class="cz"><div class="b2-col b2-pad">${back("✈️ L'Aérodrome")}${envolHTML()}</div></div>`;
   if (CZ.game === "bureau") return `<div class="cz"><div class="b2-col b2-pad">${back("🤝 Le Bureau du Baron")}${bureauHTML()}</div></div>`;
+  if (CZ.game === "lab") return `<div class="cz lb"><div class="b2-col b2-pad">${back("🧪 Le Laboratoire")}${labHTML()}</div></div>`;
+  if (CZ.game === "voyage") return `<div class="cz vy"><div class="b2-col b2-pad">${back("🧭 Le Voyageur")}${voyHTML()}</div></div>`;
   if (CZ.game === "destin") return `<div class="cz ds"><div class="b2-col b2-pad">${back("✨ Le Destin")}${destinHTML()}</div></div>`;
   return `<div class="cz"><div class="b2-col b2-pad">
     ${back("🎡 La Roulette")}
@@ -2971,6 +2989,10 @@ function czLobby(){
     ${card("destin", "✨", "Le Destin", (() => { const D = DS.info, o = D && D.owner, n = D && D.asks ? D.asks.length : 0, sky = D ? (D.fx || []).filter(x => now() >= +x.start && now() < +x.end) : [];
       return !D ? "La météo du village" : dsIamDestin() ? (n ? `${n} vœu${n > 1 ? "x" : ""} en attente` : "Tu tiens le ciel") : o ? `${esc(o.name)} tient le ciel${sky.length ? ` · ${sky.map(x => dsW(x.kind).e).join(" ")}` : ""}` : "Bientôt…"; })(),
       dsIamDestin() && DS.info.asks.length ? `<span class="cz-st on">${DS.info.asks.length}</span>` : `<span class="go">›</span>`, "d")}
+    ${card("lab", "🧪", "Le Laboratoire", (() => { const I = LB.info; if (!I) return "Plats exotiques cachés"; const o = I.owner, nf = +I.total - +I.hidden;
+      return `${o ? (lbMine() ? "Ton laboratoire" : "Chercheur : " + esc(o.name)) : "Bientôt…"} · ${nf}/${+I.total} découverts`; })(), `<span class="go">›</span>`, "x")}
+    ${card("voyage", "🧭", "Le Voyageur", (() => { const I = VY.info; if (!I) return "Voyages lointains"; const o = I.owner;
+      return o ? `${vyMine() ? "Tes caravanes" : "Voyageur : " + esc(o.name)} · ${I.road.length}/${vyCfg().slots} en route` : "Bientôt…"; })(), VY.info && VY.info.owner ? `<span class="cz-st ${VY.info.open ? "on" : ""}">${VY.info.open ? "Ouvert" : "Fermé"}</span>` : `<span class="go">›</span>`, "v")}
     ${card("lotto", "🎟️", "La Loterie", L ?`Cagnotte ${COIN}${fmtN(+L.jackpot)} · tirage à ${ltHour(L.draw_at)}` : "Bientôt…", `<span class="go">›</span>`, "l")}
     <button class="cz-room a" data-a="tab" data-v="port"><span class="ic">⚓</span><span class="sp"><b>Le Port</b><small>${ptOwner() ? (ptMine() ? "Ton port" : "Capitaine : " + esc(ptOwner().name)) : "Vendre à l'étranger"}${CAD.info && CAD.info.open && CAD.info.port && CAD.info.port.owner ? (CAD.info.port.priced ? ` · 📜 ${COIN}${fmtN(+CAD.info.port.price)}` : "") : ""}</small></span><span class="cz-st ${PT.info && PT.info.open ? "on" : ""}">${PT.info && PT.info.open ? "Ouvert" : "Fermé"}</span></button>
   </div></div>`;
@@ -3867,6 +3889,184 @@ const DS_STYLE = `
 .ds-fog h2{font:400 32px var(--disp);margin:8px 0}.ds-fog p{font:700 15px/1.45 var(--round)}
 `;
 try{ const dst = document.createElement("style"); dst.id = "ds-style"; dst.textContent = DS_STYLE; document.head.appendChild(dst); }catch(e){}
+/* =================== Le Laboratoire et le Voyageur (15 nov. 2026) ===================
+   Laboratoire : 10 plats exotiques cachés (1 recette + 1 produit de luxe + 1 sous-produit, secret gardé par le serveur).
+   Le chercheur tente des mélanges (il perd les ingrédients et un peu d'argent) ; indice : combien d'ingrédients sont bons.
+   Trouvé : il paie un brevet, le plat devient public et se cuit au four ; il touche 5 % de chaque vente au Voyageur.
+   Voyageur : voyages lointains et sûrs (8 h, 3 caravanes pour tout le village). Recettes et produits de luxe ×1,8 le cours,
+   plats exotiques ×3,5 la valeur de leurs ingrédients (sans limite de quantité). Le voyageur prend 10 %. */
+const LB = { info:null, at:0, busy:false, pick:{ craft:null, aged:null, sub:null }, last:null };
+const VY = { info:null, at:0, busy:false };
+const EXO_T = 1800;
+// les plats brevetés deviennent des recettes du four comme les autres (ils restent hors du marché)
+function exoReg(list){
+  (list || []).forEach(x => {
+    if (!P[x.k]) P[x.k] = { label:x.label, e:x.e, rec:x.rec, t:EXO_T, exo:true, place:x.place, by:x.by, byname:x.byname,
+      floor: Object.keys(x.rec).reduce((a, i) => a + (P[i] ? P[i].floor : 0), 0) };
+    if (S && S.stock && typeof S.stock[x.k] !== "number") S.stock[x.k] = 0;
+  });
+}
+const exoList = () => Object.keys(P).filter(k => P[k].exo);
+const exoUnit = k => Object.keys(P[k].rec).reduce((a, i) => a + BX.vPrice(i, now()), 0);
+const lbOwner = () => LB.info && LB.info.owner ? LB.info.owner : null;
+const lbMine = () => !!(lbOwner() && lbOwner().id === ME.id);
+const vyOwner = () => VY.info && VY.info.owner ? VY.info.owner : null;
+const vyMine = () => !!(vyOwner() && vyOwner().id === ME.id);
+async function loadLab(){
+  try{
+    const r = await rpc("baron2_lab_get", { p_token: getToken() }); LB.info = r; LB.at = now(); exoReg(r.patents);
+    if (view === "casino" && (CZ.game === "lab" || CZ.game === "lobby") && !sheetOpen && !CZ.spinning && !FL.f) draw();
+  }catch(e){}
+}
+async function loadVoy(){
+  try{
+    const r = await rpc("baron2_voy_get", {}); VY.info = r; VY.at = now(); exoReg(r.patents);
+    if (view === "casino" && (CZ.game === "voyage" || CZ.game === "lobby") && !sheetOpen && !CZ.spinning && !FL.f) draw();
+  }catch(e){}
+}
+// ce qu'un essai détruit de chaque ingrédient : environ 2 minutes de sous-produits
+const lbQty = () => Math.max(5, BX.nice(BX.effRate(S, 0) * BAL.subRatio * 120));
+const LB_FAM = [["craft", "Une recette", BX.CRAFT], ["aged", "Un produit de luxe", BX.AGED], ["sub", "Un sous-produit", BX.SUB]];
+const lbDots = h => `<span class="lb-dots">${[0, 1, 2].map(i => `<i class="${i < h ? "on" : ""}"></i>`).join("")}</span>`;
+function labHTML(){
+  const I = LB.info;
+  if (!I) return `<p class="cz-empty">Les fioles chauffent…</p>`;
+  const own = lbOwner(), me = lbMine(), found = +I.total - +I.hidden;
+  const head = `<div class="ds-hd"><div class="ds-orb">🧪</div><p>${own ? `Le chercheur : <b>${esc(me ? "toi" : own.name)}</b>` : "Le laboratoire n'a pas encore de chercheur."}</p>
+    <div class="ds-cnt"><span>${found} / ${+I.total}</span>plats exotiques découverts</div></div>`;
+  const pats = I.patents.length ? I.patents.map(x => `<div class="cz-row"><span class="ds-ic">${x.e}</span><span class="sp">${esc(x.label)} <small>de ${esc(x.place)} · brevet de ${esc(x.by === ME.id ? "toi" : x.byname)}</small></span><b class="lb-rec">${Object.keys(x.rec).map(i => P[i].e).join(" ")}</b></div>`).join("")
+    : `<p class="cz-empty">Aucun brevet pour l'instant.</p>`;
+  const patBox = `<div class="cz-feed"><h3>Les brevets</h3>${pats}<p class="ln-tip" style="margin-top:8px">Un plat breveté se cuit au four de ta Grange, et seul le Voyageur l'achète. À chaque vente, ${I.cfg.roy} % vont à celui qui a déposé le brevet.</p></div>`;
+  const rule = `<p class="cz-note">Chaque plat exotique mélange une recette, un produit de luxe et un sous-produit. Après chaque essai, les points disent combien d'ingrédients sont bons (au mieux, parmi les plats encore cachés). 3 points : trouvé !</p>`;
+  if (!me) return `${head}${+I.roy > 0 ? `<div class="cz-bank"><h3>Tes brevets</h3><div class="cz-sum"><span>Reçu sur 24 h</span><b class="up">+${COIN}${fmtN(+I.roy)}</b></div></div>` : ""}${patBox}${rule}`;
+  const q = lbQty(), pk = LB.pick;
+  const fam = LB_FAM.map(([f, lbl, ks]) => `<div class="lb-fam"><h4>${lbl}</h4><div class="lb-chips">${ks.map(k => `<button class="lb-chip ${pk[f] === k ? "on" : ""} ${S.stock[k] >= q ? "" : "ko"}" data-a="lb-pick" data-f="${f}" data-k="${k}"><span>${P[k].e}</span><small>${fmtN(S.stock[k])}</small></button>`).join("")}</div></div>`).join("");
+  const ready = pk.craft && pk.aged && pk.sub, enough = ready && ["craft", "aged", "sub"].every(f => S.stock[pk[f]] >= q), cost = +I.cfg.try;
+  const same = ready && I.tries.find(t => t.craft === pk.craft && t.aged === pk.aged && t.sub === pk.sub);
+  const res = LB.last ? `<div class="lb-res ${LB.last.hit ? "win" : ""}">${LB.last.hit ? `<b>Trouvé : ${esc((I.found.find(x => x.k === LB.last.hit) || {}).label || "un plat exotique")} !</b>` : `${lbDots(LB.last.hint)}<b>${LB.last.hint} bon${LB.last.hint > 1 ? "s" : ""} ingrédient${LB.last.hint > 1 ? "s" : ""}</b>`}</div>` : "";
+  const fnd = I.found.length ? `<div class="cz-bank lb-found"><h3>Découverte !</h3>${I.found.map(x => `<div class="cz-row"><span class="ds-ic">${x.e}</span><span class="sp">${esc(x.label)} de ${esc(x.place)}<small>${Object.keys(x.rec).map(i => `${P[i].e} ${esc(P[i].label)}`).join(" + ")}</small></span></div>
+      <button class="b2-btn big gold" data-a="lb-patent" data-k="${x.k}" ${LB.busy || S.coins < +I.cfg.patent ? "disabled" : ""}>Déposer le brevet · ${COIN}${fmtN(+I.cfg.patent)}</button>`).join("")}
+      <p>Tant qu'il n'est pas breveté, personne ne peut le cuisiner, pas même toi.</p></div>` : "";
+  const tries = I.tries.length ? I.tries.map(t => `<div class="cz-row"><span class="lb-mix">${P[t.craft].e}${P[t.aged].e}${P[t.sub].e}</span><span class="sp"><small>${fmtAgo(new Date(t.at).getTime())}</small></span>${t.hit_k ? `<b class="up">Trouvé</b>` : lbDots(t.hint)}</div>`).join("") : `<p class="cz-empty">Aucun essai pour l'instant.</p>`;
+  return `${head}${fnd}<div class="cz-bank"><h3>Ton laboratoire</h3>
+      ${+I.roy > 0 ? `<div class="cz-sum"><span>Brevets sur 24 h</span><b class="up">+${COIN}${fmtN(+I.roy)}</b></div>` : ""}
+      <p>Choisis 3 ingrédients. Chaque essai détruit ${fmtN(q)} de chacun et coûte ${COIN}${fmtN(cost)}.</p>
+      ${fam}${res}
+      <button class="b2-btn big gold" data-a="lb-try" ${ready && enough && S.coins >= cost && !LB.busy ? "" : "disabled"}>${!ready ? "Choisis 3 ingrédients" : !enough ? "Pas assez d'ingrédients" : same ? `Déjà essayé · retenter ?` : `🧪 Tenter le mélange`}</button></div>
+    <div class="cz-feed"><h3>Carnet d'essais</h3>${tries}</div>${patBox}${rule}`;
+}
+async function lbTry(){
+  const I = LB.info, pk = LB.pick, q = lbQty(); if (!I || LB.busy || !pk.craft || !pk.aged || !pk.sub) return;
+  if (["craft", "aged", "sub"].some(f => S.stock[pk[f]] < q)){ toast("Pas assez d'ingrédients."); return; }
+  if (S.coins < +I.cfg.try){ toast("Pas assez de pièces pour l'essai."); return; }
+  LB.busy = true; ["craft", "aged", "sub"].forEach(f => S.stock[pk[f]] -= q); dirty = true; draw();
+  try{
+    const r = await queue(() => rpc("baron2_lab_try", { p_token: getToken(), p_state: S, p_craft: pk.craft, p_aged: pk.aged, p_sub: pk.sub }));
+    lastSave = now(); LB.info = r; applyCredits(r.credits); LB.last = { hint: +r.hint, hit: r.hit };
+    if (r.hit){ sound("up"); buzz([40, 30, 40, 30, 120]); toast("🧪 Eurêka ! Tu as découvert un plat exotique. Dépose vite le brevet.", "gold"); }
+    else { sound(+r.hint >= 2 ? "coin" : "tap"); buzz(15); }
+  }catch(e){
+    ["craft", "aged", "sub"].forEach(f => S.stock[pk[f]] += q);
+    const m = String(e && e.message || ""); toast(m.includes("pas ton labo") ? "Ce laboratoire n'est plus à toi." : m.includes("pas assez") ? "Pas assez de pièces ou d'ingrédients." : errText(e), "err"); loadLab();
+  }
+  LB.busy = false; draw();
+}
+async function lbPatent(k){
+  const I = LB.info; if (!I || LB.busy) return;
+  if (S.coins < +I.cfg.patent){ toast("Pas assez de pièces pour le brevet."); return; }
+  LB.busy = true; draw();
+  try{
+    const r = await queue(() => rpc("baron2_lab_patent", { p_token: getToken(), p_state: S, p_k: k }));
+    LB.info = r; exoReg(r.patents); applyCredits(r.credits); LB.last = null;
+    sound("up"); toast(`📜 Brevet déposé ! Tout le village peut cuisiner ce plat, et tu touches ${I.cfg.roy} % de chaque vente au Voyageur.`, "gold");
+  }catch(e){ toast(String(e && e.message || "").includes("pas assez") ? "Pas assez de pièces pour le brevet." : errText(e), "err"); loadLab(); }
+  LB.busy = false; draw();
+}
+/* ---------- Le Voyageur ---------- */
+const vyCfg = () => (VY.info && VY.info.cfg) || { slots:3, hours:8, reg:1.8, exo:3.5, fee:10, roy:5, hold:3 };
+const vyHold = () => Math.floor(vyCfg().hold * BAL.barnCap(S.barn));
+const vyFree = () => VY.info ? Math.max(0, vyCfg().slots - VY.info.road.length) : 0;
+const vyLeft = t => new Date(t.arrive).getTime() - now();
+const vyUnit = k => P[k] && P[k].exo ? exoUnit(k) : BX.vPrice(k, now());
+const vyMult = k => P[k] && P[k].exo ? vyCfg().exo : vyCfg().reg;
+const vyOk = k => P[k] && (P[k].exo || BX.CRAFT.includes(k) || BX.AGED.includes(k));
+function voyHTML(){
+  const I = VY.info;
+  if (!I) return `<p class="cz-empty">La caravane se prépare…</p>`;
+  const own = vyOwner(), me = vyMine(), open = !!I.open, c = vyCfg(), free = vyFree(), mine = I.road.filter(t => t.pid === ME.id);
+  const head = `<div class="ds-hd"><div class="ds-orb">🧭</div><p>${own ? `Le voyageur : <b>${esc(me ? "toi" : own.name)}</b>` : "Le voyageur n'est pas encore arrivé."}</p>
+    <div class="vy-stats"><span><b>${c.slots}</b>caravanes</span><span><b>${c.hours} h</b>de voyage</span><span><b>×${ptX(c.reg)}</b>les plats</span><span><b>×${ptX(c.exo)}</b>l'exotique</span></div></div>`;
+  const road = I.road.length ? I.road.map(t => `<div class="cz-row"><span class="ds-ic">${P[t.product] ? P[t.product].e : "📦"}</span><span class="sp">${esc(t.pid === ME.id ? "Toi" : t.name)} · ${fmtN(t.qty)} ${esc(P[t.product] ? P[t.product].label.toLowerCase() : t.product)}<small>${t.pid === ME.id ? `Retour prévu : ${COIN}${fmtN(+t.value)}` : "en route"}</small></span><b data-vy-end="${new Date(t.arrive).getTime()}">${fmtT(vyLeft(t))}</b></div>`).join("")
+    : `<p class="cz-empty">Aucune caravane sur la route.</p>`;
+  const send = !own ? `<p class="ln-tip">Les voyages ouvriront quand le voyageur aura un patron.</p>` : !open ? `<div class="pt-shut">🔒 Le voyageur est fermé${me ? "" : `<small>Seul ${esc(own.name)} peut l'ouvrir.</small>`}</div>`
+    : `<button class="b2-btn big gold" data-a="vy-send" ${free && !VY.busy ? "" : "disabled"}>${free ? "🐪 Confier une cargaison" : "Toutes les caravanes sont parties"}</button>
+       <p class="ln-tip" style="text-align:center;margin-top:6px">${free ? `${free} caravane${free > 1 ? "s" : ""} libre${free > 1 ? "s" : ""}` : `La prochaine rentre dans ${fmtT(Math.min(...I.road.map(vyLeft)))}`}</p>`;
+  const panel = me ? `<div class="cz-bank"><h3>Tes caravanes</h3><div class="cz-sum"><span>Commissions sur 24 h</span><b class="up">+${COIN}${fmtN(+I.fees)}</b></div>
+      <p>Tu prends ${c.fee} % de chaque cargaison qui rentre. Les tiennes ne paient rien.</p>
+      <button class="b2-btn big ${open ? "red" : "gold"}" data-a="vy-toggle" ${VY.busy ? "disabled" : ""}>${open ? "Fermer le voyageur" : "Ouvrir le voyageur"}</button>${chargeNote()}</div>` : "";
+  const log = I.log.length ? `<div class="cz-feed"><h3>Derniers retours</h3>${I.log.map(t => `<div class="cz-row"><span class="ds-ic">${P[t.product] ? P[t.product].e : "📦"}</span><span class="sp">${esc(t.pid === ME.id ? "Toi" : t.name)} · ${fmtN(t.qty)}<small>${fmtAgo(new Date(t.at).getTime())}</small></span><b class="up">+${COIN}${fmtN(+t.value)}</b></div>`).join("")}</div>` : "";
+  return `${head}${send}${panel}<div class="cz-feed"><h3>Sur la route</h3>${road}</div>${log}
+    <p class="cz-note">Le voyageur part très loin, sans tempête, mais le voyage dure ${c.hours} h. Il n'achète que des plats : recettes et produits de luxe (${ptX(c.reg)} fois le cours du village), et les plats exotiques brevetés (${ptX(c.exo)} fois la valeur de leurs ingrédients, autant que tu veux). Il garde ${c.fee} %, et ${c.roy} % de chaque plat exotique vont à celui qui a son brevet. Ta vente ne fait pas baisser le cours.</p>`;
+}
+function vySendSheet(k){
+  if (!k){
+    const ex = exoList().filter(x => S.stock[x] >= 1), rg = BX.CRAFT.concat(BX.AGED).filter(x => S.stock[x] >= 1);
+    if (!ex.length && !rg.length){ toast("Tu n'as aucun plat à confier : cuisine des recettes ou des plats exotiques."); return; }
+    sheetCtx = null;
+    const tile = x => `<button class="b2-tile" data-a="vy-pick" data-k="${x}"><div class="ic">${P[x].e}</div><b>${fmtN(S.stock[x])}</b><small>${esc(P[x].label)}</small></button>`;
+    sheet(`<h3>🐪 Que confier au voyageur ?</h3>${ex.length ? `<p><b>Plats exotiques</b> · ×${ptX(vyCfg().exo)}, sans limite</p><div class="b2-stock">${ex.map(tile).join("")}</div>` : ""}
+      ${rg.length ? `<p><b>Recettes et produits de luxe</b> · ×${ptX(vyCfg().reg)}, jusqu'à ${fmtN(vyHold())}</p><div class="b2-stock">${rg.map(tile).join("")}</div>` : ""}`);
+    return;
+  }
+  const exo = !!P[k].exo, max = exo ? Math.floor(S.stock[k]) : Math.min(Math.floor(S.stock[k]), vyHold());
+  sheetCtx = { type:"voy", k };
+  sheet(`<h3>${P[k].e} ${esc(P[k].label)}</h3><p>${exo ? `Valeur des ingrédients : <b>${fmtP(exoUnit(k))}</b> l'unité. Le voyageur paie ${ptX(vyCfg().exo)} fois plus` : `Cours du village : <b>${fmtP(BX.vPrice(k, now()))}</b>. Le voyageur paie ${ptX(vyCfg().reg)} fois plus`}, dans ${vyCfg().hours} h.</p>
+    ${qtyBlock(max, max, "q")}<div class="b2-sum" data-sum></div><button class="b2-btn gold big" data-a="confirm">🐪 Confier la cargaison</button>`);
+  sheetSum();
+}
+function vySum(q, k){
+  const c = vyCfg(), v = Math.floor(q * vyUnit(k) * vyMult(k)), fee = vyMine() ? 0 : Math.floor(v * c.fee / 100), roy = P[k].exo && P[k].by && P[k].by !== ME.id ? Math.floor(v * c.roy / 100) : 0;
+  return `<span>À l'arrivée${fee || roy ? ` <small>(après ${[fee ? `${c.fee} % du voyageur` : "", roy ? `${c.roy} % du brevet` : ""].filter(Boolean).join(" et ")})</small>` : ""}</span><span>${COIN}${fmtN(v - fee - roy)}</span>`;
+}
+async function vySend(k, q){
+  if (q < 1 || q > S.stock[k] || VY.busy) return;
+  const unit = vyUnit(k); VY.busy = true;
+  S.stock[k] -= q; dirty = true; closeSheet(); live();
+  try{
+    const r = await queue(() => rpc("baron2_voy_send", { p_token: getToken(), p_state: S, p_product: k, p_qty: q, p_unit: unit }));
+    lastSave = now(); VY.info = r; applyCredits(r.credits);
+    sound("up"); buzz([20, 40, 20]); toast(`🐪 La caravane emporte ${fmtN(q)} ${P[k].e} vers des terres lointaines !`, "gold");
+  }catch(e){
+    S.stock[k] += q;
+    const m = String(e && e.message || "");
+    toast(m.includes("fermé") ? "Le voyageur vient de fermer." : m.includes("plus de caravane") ? "Trop tard : la dernière caravane vient de partir." : m.includes("trop petite") ? "C'est trop pour une caravane." : m.includes("pas de voyageur") ? "Le voyageur n'a pas encore de patron." : errText(e), "err");
+    loadVoy();
+  }
+  VY.busy = false; draw();
+}
+async function vyToggle(){
+  if (VY.busy || !VY.info) return; VY.busy = true;
+  try{ VY.info = await rpc("baron2_voy_set", { p_token: getToken(), p_open: !VY.info.open }); sound("tap"); }catch(e){ toast(errText(e), "err"); }
+  VY.busy = false; draw();
+}
+function vyTick(){ wrapEl.querySelectorAll("[data-vy-end]").forEach(el => { el.textContent = fmtT(+el.dataset.vyEnd - now()); }); }
+const LV_STYLE = `
+.cz.lb{background:radial-gradient(120% 70% at 50% 0,#1E7F86,#0F4A55 55%,#082E36)}
+.cz.vy{background:radial-gradient(120% 70% at 50% 0,#C9853A,#8A4E1E 55%,#4E2A10)}
+.cz-room.x{background:linear-gradient(135deg,#1E8F8A,#0B4048)!important;border:2px solid #9FF0E2!important}
+.cz-room.v{background:linear-gradient(135deg,#D08A3C,#7A3F14)!important;border:2px solid #FFD58A!important}
+.lb-fam{margin:10px 0}.lb-fam h4{margin:0 0 6px;font:800 12px var(--round);text-transform:uppercase;letter-spacing:.06em;opacity:.7}
+.lb-chips{display:flex;flex-wrap:wrap;gap:6px}
+.lb-chip{display:flex;flex-direction:column;align-items:center;min-width:46px;padding:6px 6px 4px;border-radius:12px;background:rgba(255,255,255,.1)!important;border:2px solid transparent!important}
+.lb-chip span{font-size:22px;line-height:1}.lb-chip small{font:700 10px var(--round);opacity:.75;margin-top:2px}
+.lb-chip.on{background:rgba(159,240,226,.25)!important;border-color:#9FF0E2!important}.lb-chip.ko small{color:#FF9C88;opacity:1}
+.lb-dots{display:inline-flex;gap:4px}.lb-dots i{width:11px;height:11px;border-radius:50%;background:rgba(255,255,255,.18);display:block}.lb-dots i.on{background:#9FF0E2;box-shadow:0 0 6px #9FF0E2}
+.lb-res{display:flex;align-items:center;justify-content:center;gap:10px;margin:8px 0 12px;font:800 15px var(--round)}.lb-res.win{color:#FFE6B8;font-size:17px}
+.lb-mix{font-size:20px;letter-spacing:2px}.lb-rec{font-size:16px}
+.lb-found{border-color:#FFE6B8;box-shadow:0 0 18px rgba(255,230,184,.35)}.lb-found .b2-btn{margin:8px 0}
+.vy-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px}.vy-stats span{background:rgba(0,0,0,.25);border-radius:12px;padding:6px 2px;font:700 11px var(--round);opacity:.95}.vy-stats b{display:block;font:900 15px var(--round);color:#FFE6B8}
+`;
+try{ const lvs = document.createElement("style"); lvs.id = "lv-style"; lvs.textContent = LV_STYLE; document.head.appendChild(lvs); }catch(e){}
 /* =================== Les Réglages des lieux (14 nov. 2026) ===================
    Le propriétaire règle son lieu : chaque choix a un pour et un contre, et tout le monde voit les réglages.
    Un changement par lieu toutes les 10 minutes. */
@@ -4539,6 +4739,7 @@ function sheetSum(){
     const b = wrapEl.querySelector("[data-a=confirm]"); if (b) b.disabled = q < 1 || q + fee > S.coins; }
   if (c.type === "buy" || c.type === "colp"){ s.innerHTML = `<span>Tu paies</span><span>${COIN}${fmtN(q * c.price)}</span>`; const b = wrapEl.querySelector("[data-a=confirm]"); if (b) b.disabled = q < 1 || q * c.price > S.coins; }
   if (c.type === "port"){ s.innerHTML = ptSum(q, c.k); }
+  if (c.type === "voy"){ s.innerHTML = vySum(q, c.k); }
   if (c.type === "bake"){ s.innerHTML = `<span>Cuisson</span><span>${fmtT(BX.ovenDur(S, c.k))}</span>`; }
 }
 function sellSheet(k){
@@ -4621,6 +4822,7 @@ async function confirm(){
   const q = qval("q"); if (q < 1) return;
   const btn = wrapEl.querySelector("[data-a=confirm]"); if (btn) btn.disabled = true;
   if (c.type === "port"){ ptSend(c.k, q, !!c.ins); return; }
+  if (c.type === "voy"){ vySend(c.k, q); return; }
   if (c.type === "bet"){
     const b = BX.openBet(S, c.k, c.d, q, now());
     if (!b){ toast("Ce pari n'est pas possible.", "err"); closeSheet(); return; }
@@ -4723,7 +4925,7 @@ function onClick(e){
     }
     case "cz-spin": czSpin(); return;
     case "cz-game": if (FL.f) return; CZ.game = b.dataset.g; CZ.res = null; LT.pick = []; sound("tap"); wrapEl.querySelector("#b2-main").scrollTop = 0; draw();
-      if (CZ.game === "envol") loadFly(); if (CZ.game === "lotto") loadLotto(); if (CZ.game === "roulette" || CZ.game === "lobby") loadCasino(); if (CZ.game === "bureau" || CZ.game === "lobby") loadLoans(); if (CZ.game === "destin" || CZ.game === "lobby") loadDestin(); return;
+      if (CZ.game === "envol") loadFly(); if (CZ.game === "lotto") loadLotto(); if (CZ.game === "roulette" || CZ.game === "lobby") loadCasino(); if (CZ.game === "bureau" || CZ.game === "lobby") loadLoans(); if (CZ.game === "destin" || CZ.game === "lobby") loadDestin(); if (CZ.game === "lab" || CZ.game === "lobby") loadLab(); if (CZ.game === "voyage" || CZ.game === "lobby") loadVoy(); return;
     case "fl-chip": FL.chip = +b.dataset.i; FL.res = null; sound("tap"); draw(); return;
     case "fl-start": flStart(); return;
     case "fl-cash": flCash(); return;
@@ -4734,6 +4936,12 @@ function onClick(e){
     case "fl-toggle": flToggle(); return;
     case "ln-pick": LN.pick = +b.dataset.i; sound("tap"); draw(); return;
     case "ds-pick": sound("tap"); dsPick(b.dataset.k); return;
+    case "lb-pick": LB.pick[b.dataset.f] = LB.pick[b.dataset.f] === b.dataset.k ? null : b.dataset.k; LB.last = null; sound("tap"); draw(); return;
+    case "lb-try": lbTry(); return;
+    case "lb-patent": lbPatent(b.dataset.k); return;
+    case "vy-send": sound("tap"); vySendSheet(); return;
+    case "vy-pick": sound("tap"); vySendSheet(b.dataset.k); return;
+    case "vy-toggle": vyToggle(); return;
     case "ds-go": dsGo(b.dataset.k, b.dataset.t); return;
     case "ds-cancel": dsCancel(); return;
     case "ds-yes": dsYes(b.dataset.id, b.dataset.y === "1"); return;
