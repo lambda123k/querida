@@ -42,27 +42,27 @@ create table if not exists baron2_recipes (
 alter table baron2_recipes enable row level security;
 
 insert into baron2_recipes(k, ord, name, e, city, riddle, grid) values
- ('zabaione', 1,  'Sabayon',         '🥂', 'Venise',     'Une crème mousseuse, fouettée au vin doux dans les palais de Venise.',
+ ('zabaione', 1,  'Sabayon',         '🥂', 'Venise',     'Une crème de Venise : du sucre, des œufs battus et un vin de miel. Forme : Une diagonale, d''un coin à l''autre.',
     '["sucre",null,null, null,"oeufs",null, null,null,"hydromel"]'),
- ('loukoum',  2,  'Loukoums',        '🌹', 'Istanbul',   'De petits cubes moelleux qui sentent la rose, sur les bords du Bosphore.',
+ ('loukoum',  2,  'Loukoums',        '🌹', 'Istanbul',   'Des cubes sucrés d''Istanbul : du sucre, de la farine de blé et des fruits. Forme : Une ligne de 3.',
     '[null,null,null, "sucre","ble","fruits", null,null,null]'),
- ('baklava',  3,  'Baklava',         '🥮', 'Damas',      'Des feuilles très fines, des noix et beaucoup de miel. Damas en raffole.',
+ ('baklava',  3,  'Baklava',         '🥮', 'Damas',      'Des feuilles de pâte fines comme une crêpe, des noix, et deux fois du miel. Forme : Un L (3 cases en colonne, plus une à droite en bas).',
     '["crepes",null,null, "noyaux",null,null, "miel","miel",null]'),
- ('basbousa', 4,  'Basbousa',        '🟨', 'Le Caire',   'Un gâteau de semoule imbibé de sirop, que l''on mange au pied des pyramides.',
+ ('basbousa', 4,  'Basbousa',        '🟨', 'Le Caire',   'Un gâteau de semoule de blé, sucré, aux noix, mouillé de lait. Forme : Un carré de 2×2.',
     '["ble","sucre",null, "noyaux","lait",null, null,null,null]'),
- ('rhumarr',  5,  'Rhum arrangé',    '🍹', 'Zanzibar',   'Une bouteille où dorment des fruits, pour les marins de Zanzibar.',
+ ('rhumarr',  5,  'Rhum arrangé',    '🍹', 'Zanzibar',   'Une bouteille de rhum, et dessous : des fruits de chaque côté de la mélasse. Forme : Un T à l''envers (1 case en haut, une ligne de 3 dessous).',
     '[null,"rhum",null, "fruits","melasse","fruits", null,null,null]'),
- ('chai',     6,  'Thé chaï',        '🫖', 'Bombay',     'Une boisson chaude qui réchauffe les rues de Bombay.',
+ ('chai',     6,  'Thé chaï',        '🫖', 'Bombay',     'Une boisson chaude d''Inde : du miel, du lait et du sucre, l''un sur l''autre. Forme : Une colonne de 3.',
     '[null,"miel",null, null,"lait",null, null,"sucre",null]'),
- ('encens',   7,  'Encens',          '🪔', 'Bagdad',     'Une fumée parfumée qui monte dans les palais de Bagdad.',
+ ('encens',   7,  'Encens',          '🪔', 'Bagdad',     'De la cire au cœur, du miel à gauche, des plumes à droite, de la sciure en haut et en bas. Forme : Une croix +.',
     '[null,"sciure",null, "miel","cire","plumes", null,"sciure",null]'),
- ('halva',    8,  'Halva',           '🟫', 'Samarcande', 'Une pâte de graines broyées et de sucre, vendue au grand marché de Samarcande.',
+ ('halva',    8,  'Halva',           '🟫', 'Samarcande', 'Des noix et du lait en haut, du sucre au centre, du miel en bas. Forme : Un Y.',
     '["noyaux",null,"lait", null,"sucre",null, null,"miel",null]'),
- ('nan',      9,  'Nan aux noix',    '🫓', 'Kachgar',    'Un pain rond cuit contre les parois du four, pour les caravaniers de Kachgar.',
+ ('nan',      9,  'Nan aux noix',    '🫓', 'Kachgar',    'Un pain rond : du pain, des noix, des œufs et du miel tout autour d''un trou. Forme : Un losange (les 4 bords, le centre vide).',
     '[null,"pain",null, "noyaux",null,"oeufs", null,"miel",null]'),
- ('mochi',    10, 'Mochi',           '🍡', 'Kyoto',      'Une pâte de riz collante, fourrée d''une douceur rouge. Kyoto en est fou.',
+ ('mochi',    10, 'Mochi',           '🍡', 'Kyoto',      'Du riz (le blé), une confiture rouge et du sucre. Forme : Une diagonale, dans l''autre sens.',
     '[null,null,"ble", null,"confiture",null, "sucre",null,null]'),
- ('elixir',   11, 'Élixir d''Orient', '⚗️', 'Partout',   'La recette légendaire : cinq trésors précieux. Toutes les villes se l''arrachent.',
+ ('elixir',   11, 'Élixir d''Orient', '⚗️', 'Partout',   'Les cinq trésors : hydromel, rhum, miel, cire et fromage. Forme : Un X (les 4 coins et le centre).',
     '["hydromel",null,"rhum", null,"miel",null, "cire",null,"fromage"]')
 on conflict (k) do nothing;
 
