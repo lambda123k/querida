@@ -1,0 +1,650 @@
+{
+ "recettes": [
+  {
+   "k": "painperdu",
+   "nom": "Pain perdu",
+   "emoji": "🍞",
+   "indice": "Exemple",
+   "grille": [
+    null,
+    "pain",
+    null,
+    null,
+    "oeufs",
+    null,
+    null,
+    "lait",
+    null
+   ]
+  },
+  {
+   "k": "croque",
+   "nom": "Croque-monsieur",
+   "emoji": "🥪",
+   "indice": "Un classique des cafés français, chaud et qui file. C'est un sandwich : quelque chose dessus, quelque chose dessous.",
+   "grille": [
+    "pain",
+    null,
+    null,
+    "fromage",
+    null,
+    null,
+    "pain",
+    null,
+    null
+   ]
+  },
+  {
+   "k": "pizza",
+   "nom": "Pizza",
+   "emoji": "🍕",
+   "indice": "Ronde, plate, et elle vient d'Italie. Petit secret : la tomate, c'est un fruit.",
+   "grille": [
+    null,
+    null,
+    null,
+    "ble",
+    "fruits",
+    "fromage",
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "mojito",
+   "nom": "Mojito",
+   "emoji": "🍹",
+   "indice": "Un cocktail cubain bien frais, avec un alcool des îles. Il se boit avec du citron.",
+   "grille": [
+    "fruits",
+    null,
+    null,
+    null,
+    "sucre",
+    null,
+    null,
+    null,
+    "rhum"
+   ]
+  },
+  {
+   "k": "milkshake",
+   "nom": "Milkshake",
+   "emoji": "🥤",
+   "indice": "Ça se boit à la paille dans les fast-foods américains, souvent à la fraise. Le sucre est pile au milieu.",
+   "grille": [
+    null,
+    null,
+    "fruits",
+    null,
+    "sucre",
+    null,
+    "lait",
+    null,
+    null
+   ]
+  },
+  {
+   "k": "pancakes",
+   "nom": "Pancakes",
+   "emoji": "🥞",
+   "indice": "Le petit-déjeuner des films américains : des galettes empilées, avec un sirop doré tout en haut.",
+   "grille": [
+    null,
+    "miel",
+    null,
+    "ble",
+    "oeufs",
+    "lait",
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "tiramisu",
+   "nom": "Tiramisu",
+   "emoji": "🍨",
+   "indice": "Un dessert italien en couches, avec des biscuits et une crème au mascarpone (un fromage).",
+   "grille": [
+    "gateau",
+    "fromage",
+    null,
+    "oeufs",
+    "sucre",
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "creme",
+   "nom": "Crème brûlée",
+   "emoji": "🍮",
+   "indice": "Un dessert à la vanille qu'on casse à la petite cuillère, grâce à sa couche dorée tout en haut.",
+   "grille": [
+    "caramel",
+    null,
+    null,
+    "lait",
+    null,
+    null,
+    "oeufs",
+    "sucre",
+    null
+   ]
+  },
+  {
+   "k": "nougat",
+   "nom": "Nougat",
+   "emoji": "🤍",
+   "indice": "Une confiserie blanche et dure de Montélimar, pleine d'amandes (des noyaux) et liée au miel.",
+   "grille": [
+    null,
+    "miel",
+    null,
+    "noyaux",
+    null,
+    "meringue",
+    null,
+    "sucre",
+    null
+   ]
+  },
+  {
+   "k": "epices",
+   "nom": "Pain d'épices",
+   "emoji": "🍪",
+   "indice": "Ça sent Noël et les marchés d'hiver. Une farine et beaucoup, beaucoup de miel.",
+   "grille": [
+    "miel",
+    null,
+    "miel",
+    null,
+    "ble",
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "tatin",
+   "nom": "Tarte Tatin",
+   "emoji": "🥧",
+   "indice": "Une tarte aux pommes cuite à l'envers, toute caramélisée.",
+   "grille": [
+    "fruits",
+    "caramel",
+    null,
+    "ble",
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "croquemadame",
+   "nom": "Croque-madame",
+   "emoji": "🍳",
+   "indice": "Le cousin chic du croque-monsieur, avec un œuf posé dessus.",
+   "grille": [
+    "pain",
+    "oeufs",
+    null,
+    "fromage",
+    null,
+    null,
+    "pain",
+    null,
+    null
+   ]
+  },
+  {
+   "k": "crepesucre",
+   "nom": "Crêpe au sucre",
+   "emoji": "🥞",
+   "indice": "La crêpe la plus simple de la crêperie : juste un peu de blanc saupoudré dessus.",
+   "grille": [
+    "sucre",
+    null,
+    null,
+    "crepes",
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "galette",
+   "nom": "Galette complète",
+   "emoji": "🫓",
+   "indice": "La galette bretonne de base : un œuf et du fromage posés dessus.",
+   "grille": [
+    "oeufs",
+    "fromage",
+    null,
+    "crepes",
+    "crepes",
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "fondue",
+   "nom": "Fondue savoyarde",
+   "emoji": "🫕",
+   "indice": "Un caquelon de fromage fondu, où l'on trempe des morceaux de pain.",
+   "grille": [
+    null,
+    "pain",
+    null,
+    "fromage",
+    "fromage",
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "welsh",
+   "nom": "Welsh",
+   "emoji": "🥘",
+   "indice": "Le plat du Nord : une tranche de pain, noyée sous du fromage fondu… à la bière.",
+   "grille": [
+    "biere",
+    null,
+    null,
+    "fromage",
+    null,
+    null,
+    "pain",
+    null,
+    null
+   ]
+  },
+  {
+   "k": "pinacolada",
+   "nom": "Piña colada",
+   "emoji": "🍍",
+   "indice": "Un cocktail des Caraïbes à l'ananas, avec un alcool des îles et une touche crémeuse.",
+   "grille": [
+    "rhum",
+    null,
+    null,
+    "fruits",
+    "lait",
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "grog",
+   "nom": "Grog",
+   "emoji": "☕",
+   "indice": "Le remède de grand-mère contre le rhume : un alcool des îles, du citron et le trésor des abeilles.",
+   "grille": [
+    "fruits",
+    null,
+    "miel",
+    null,
+    "rhum",
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "smoothie",
+   "nom": "Smoothie",
+   "emoji": "🍓",
+   "indice": "Plein de fruits mixés, adoucis avec ce que font les abeilles.",
+   "grille": [
+    "fruits",
+    null,
+    null,
+    "fruits",
+    null,
+    null,
+    "miel",
+    null,
+    null
+   ]
+  },
+  {
+   "k": "saladefruits",
+   "nom": "Salade de fruits",
+   "emoji": "🍉",
+   "indice": "Un grand saladier de fruits coupés en morceaux, avec un peu de sucre en dessous.",
+   "grille": [
+    "fruits",
+    "fruits",
+    "fruits",
+    null,
+    "sucre",
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "compote",
+   "nom": "Compote",
+   "emoji": "🍏",
+   "indice": "Des pommes cuites jusqu'à devenir de la purée, avec un peu de sucre.",
+   "grille": [
+    "fruits",
+    "sucre",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "madeleines",
+   "nom": "Madeleines",
+   "emoji": "🐚",
+   "indice": "Des petits gâteaux en forme de coquillage, bien bombés. Farine, œufs, sucre.",
+   "grille": [
+    "ble",
+    null,
+    null,
+    null,
+    "oeufs",
+    null,
+    null,
+    null,
+    "sucre"
+   ]
+  },
+  {
+   "k": "gaufre",
+   "nom": "Gaufre",
+   "emoji": "🧇",
+   "indice": "Ça se mange à la fête foraine, avec plein de petits carreaux. Une pâte, et du sucre dessus.",
+   "grille": [
+    "ble",
+    "oeufs",
+    null,
+    "lait",
+    "sucre",
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "churros",
+   "nom": "Churros",
+   "emoji": "🥨",
+   "indice": "Des bâtonnets de pâte frits à la fête foraine, roulés dans le sucre.",
+   "grille": [
+    "ble",
+    null,
+    null,
+    null,
+    "sucre",
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "beignet",
+   "nom": "Beignet",
+   "emoji": "🍩",
+   "indice": "Une boule de pâte frite, fourrée de quelque chose de rouge, avec du sucre sur le dessus.",
+   "grille": [
+    null,
+    "sucre",
+    null,
+    "ble",
+    "confiture",
+    "ble",
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "barbe",
+   "nom": "Barbe à papa",
+   "emoji": "🍥",
+   "indice": "Un gros nuage rose qui colle, sur un bâton, à la fête foraine.",
+   "grille": [
+    "sucre",
+    null,
+    null,
+    "sucre",
+    null,
+    null,
+    "bois",
+    null,
+    null
+   ]
+  },
+  {
+   "k": "pommeamour",
+   "nom": "Pomme d'amour",
+   "emoji": "🍎",
+   "indice": "Une pomme toute rouge et brillante, plantée sur un bâton, à la fête foraine.",
+   "grille": [
+    "caramel",
+    null,
+    null,
+    "fruits",
+    null,
+    null,
+    "bois",
+    null,
+    null
+   ]
+  },
+  {
+   "k": "brochette",
+   "nom": "Brochette de bonbons",
+   "emoji": "🍡",
+   "indice": "Des bonbons enfilés sur une pique en bois, de travers.",
+   "grille": [
+    null,
+    null,
+    "bonbons",
+    null,
+    "bonbons",
+    null,
+    "bois",
+    null,
+    null
+   ]
+  },
+  {
+   "k": "galettedesrois",
+   "nom": "Galette des rois",
+   "emoji": "👑",
+   "indice": "On la mange en janvier en cherchant la fève : de la pâte dessus, de la pâte dessous, des amandes au milieu.",
+   "grille": [
+    "ble",
+    null,
+    null,
+    "noyaux",
+    null,
+    null,
+    "ble",
+    null,
+    null
+   ]
+  },
+  {
+   "k": "buche",
+   "nom": "Bûche de Noël",
+   "emoji": "🎄",
+   "indice": "Le dessert de Noël, roulé en forme de bûche, avec des petits champignons en meringue au bout.",
+   "grille": [
+    "gateau",
+    "gateau",
+    "gateau",
+    "meringue",
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "clafoutis",
+   "nom": "Clafoutis",
+   "emoji": "🍒",
+   "indice": "Un flan du Limousin plein de cerises, fait avec des œufs et du lait.",
+   "grille": [
+    "fruits",
+    "fruits",
+    null,
+    "oeufs",
+    "lait",
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "omelette",
+   "nom": "Omelette au fromage",
+   "emoji": "🥚",
+   "indice": "Des œufs battus dans la poêle, avec du râpé au bout.",
+   "grille": [
+    "oeufs",
+    "oeufs",
+    "fromage",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "painaulait",
+   "nom": "Pain au lait",
+   "emoji": "🥯",
+   "indice": "Un petit pain tout doux du goûter : farine, lait, et une touche sucrée.",
+   "grille": [
+    "ble",
+    "lait",
+    null,
+    null,
+    "sucre",
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "flan",
+   "nom": "Flan pâtissier",
+   "emoji": "🟨",
+   "indice": "Le flan des boulangeries : une crème bien jaune aux œufs et au lait, posée sur une pâte.",
+   "grille": [
+    "lait",
+    "oeufs",
+    null,
+    "tarte",
+    "tarte",
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "tartine",
+   "nom": "Tartine de confiture",
+   "emoji": "🥖",
+   "indice": "Le petit-déjeuner le plus simple : une tranche avec quelque chose de sucré étalé dessus.",
+   "grille": [
+    "confiture",
+    null,
+    null,
+    "pain",
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "crepecidre",
+   "nom": "Crêpe et cidre",
+   "emoji": "🍾",
+   "indice": "Le repas breton par excellence : une crêpe, et une bolée à côté.",
+   "grille": [
+    "crepes",
+    "cidre",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "plateau",
+   "nom": "Plateau de fromages",
+   "emoji": "🧀",
+   "indice": "Pour finir le repas à la française : trois fromages, et de quoi les manger.",
+   "grille": [
+    "fromage",
+    "fromage",
+    "fromage",
+    null,
+    "pain",
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "k": "piece",
+   "nom": "Pièce montée",
+   "emoji": "🎂",
+   "indice": "La légende des mariages : une tour de gâteaux très haute, avec du caramel au sommet.",
+   "grille": [
+    null,
+    "caramel",
+    null,
+    "meringue",
+    "gateau",
+    "meringue",
+    null,
+    "gateau",
+    null
+   ]
+  }
+ ]
+}

@@ -89,6 +89,12 @@ ne sont volontairement pas écrits ici : les demander à Naim.
   Caravane : produits transformés seulement (recettes, luxe, exotiques), 3 routes (Levant 3 h, Épices 6 h, Soie 10 h), ventes ville par ville,
   pillage / sable / douane, assurance payée par le voyageur, départ par le voyageur ou automatique 3 h après le 1er lot.
   Serveur : `supabase/baron2_28_labo_caravane.sql` (à lancer après le 27 ; `_baron2_credits` et `_baron2_charges` redéfinis).
+  Après tests de Naim (15-16 nov.) : le Laboratoire doit passer en MÉLANGE LIBRE (pas d'énigme choisie : on pose ce qu'on veut,
+  la forme compte mais pas la position, façon Minecraft ; si raté, 🟢/🎯 par rapport à la recette inconnue la plus proche),
+  livre en cartes numérotées (❓), pain perdu connu en exemple, essais illimités, indices = nombre d'ingrédients + un indice
+  autonome, « Savoir ce que c'est » (nom du plat) payant. 38 plats connus de tous (pas d'objets) dans `.github/labo-recettes.json`
+  (à mettre dans `baron2_recipes` à la place des 11 anciennes) ; villes de la caravane à revoir pour coller aux plats.
+  Prototype validé : artefact « Le Laboratoire · essai » (https://claude.ai/artifact/L29tUHTUapQuo97cwkfDib).
   Attribution plus tard : `update baron2_labo set owner_id = '<id>'`, `update baron2_cara set owner_id = '<id>'`.
 - Coups de malice (Cartes Chance, Almanach, prête-nom, contrats) : codés sur la branche `baron-malice`, mis de côté par Naim.
 
