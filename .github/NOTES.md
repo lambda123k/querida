@@ -94,6 +94,7 @@ ne sont volontairement pas écrits ici : les demander à Naim.
   livre en cartes numérotées (❓), pain perdu connu en exemple, essais illimités, indices = nombre d'ingrédients + un indice
   autonome, « Savoir ce que c'est » (nom du plat) payant. 38 plats connus de tous (pas d'objets) dans `.github/labo-recettes.json`
   (à mettre dans `baron2_recipes` à la place des 11 anciennes) ; villes de la caravane à revoir pour coller aux plats.
+  Règle validée : la caravane et ses villes ne demandent/affichent JAMAIS un plat pas encore découvert (déjà le cas : `_baron2_cara_cat` et `exoOf` filtrent `found`) ; à garder pour les nouvelles villes.
   Prototype validé : artefact « Le Laboratoire · essai » (https://claude.ai/artifact/L29tUHTUapQuo97cwkfDib).
   Attribution plus tard : `update baron2_labo set owner_id = '<id>'`, `update baron2_cara set owner_id = '<id>'`.
 - Coups de malice (Cartes Chance, Almanach, prête-nom, contrats) : codés sur la branche `baron-malice`, mis de côté par Naim.
