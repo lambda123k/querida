@@ -641,6 +641,8 @@ function checkBets(s, t){
 function fortune(s, t){
   t = t || Date.now(); let st = 0; (s.bets || []).forEach(b => st += betValue(b, t)); ALL.forEach(k => st += (s.stock[k] || 0) * P[k].floor);
   if (s.cellar) s.cellar.slots.forEach(sl => { if (sl) st += sl.qty * P[P[sl.k].src].floor; });
+  if (s.exo) for (const k in s.exo) st += (+s.exo[k] || 0) * 80;   // produits exotiques du Laboratoire
+  if (s.lab) st += (+s.lab.q || 0) * 80;
   return Math.floor(s.coins + st + s.stats.invested * 0.5);
 }
 // ce qui se découvre petit à petit
@@ -785,7 +787,7 @@ function publicStats(){
     etb: S.etb && S.etb.job && S.etb.job.cid === etbCid(now()) ? S.etb.job.cid : 0, crafted: S.stats.crafted || 0 };
 }
 function applyCredits(list){
-  const msgs = [], bank = [], portFees = [];
+  const msgs = [], bank = [], portFees = [], lcAcc = { sale:[], fee:[], roy:[] };
   const arr = (list || []).slice().sort((a, b) => a.id - b.id);
   for (const c of arr){
     if (+c.id <= (S.credit_seen || 0)) continue;
@@ -803,10 +805,11 @@ function applyCredits(list){
     if (c.product === "fly_fee" || c.product === "fly_bank"){ portFees.push(Object.assign({}, c, { fl: 1 })); continue; }
     if (c.product === "egg_dup") continue;
     if (c.product === "egg_fee"){ portFees.push(Object.assign({}, c, { eg: 1 })); continue; }
-    if (c.product === "charge"){ toast(`🧾 Charges ${c.buyer === "Casino" ? "du casino" : c.buyer === "Port" ? "du port" : c.buyer === "Loterie" ? "de la loterie" : c.buyer === "Œufs" ? "du Maître des œufs" : "de l'aérodrome"} : −${COIN}${fmtN(-c.coins)}, versées au Baron (le Tribut)`); continue; }
+    if (c.product === "charge"){ toast(`🧾 Charges ${c.buyer === "Casino" ? "du casino" : c.buyer === "Port" ? "du port" : c.buyer === "Loterie" ? "de la loterie" : c.buyer === "Œufs" ? "du Maître des œufs" : c.buyer === "Caravane" ? "de la caravane" : c.buyer === "Laboratoire" ? "de tes brevets" : "de l'aérodrome"} : −${COIN}${fmtN(-c.coins)}, versées au Baron (le Tribut)`); continue; }
     if (c.product === "cad_sale"){ const [who, lieu] = String(c.buyer).split("|"); toast(`📜 ${esc(who)} a racheté ${lieu === "Port" ? "ton Port" : "ton Aérodrome"} au prix que tu avais fixé : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); loadCad(); loadPort(); loadFly(); continue; }
     if (c.product === "cad_tax"){ toast(`📜 Impôt sur ${c.buyer === "Port" ? "ton Port" : "ton Aérodrome"} : −${COIN}${fmtN(-c.coins)}, versés au Baron`); continue; }
     if (c.product === "notice"){ toast(esc(c.buyer), "gold"); continue; }
+    if (lcCredit(c, lcAcc)) continue;
     if (c.product === "destin_pay") continue;
     if (c.product === "destin_back"){ toast(+c.qty === 2 ? `✨ Le Destin a refusé ton vœu (${dsW(c.buyer).label}) : +${COIN}${fmtN(c.coins)} remboursés` : +c.qty === 1 ? `✨ Vœu retiré : +${COIN}${fmtN(c.coins)} remboursés` : `✨ Le Destin n'a pas répondu à ton vœu : +${COIN}${fmtN(c.coins)} remboursés`); loadDestin(); continue; }
     if (c.product === "destin_gain"){ const [k, who] = String(c.buyer).split("|"); toast(`✨ Vœu de ${esc(who)} exaucé (${dsW(k).e} ${dsW(k).label}) : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); continue; }
@@ -821,6 +824,7 @@ function applyCredits(list){
     S.stats.sold += +c.coins || 0; S.stats.earned += +c.coins || 0;
     msgs.push(c);
   }
+  lcCreditsDone(lcAcc);
   const egf = portFees.filter(c => c.eg);
   if (egf.length){ const tot = egf.reduce((a, c) => a + (+c.coins || 0), 0); toast(`👑 ${egf.length} œuf${egf.length > 1 ? "s" : ""} acheté${egf.length > 1 ? "s" : ""} au village : +${COIN}${fmtN(tot)} pour le Maître des œufs`, "gold"); }
   const pf = portFees.filter(c => !c.lt && !c.fl && !c.eg), lf = portFees.filter(c => c.lt), ff = portFees.filter(c => c.fl);
@@ -865,6 +869,7 @@ function fixState(s){
   if (!s.ord2){ s.ord2 = 1; s.orders = { slot:0, list:[], prog:{} }; }
   s.ord3 = 1; s.v4 = 1; s.v5 = 1; s.v6 = 1;                                                 // atelier, sous-produits, cellier
   s.etb = Object.assign({ rep:0, job:null, inv:{} }, s.etb || {}); s.etb.inv = s.etb.inv || {};
+  s.exo = s.exo || {};
   s.bets = s.bets || []; s.tools = s.tools || {}; s.atelier = s.atelier || 0; s.cellar = s.cellar || { lvl:0, slots:[] };                                                            // demandes surprises (11 nov. 2026)   // commandes du village en course (11 nov. 2026)
   s.claims = (s.claims || []).map(c => ({ id: c.id, slot: c.slot })); s.wonIds = s.wonIds || [];
   // une seule exploitation en plus : on garde la plus développée
@@ -902,7 +907,7 @@ async function loadWorld(force){
     const r = await rpc("baron2_world", {});
     BX.setMarket({ press: r.press || {}, med: r.med });
     W = { res: r.reserve || null, players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
-    await loadOrders(true); await loadEtb(); loadCasino(); loadPort(); loadLotto(); loadFly(); loadLoans(); loadCad(); loadDestin();
+    await loadOrders(true); await loadEtb(); loadCasino(); loadPort(); loadLotto(); loadFly(); loadLoans(); loadCad(); loadDestin(); loadLabo(); loadCara();
     if (wrapEl && (view === "market" || view === "village" || view === "atelier") && !gestOpen && !sheetOpen) draw();
   }catch(e){}
 }
@@ -1869,6 +1874,9 @@ function loop(){
     if (n % 40 === 24) loadLoans();
     if (n % 40 === 16 || (n % 12 === 4 && view === "casino" && CZ.game === "destin")) loadDestin();
     if (n % 4 === 1) dsTick();
+    if (n % 40 === 20 || (n % 16 === 6 && view === "casino" && CZ.game === "labo")) loadLabo();
+    if (n % 40 === 28 || (n % 16 === 10 && view === "casino" && CZ.game === "cara")) loadCara();
+    if (n % 4 === 3) lbTick();
     if (n % 40 === 32 && (view === "port" || view === "casino")) loadCad().then(() => { if ((view === "port" || (view === "casino" && CZ.game === "envol" && !FL.f)) && !sheetOpen) draw(); });
     if (view === "casino" && CZ.game === "bureau") lnTick();
     if (view === "chat" ? n % 12 === 6 : n % 60 === 6) chPoll();
@@ -2948,6 +2956,8 @@ function casinoHTML(){
   if (CZ.game === "envol") return `<div class="cz"><div class="b2-col b2-pad">${back("✈️ L'Aérodrome")}${envolHTML()}</div></div>`;
   if (CZ.game === "bureau") return `<div class="cz"><div class="b2-col b2-pad">${back("🤝 Le Bureau du Baron")}${bureauHTML()}</div></div>`;
   if (CZ.game === "destin") return `<div class="cz ds"><div class="b2-col b2-pad">${back("✨ Le Destin")}${destinHTML()}</div></div>`;
+  if (CZ.game === "labo") return `<div class="cz lb"><div class="b2-col b2-pad">${back("⚗️ Le Laboratoire")}${laboHTML()}</div></div>`;
+  if (CZ.game === "cara") return `<div class="cz cv"><div class="b2-col b2-pad">${back("🐫 La Caravane")}${caravaneHTML()}</div></div>`;
   return `<div class="cz"><div class="b2-col b2-pad">
     ${back("🎡 La Roulette")}
     <div class="cz-hd"><span class="cz-st ${open ? "on" : ""}">${open ? "Roulette ouverte" : "Roulette fermée"}</span></div>
@@ -2971,6 +2981,12 @@ function czLobby(){
     ${card("destin", "✨", "Le Destin", (() => { const D = DS.info, o = D && D.owner, n = D && D.asks ? D.asks.length : 0, sky = D ? (D.fx || []).filter(x => now() >= +x.start && now() < +x.end) : [];
       return !D ? "La météo du village" : dsIamDestin() ? (n ? `${n} vœu${n > 1 ? "x" : ""} en attente` : "Tu tiens le ciel") : o ? `${esc(o.name)} tient le ciel${sky.length ? ` · ${sky.map(x => dsW(x.kind).e).join(" ")}` : ""}` : "Bientôt…"; })(),
       dsIamDestin() && DS.info.asks.length ? `<span class="cz-st on">${DS.info.asks.length}</span>` : `<span class="go">›</span>`, "d")}
+    ${card("labo", "⚗️", "Le Laboratoire", (() => { if (!LB.info) return "Les recettes secrètes"; const b = lbBook(), f = b.filter(r => r.found).length;
+      return lbIam() ? `Tu cherches · ${f}/${b.length} trouvées` : lbOwner() ? `Chercheur : ${esc(lbOwner().name)} · ${f}/${b.length} trouvées` : "Bientôt…"; })(),
+      S.lab ? `<span class="cz-st on">${exoInfo(S.lab.k).e}</span>` : `<span class="go">›</span>`, "lb")}
+    ${card("cara", "🐫", "La Caravane", (() => { const I = CV.info, o = cvOwner(); if (!I) return "Les longs voyages"; if (!o) return "Bientôt…";
+      return `${cvIam() ? "Ta caravane" : "Voyageur : " + esc(o.name)} · ${esc(I.rt.name)}`; })(),
+      CV.info && cvOwner() ? `<span class="cz-st ${CV.info.on_road ? "on" : ""}">${CV.info.on_road ? "En route" : "Au départ"}</span>` : `<span class="go">›</span>`, "cv")}
     ${card("lotto", "🎟️", "La Loterie", L ?`Cagnotte ${COIN}${fmtN(+L.jackpot)} · tirage à ${ltHour(L.draw_at)}` : "Bientôt…", `<span class="go">›</span>`, "l")}
     <button class="cz-room a" data-a="tab" data-v="port"><span class="ic">⚓</span><span class="sp"><b>Le Port</b><small>${ptOwner() ? (ptMine() ? "Ton port" : "Capitaine : " + esc(ptOwner().name)) : "Vendre à l'étranger"}${CAD.info && CAD.info.open && CAD.info.port && CAD.info.port.owner ? (CAD.info.port.priced ? ` · 📜 ${COIN}${fmtN(+CAD.info.port.price)}` : "") : ""}</small></span><span class="cz-st ${PT.info && PT.info.open ? "on" : ""}">${PT.info && PT.info.open ? "Ouvert" : "Fermé"}</span></button>
   </div></div>`;
@@ -3867,6 +3883,390 @@ const DS_STYLE = `
 .ds-fog h2{font:400 32px var(--disp);margin:8px 0}.ds-fog p{font:700 15px/1.45 var(--round)}
 `;
 try{ const dst = document.createElement("style"); dst.id = "ds-style"; dst.textContent = DS_STYLE; document.head.appendChild(dst); }catch(e){}
+/* =================== Le Laboratoire et la Caravane (15 nov. 2026) ===================
+   Le Laboratoire : un chercheur cherche des recettes exotiques cachées dans une grille de 3×3 (façon Minecraft).
+   Chaque essai brûle les produits posés ; la réponse dit combien d'ingrédients sont justes et combien sont à la
+   bonne case, jamais lesquels. Recette trouvée : son découvreur la cuisine seul, ou dépose un brevet (tout le monde
+   la cuisine, il touche 5 % des ventes). Les produits exotiques ne se vendent qu'en caravane.
+   La Caravane : un voyageur emmène les produits transformés (recettes, luxe, exotiques) sur de longues routes,
+   ville par ville, avec des risques en chemin (pillage, sable, douane) et une assurance qu'il fixe et qu'il paie. */
+const LB = { info:null, at:0, k:null, grid:[null, null, null, null, null, null, null, null, null], busy:false, res:null };
+const LB_BREW_MS = 30 * 60000;
+const lbBook = () => (LB.info && LB.info.book) || [];
+const lbRec = k => lbBook().find(r => r.k === k) || null;
+const lbOwner = () => LB.info && LB.info.owner ? LB.info.owner : null;
+const lbIam = () => !!(lbOwner() && lbOwner().id === ME.id);
+const exoInfo = k => { const r = lbRec(k); return r && r.name ? { e: r.e, label: r.name } : { e: "🧪", label: "Produit exotique" }; };
+const pInfo = k => P[k] ? { e: P[k].e, label: P[k].label } : exoInfo(k);
+// le cours d'un produit exotique : 2× la somme du cours de ses ingrédients
+const exoUnit = k => { const r = lbRec(k); if (!r || !r.ings) return 0; return 2 * r.ings.reduce((a, x) => a + (P[x] ? BX.vPrice(x, now()) : 0), 0); };
+const lbDose = () => Math.max(10, Math.round(BX.effRate(S, now()) * 10));            // par case : ~10 s de ta production
+const lbCost = () => BX.nice(Math.max(1e6, BX.fortune(S, now()) * 0.002));
+const lbCap = () => Math.max(20, Math.round(BX.effRate(S, now()) * 300));             // chaudron : ~5 min de ta production
+const lbAvail = () => lbBook().filter(r => r.found && r.ings && (r.patent || r.by_id === ME.id));
+const cityAt = c => c === "Le Caire" ? "au Caire" : "à " + esc(c);
+const lbCity = r => r.city === "Partout" ? "🌍 Recherchée dans toutes les villes" : `📍 Recherchée ${cityAt(r.city)}`;
+async function loadLabo(){
+  try{
+    const r = await rpc("baron2_labo_get", { p_token: getToken() }); LB.info = r; LB.at = now();
+    if (view === "casino" && (CZ.game === "labo" || CZ.game === "lobby" || CZ.game === "cara") && !sheetOpen && !CZ.spinning && !FL.f && !LB.busy) draw();
+  }catch(e){}
+}
+function laboHTML(){
+  const I = LB.info;
+  if (!I) return `<p class="cz-empty">Les alambics chauffent…</p>`;
+  const own = lbOwner(), me = lbIam(), book = lbBook(), nf = book.filter(r => r.found).length;
+  const head = `<div class="ds-hd"><div class="lb-flask">⚗️</div><p>${own ? `Le chercheur : <b>${esc(me ? "toi" : own.name)}</b>` : "Le Laboratoire n'a pas encore de chercheur."}</p>
+    <div class="ds-cnt"><span>${nf} / ${book.length}</span>recettes découvertes</div></div>`;
+  if (me && LB.k && lbRec(LB.k) && !lbRec(LB.k).found) return head + lbBench();
+  const t = now(), avail = lbAvail();
+  const pot = S.lab ? `<div class="lb-pot"><span class="lb-ic bub">${exoInfo(S.lab.k).e}</span><span class="sp"><b>${fmtN(S.lab.q)} ${esc(exoInfo(S.lab.k).label)}</b><small>au chaudron · prêt dans <i data-lb-end="${S.lab.end}">${fmtT(S.lab.end - t)}</i></small></span></div>`
+    : avail.length ? avail.map(r => `<button class="ds-w" data-a="lb-brew" data-k="${r.k}"><span class="ds-ic">${r.e}</span><span class="sp"><b>${esc(r.name)}</b><small>${r.ings.map(x => P[x] ? P[x].e : "?").join(" + ")}${r.patent ? "" : " · ta recette secrète"}</small></span><span class="pr">${COIN}${fmtP(exoUnit(r.k))}</span></button>`).join("")
+    : `<p class="cz-empty">Aucune recette à cuisiner pour l'instant. Il faut qu'une recette soit découverte, puis brevetée.</p>`;
+  const inv = Object.keys(S.exo || {}).filter(k => S.exo[k] >= 1);
+  const invHTML = inv.length ? `<div class="lb-inv">${inv.map(k => `<span>${exoInfo(k).e}<b>${fmtN(S.exo[k])}</b><small>${esc(exoInfo(k).label)}</small></span>`).join("")}</div>
+    <button class="b2-btn gold" style="width:100%;margin-top:10px" data-a="cz-game" data-g="cara">🐫 Les vendre en caravane</button>` : "";
+  const cards = book.map(r => {
+    const side = r.found ? (r.by_id === ME.id && !r.patent ? `<span class="cz-st on">Brevet ?</span>` : r.patent ? `<span class="lb-tag">📜</span>` : `<span class="lb-tag">🔒</span>`)
+      : me ? `<span class="go">›</span>` : "";
+    return `<button class="lb-rc ${r.found ? "ok" : ""}" data-a="lb-rec" data-k="${r.k}"><span class="lb-ic">${r.found ? r.e : "❓"}</span><span class="sp"><b>${r.found ? esc(r.name) : "Recette inconnue"}</b><small>${esc(r.riddle)}</small>
+      <small class="lb-meta">${lbCity(r)}${r.found ? ` · trouvée par ${esc(r.by_id === ME.id ? "toi" : r.by)}${r.patent ? ", brevetée" : ", secrète"}` : r.ntries ? ` · ${r.ntries} essai${r.ntries > 1 ? "s" : ""}` : ""}</small></span>${side}</button>`;
+  }).join("");
+  return `${head}
+    ${me ? `<div class="cz-bank"><h3>Tu es le chercheur</h3><p>Choisis une énigme, pose des produits dans la grille et lance un essai. ${+I.today >= +I.max ? "Le laboratoire a fait ses 30 essais du jour : reviens demain." : `Encore ${+I.max - +I.today} essai${+I.max - +I.today > 1 ? "s" : ""} aujourd'hui.`}</p>
+      ${+I.roy ? `<div class="cz-sum"><span>Tes brevets sur 24 h</span><b class="up">+${COIN}${fmtN(+I.roy)}</b></div>` : ""}</div>` : ""}
+    <div class="cz-feed"><h3>Le livre des recettes</h3>${cards}</div>
+    <div class="cz-feed"><h3>Le chaudron</h3>${pot}${invHTML}</div>
+    <p class="cz-note">Seul le chercheur fait des essais (30 par jour). Chaque essai brûle les produits posés et coûte un peu d'argent. La réponse dit combien d'ingrédients sont justes et combien sont à la bonne case, jamais lesquels. Une recette trouvée reste secrète tant que son découvreur ne dépose pas de brevet : ensuite tout le monde peut la cuisiner, et il touche 5 % de chaque vente. Les produits exotiques ne se vendent qu'en caravane.</p>`;
+}
+// la paillasse : la grille de 3×3, la réponse du dernier essai et les essais précédents
+function lbBench(){
+  const r = lbRec(LB.k), I = LB.info, dose = lbDose(), cost = lbCost(), left = +I.max - +I.today;
+  const need = {}; LB.grid.forEach(k => { if (k) need[k] = (need[k] || 0) + dose; });
+  const miss = Object.keys(need).filter(k => (S.stock[k] || 0) < need[k]);
+  const n = LB.grid.filter(Boolean).length, ok = n && !miss.length && S.coins >= cost && left > 0 && !LB.busy;
+  const cells = LB.grid.map((k, i) => `<button class="lb-cell ${k ? "on" : ""} ${k && miss.includes(k) ? "low" : ""}" data-a="lb-cell" data-i="${i}" aria-label="Case ${i + 1}">${k ? P[k].e : ""}</button>`).join("");
+  const res = LB.res && LB.res.k === LB.k ? `<div class="lb-res"><span><b>${LB.res.good}</b>bon${LB.res.good > 1 ? "s" : ""} ingrédient${LB.res.good > 1 ? "s" : ""}</span><span><b>${LB.res.placed}</b>à la bonne case</span></div>` : "";
+  const tries = (r.tries || []).map(t => `<div class="lb-try"><div class="lb-mini">${(t.grid || []).map(k => `<i>${k && P[k] ? P[k].e : ""}</i>`).join("")}</div><span>🟢 ${t.good}<br>🎯 ${t.placed}</span></div>`).join("");
+  return `<button class="b2-btn ghost lb-back" data-a="lb-rec" data-k="">‹ Le livre des recettes</button>
+    <div class="lb-riddle"><span>❓</span><p>${esc(r.riddle)}<small>${lbCity(r)}</small></p></div>
+    <div class="lb-table"><div class="lb-grid">${cells}</div></div>${res}
+    <div class="b2-two" style="margin-top:12px"><button class="b2-btn ghost" data-a="lb-clear" ${n ? "" : "disabled"}>Vider</button><button class="b2-btn gold" data-a="lb-try" ${ok ? "" : "disabled"}>${LB.busy ? "L'alambic chauffe…" : `Essayer · ${COIN}${fmtN(cost)}`}</button></div>
+    <p class="lb-tip">Chaque case pose ${fmtN(dose)} unités du produit, brûlées à l'essai.${miss.length ? ` <b>Il te manque ${miss.map(k => P[k].e).join(" ")}.</b>` : ""} Essais restants aujourd'hui : ${Math.max(0, left)}.</p>
+    ${tries ? `<div class="cz-feed"><h3>Tes essais</h3><div class="lb-tries">${tries}</div></div>` : ""}
+    <p class="cz-note">🟢 : combien de produits posés font partie de la recette, peu importe la case. 🎯 : combien sont exactement à la bonne case. Le nombre d'ingrédients de la recette n'est jamais dit.</p>`;
+}
+function lbCellSheet(i){
+  const dose = lbDose(), groups = [["Récoltes", BX.RAW], ["Recettes", BX.CRAFT], ["Sous-produits", BX.SUB], ["Produits de luxe", BX.AGED]];
+  sheetCtx = null; LB.cell = i;
+  sheet(`<h3>Case ${i + 1} : quel produit ?</h3><p class="b2-note">Il faut ${fmtN(dose)} unités par case. Les produits grisés te manquent.</p>
+    ${groups.map(([t, ks]) => `<h4 class="lb-gh">${t}</h4><div class="b2-stock">${ks.map(k => `<button class="b2-tile ${(S.stock[k] || 0) >= dose ? "" : "lb-low"}" data-a="lb-put" data-k="${k}"><div class="ic">${P[k].e}</div><b>${fmtN(S.stock[k] || 0)}</b><small>${esc(P[k].label)}</small></button>`).join("")}</div>`).join("")}
+    ${LB.grid[i] ? `<button class="b2-btn ghost big" style="margin-top:12px" data-a="lb-put" data-k="">Vider la case</button>` : ""}`);
+}
+async function lbTry(){
+  const k = LB.k, grid = LB.grid.slice(), dose = lbDose(), cost = lbCost();
+  if (LB.busy || !k || !grid.some(Boolean)) return;
+  const need = {}; grid.forEach(x => { if (x) need[x] = (need[x] || 0) + dose; });
+  if (Object.keys(need).some(x => (S.stock[x] || 0) < need[x]) || S.coins < cost){ toast("Il te manque des produits ou des pièces pour cet essai.", "err"); return; }
+  LB.busy = true; for (const x in need) S.stock[x] -= need[x]; S.coins -= cost; dirty = true; draw();
+  try{
+    const r = await queue(() => rpc("baron2_labo_try", { p_token: getToken(), p_state: S, p_k: k, p_grid: grid }));
+    lastSave = now(); LB.info = r; LB.res = r.res; if (r.credits) applyCredits(r.credits);
+    if (r.res && r.res.found){ sound("up"); buzz([40, 30, 40, 30, 120]); LB.busy = false; LB.k = null; LB.grid = [null, null, null, null, null, null, null, null, null]; draw(); lbFoundSheet(lbRec(k)); return; }
+    sound(r.res && r.res.good ? "coin" : "tap"); buzz(15);
+  }catch(e){
+    for (const x in need) S.stock[x] += need[x]; S.coins += cost;
+    const m = String(e && e.message || "");
+    toast(m.includes("plus d'essais") ? "Le laboratoire a fait ses 30 essais du jour." : m.includes("déjà trouvée") ? "Quelqu'un vient de trouver cette recette." : m.includes("pas le chercheur") || m.includes("pas de chercheur") ? "Tu n'es plus le chercheur du laboratoire." : m.includes("pas assez") ? "Il te manque des produits pour cet essai." : errText(e), "err");
+    loadLabo();
+  }
+  LB.busy = false; draw();
+}
+function lbFoundSheet(r){
+  if (!r) return;
+  sheetCtx = null;
+  const pr = +LB.info.patent_price || 0;
+  sheet(`<div class="ds-big">${r.e}</div><h3 style="text-align:center">${esc(r.name)} !</h3><p style="text-align:center">Tu as trouvé une recette exotique. ${r.ings ? r.ings.map(x => P[x] ? P[x].e : "").join(" + ") : ""}</p>
+    <p>Pour l'instant, elle est <b>secrète</b> : tu es le seul à pouvoir la cuisiner. Avec un <b>brevet</b>, tout le monde peut la cuisiner, et tu touches 5 % de chaque vente en caravane.</p>
+    <button class="b2-btn gold big" data-a="lb-patent" data-k="${r.k}" ${S.coins >= pr ? "" : "disabled"}>📜 Déposer le brevet · ${COIN}${fmtN(pr)}</button>
+    <button class="b2-btn ghost big" style="margin-top:8px" data-a="close-sheet">La garder secrète</button>`);
+}
+async function lbPatent(k){
+  const pr = +LB.info.patent_price || 0;
+  if (LB.busy || S.coins < pr) return;
+  LB.busy = true; S.coins -= pr; dirty = true; closeSheet();
+  try{
+    const r = await queue(() => rpc("baron2_labo_patent", { p_token: getToken(), p_state: S, p_k: k }));
+    lastSave = now(); LB.info = r; if (r.credits) applyCredits(r.credits);
+    sound("up"); toast(`📜 Brevet déposé : tout le village peut cuisiner ${esc(exoInfo(k).label)}, et tu touches 5 % de chaque vente.`, "gold");
+  }catch(e){ S.coins += pr; toast(String(e && e.message || "").includes("déjà") ? "Cette recette est déjà brevetée." : errText(e), "err"); loadLabo(); }
+  LB.busy = false; draw();
+}
+function lbRecTap(k){
+  if (!k){ LB.k = null; sound("tap"); draw(); return; }
+  const r = lbRec(k); if (!r) return;
+  if (!r.found){
+    if (!lbIam()){ toast(lbOwner() ? `Seul le chercheur (${esc(lbOwner().name)}) peut chercher les recettes.` : "Le Laboratoire n'a pas encore de chercheur."); return; }
+    if (LB.k !== k){ LB.k = k; LB.res = null; }
+    sound("tap"); wrapEl.querySelector("#b2-main").scrollTop = 0; draw(); return;
+  }
+  if (r.by_id === ME.id && !r.patent){ lbFoundSheet(r); return; }
+  if (r.ings && (r.patent || r.by_id === ME.id)){ lbBrewSheet(k); return; }
+  toast(`${r.e} ${esc(r.name)} : la recette secrète de ${esc(r.by)}.`);
+}
+function lbBrewSheet(k){
+  const r = lbRec(k); if (!r || !r.ings) return;
+  if (S.lab){ toast("Ton chaudron est déjà occupé."); return; }
+  const max = Math.min(lbCap(), ...r.ings.map(x => Math.floor(S.stock[x] || 0)));
+  sheetCtx = { type: "brew", k };
+  sheet(`<div class="ds-big">${r.e}</div><h3 style="text-align:center">${esc(r.name)}</h3><p style="text-align:center">Pour 1 ${r.e} : ${r.ings.map(x => `1 ${P[x] ? P[x].e : "?"}`).join(" + ")}. Cuisson : 30 min.</p>
+    ${max >= 1 ? `${qtyBlock(max, max, "q")}<div class="b2-sum" data-sum></div><button class="b2-btn gold big" data-a="confirm">Lancer le chaudron</button><p class="b2-note">Ton chaudron cuit jusqu'à ${fmtN(lbCap())} d'un coup.</p>`
+      : `<p class="b2-note" style="text-align:center">Il te manque des ingrédients : ${r.ings.filter(x => !(S.stock[x] >= 1)).map(x => P[x] ? P[x].e + " " + P[x].label.toLowerCase() : x).join(", ")}.</p>`}`);
+  if (max >= 1) sheetSum();
+}
+function lbBrew(k, q){
+  const r = lbRec(k); if (!r || !r.ings || S.lab) return;
+  if (r.ings.some(x => (S.stock[x] || 0) < q)){ toast("Il te manque des ingrédients.", "err"); return; }
+  r.ings.forEach(x => S.stock[x] -= q);
+  S.lab = { k, q, end: now() + LB_BREW_MS }; dirty = true; save(true); closeSheet();
+  sound("up"); toast(`🧪 ${fmtN(q)} ${r.e} au chaudron : prêts dans 30 min.`); draw();
+}
+function lbTick(){
+  if (!S) return;
+  if (S.lab && now() >= S.lab.end && LB.info){
+    const { k, q } = S.lab; S.exo = S.exo || {}; S.exo[k] = (S.exo[k] || 0) + q; delete S.lab; dirty = true; save(true);
+    sound("coin"); toast(`🧪 Ton chaudron est prêt : ${fmtN(q)} ${exoInfo(k).e} ${esc(exoInfo(k).label)}. Ils se vendent en caravane.`, "gold");
+    if (view === "casino" && !sheetOpen) draw();
+  }
+  if (!wrapEl) return;
+  wrapEl.querySelectorAll("[data-lb-end]").forEach(el => { el.textContent = fmtT(+el.dataset.lbEnd - now()); });
+  wrapEl.querySelectorAll("[data-cv-end]").forEach(el => { const l = +el.dataset.cvEnd - (now() - (CV.skew || 0)); el.textContent = l > 0 ? fmtT(l) : "bientôt"; });
+}
+
+/* ---------- La Caravane ---------- */
+const CV = { info:null, at:0, busy:false, skew:0, step:0 };
+const CV_EV = {
+  pillage: { e:"⚔️", label:"Pillage",          txt:"40 % de ce qui restait a été volé" },
+  sable:   { e:"🌪️", label:"Tempête de sable", txt:"20 % de ce qui restait est perdu" },
+  douane:  { e:"🛃", label:"Douane",           txt:"30 % des ventes de la ville prises" }
+};
+const CV_R = {
+  levant: { name:"Route du Levant",  e:"🏛️", h:3,  risk:8,  x:"×2,2 à ×3" },
+  epices: { name:"Route des épices", e:"🌶️", h:6,  risk:12, x:"×2,8 à ×4" },
+  soie:   { name:"Route de la soie", e:"🏯", h:10, risk:15, x:"×3,2 à ×6" }
+};
+const cvOwner = () => CV.info && CV.info.owner ? CV.info.owner : null;
+const cvIam = () => !!(cvOwner() && cvOwner().id === ME.id);
+const cvCat = k => BX.CRAFT.includes(k) ? "craft" : BX.AGED.includes(k) ? "luxe" : lbRec(k) ? "exo" : null;
+const cvUnit = k => cvCat(k) === "exo" ? exoUnit(k) : BX.vPrice(k, now());
+const cvHas = k => cvCat(k) === "exo" ? ((S.exo || {})[k] || 0) : (S.stock[k] || 0);
+const cvHold = () => Math.floor(0.25 * BAL.barnCap(S.barn));
+const cvMine = () => CV.info ? CV.info.lots.filter(l => l.pid === ME.id) : [];
+const cvUsed = () => cvMine().reduce((a, l) => a + (+l.qty || 0), 0);
+const cvT = () => now() - (CV.skew || 0);
+const cvX = x => String(Math.round(x * 100) / 100).replace(".", ",");
+const cvFavW = f => f === "luxe" ? "le luxe" : "les recettes";
+async function loadCara(){
+  try{
+    const r = await rpc("baron2_cara_get", { p_token: getToken() }); CV.info = r; CV.at = now();
+    if (r.now) CV.skew = now() - new Date(r.now).getTime();
+    if (view === "casino" && (CZ.game === "cara" || CZ.game === "lobby") && !sheetOpen && !CZ.spinning && !FL.f && !CV.busy) draw();
+  }catch(e){}
+}
+// la carte : le village, puis les villes de la route ; la caravane avance au fil du voyage
+function cvMap(){
+  const I = CV.info, cs = I.rt.cities, n = cs.length, h = +I.rt.h * 3600000, t = cvT();
+  const W = 360, H = 170, pts = [{ c:"Le village" }].concat(cs).map((c, i) => Object.assign({}, c, { x: 28 + i * (W - 56) / n, y: i % 2 ? 62 : 112 }));
+  let f = 0;
+  if (I.on_road && I.depart_at) f = Math.min(n, Math.max(0, (t - new Date(I.depart_at).getTime()) / h));
+  const seg = Math.min(n - 1, Math.floor(f)), u = f - seg, a = pts[seg], b = pts[seg + 1];
+  const cx = I.on_road ? a.x + (b.x - a.x) * u : pts[0].x, cy = I.on_road ? a.y + (b.y - a.y) * u : pts[0].y;
+  const st = {}; (I.steps || []).forEach(s => st[s.step] = s);
+  const path = pts.map((p, i) => (i ? "L" : "M") + p.x.toFixed(1) + " " + p.y).join(" ");
+  return `<svg viewBox="0 0 ${W} ${H}" class="cv-map" aria-hidden="true">
+    <defs><linearGradient id="cvsand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6D69A"/><stop offset="1" stop-color="#E2A85E"/></linearGradient></defs>
+    <rect width="${W}" height="${H}" rx="16" fill="url(#cvsand)"/>
+    <path d="M0 140 Q60 118 120 138 T240 132 T360 140 V${H} H0Z" fill="#D9974C" opacity=".55"/><path d="M0 30 Q80 14 160 30 T360 24 V0 H0Z" fill="#FBE7BE" opacity=".6"/>
+    <path d="${path}" class="cv-road"/>
+    ${pts.map((p, i) => { const s = st[i], done = i === 0 || !!s; return `<g transform="translate(${p.x.toFixed(1)} ${p.y})"><circle r="${i ? 8 : 10}" class="cv-dot ${done && i ? "done" : ""} ${i === 0 ? "home" : ""}"/>
+      ${s && s.event && CV_EV[s.event] ? `<text y="-14" class="cv-ev">${CV_EV[s.event].e}</text>` : ""}<text y="${p.y > 80 ? 26 : -16}" class="cv-city">${esc(p.c)}</text></g>`; }).join("")}
+    <text x="${cx.toFixed(1)}" y="${(cy + 7).toFixed(1)}" class="cv-camel">🐫</text></svg>`;
+}
+function caravaneHTML(){
+  const I = CV.info;
+  if (!I) return `<p class="cz-empty">Les chameaux se lèvent…</p>`;
+  const own = cvOwner(), me = cvIam(), rt = I.rt, cs = rt.cities, n = cs.length, hms = +rt.h * 3600000, t = cvT(), R = CV_R[I.route] || CV_R.levant;
+  const head = `<div class="ds-hd"><div class="lb-flask">🐫</div><p>${own ? `Le voyageur : <b>${esc(me ? "toi" : own.name)}</b>` : "La Caravane n'a pas encore de voyageur."}</p>
+    <div class="ds-cnt"><span>${I.on_road ? "En route" : "Au départ"}</span>${R.e} ${esc(rt.name)}</div></div>`;
+  const exoOf = c => lbBook().filter(r => r.found && (r.city === c || r.city === "Partout")).map(r => r.e).join(" ");
+  const towns = cs.map((c, i) => { const s = (I.steps || []).find(x => +x.step === i + 1), eta = I.on_road && I.depart_at ? new Date(I.depart_at).getTime() + hms * (i + 1) : 0, ex = exoOf(c.c);
+    return `<div class="cz-row"><span class="ds-ic">${s ? (s.event && CV_EV[s.event] ? CV_EV[s.event].e : "✅") : i + 1}</span><span class="sp">${esc(c.c)} · ×${cvX(+c.m)}<small>Aime ${cvFavW(c.fav)} (+25 %)${ex ? ` · ${ex} ×1,5` : ""}${s && s.event && CV_EV[s.event] ? ` · ${CV_EV[s.event].label} : ${CV_EV[s.event].txt}` : ""}</small></span>
+      <b>${s ? `${fmtN(+s.sold)} vendus` : I.on_road ? `<span data-cv-end="${eta}">${fmtT(eta - t)}</span>` : `${i === n - 1 ? "tout" : Math.round(+c.share * 100) + " %"}`}</b></div>`; }).join("");
+  const route = `<div class="cz-feed"><h3>${R.e} ${esc(rt.name)} · ${n} étapes de ${cvX(+rt.h)} h · risque ${Math.round(+rt.risk * 100)} % par étape</h3>${towns}</div>`;
+  const myLots = cvMine(), used = cvUsed(), hold = cvHold();
+  const lotRow = l => { const pi = pInfo(l.product), mine = l.pid === ME.id;
+    return `<div class="cz-row"><span class="ds-ic">${pi.e}</span><span class="sp">${esc(mine ? "Toi" : l.name)} · ${fmtN(+l.qty)} ${esc(pi.label.toLowerCase())}${l.ins ? " 🛡️" : ""}
+      <small>${I.on_road ? `${fmtN(+l.left)} encore à vendre${+l.lost ? ` · ${fmtN(+l.lost)} perdus` : ""}` : `au cours de ${fmtP(+l.unit)}`}</small></span>
+      ${I.on_road ? `<b class="up">+${COIN}${fmtN(+l.earned)}</b>` : mine ? `<button class="b2-btn ghost cv-take" data-a="cv-unload" data-id="${l.id}" ${CV.busy ? "disabled" : ""}>Reprendre</button>` : ""}</div>`; };
+  let body = "";
+  if (!own) body = `<p class="ln-tip">La caravane partira dès qu'elle aura un voyageur.</p>`;
+  else if (!I.on_road){
+    const auto = I.first_at ? new Date(I.auto_at).getTime() : 0;
+    const full = myLots.length >= 3 || used >= hold;
+    body = `<div class="cz-bank"><h3>Le chargement</h3>
+      <p>${auto ? `Départ ${me ? "quand tu veux" : `quand ${esc(own.name)} le décide`}, au plus tard dans <b data-cv-end="${auto}">${fmtT(auto - t)}</b>.` : "La caravane attend son premier chargement."} Seulement des produits transformés : recettes, produits de luxe et produits exotiques.</p>
+      <button class="b2-btn gold big" data-a="cv-load" ${full || CV.busy ? "disabled" : ""}>${full ? (myLots.length >= 3 ? "Tu as déjà 3 lots" : "Tes chameaux sont pleins") : "🐫 Charger la caravane"}</button>
+      <p class="b2-note" style="color:inherit;opacity:.75;text-align:center">Tes chameaux : ${fmtN(used)} / ${fmtN(hold)} unités · ${myLots.length} / 3 lots</p></div>
+      <div class="cz-feed"><h3>Dans la caravane</h3>${I.lots.length ? I.lots.map(lotRow).join("") : `<p class="cz-empty">Rien pour l'instant.</p>`}</div>`;
+  } else body = `<div class="cz-feed"><h3>Dans la caravane</h3>${I.lots.length ? I.lots.map(lotRow).join("") : `<p class="cz-empty">Personne n'a chargé ce voyage.</p>`}</div>`;
+  let panel = "";
+  if (me){
+    const chip = (k, v, l, on) => `<button class="cv-chip ${on ? "on" : ""}" data-a="cv-cfg" data-k="${k}" data-v="${v}" ${CV.busy ? "disabled" : ""}>${l}</button>`;
+    panel = `<div class="cz-bank" style="margin-top:14px"><h3>Tu es le voyageur</h3>
+      <div class="cz-sum"><span>Commissions et assurance sur 24 h</span><b class="${+I.fees >= 0 ? "up" : "dn"}">${+I.fees >= 0 ? "+" : "−"}${COIN}${fmtN(Math.abs(+I.fees))}</b></div>
+      ${!I.on_road ? `<button class="b2-btn gold big" data-a="cv-go" ${I.lots.length && !CV.busy ? "" : "disabled"}>${I.lots.length ? `🐫 Donner le départ` : "Personne n'a encore chargé"}</button>` : ""}
+      <h4 class="cv-h4">La route${I.on_road ? " (pendant le voyage, on ne change pas)" : ""}</h4><div class="cv-chips">${Object.keys(CV_R).map(k => chip("route", k, `${CV_R[k].e} ${CV_R[k].name}<small>${CV_R[k].h} h · ${CV_R[k].x} · risque ${CV_R[k].risk} %</small>`, I.route === k)).join("")}</div>
+      <h4 class="cv-h4">Ta commission</h4><div class="cv-chips row">${["5", "10", "15", "20"].map(v => chip("fee", v, v + " %", +I.fee === +v)).join("")}</div>
+      <h4 class="cv-h4">L'assurance (c'est toi qui rembourses)</h4><div class="cv-chips row">${["off", "5", "10", "20", "30"].map(v => chip("ins", v, v === "off" ? "Aucune" : v + " %", v === "off" ? I.ins == null : +I.ins === +v)).join("")}</div>
+      <p class="b2-note" style="color:inherit;opacity:.75">Un réglage toutes les 10 minutes. Une prime plus chère rapporte plus, mais fait fuir les clients ; un pillage sur un lot assuré, c'est toi qui paies.</p>${chargeNote()}</div>`;
+  } else if (own) panel = `<p class="ln-tip" style="text-align:center;margin-top:12px">Commission du voyageur : ${+I.fee} % · Assurance : ${I.ins == null ? "aucune" : `${+I.ins} % de la valeur estimée`}</p>`;
+  const last = I.last && I.last.length ? `<div class="cz-feed"><h3>Le dernier voyage</h3>${I.last.map(l => `<div class="cz-row"><span class="ds-ic">${pInfo(l.product).e}</span><span class="sp">${esc(l.pid === ME.id ? "Toi" : l.name)} · ${fmtN(+l.qty)}${l.ins ? " 🛡️" : ""}${+l.lost ? `<small>${fmtN(+l.lost)} perdus en route</small>` : ""}</span><b class="up">+${COIN}${fmtN(+l.earned)}</b></div>`).join("")}</div>` : "";
+  const log = I.log && I.log.length ? `<div class="cz-feed"><h3>Le carnet de route</h3>${I.log.map(s => `<div class="cz-row"><span class="ds-ic">${s.event && CV_EV[s.event] ? CV_EV[s.event].e : "✅"}</span><span class="sp">${esc(s.city)}<small>${s.event && CV_EV[s.event] ? CV_EV[s.event].label + " · " : ""}${fmtAgo(new Date(s.at).getTime())}</small></span><b>${fmtN(+s.sold)} vendus</b></div>`).join("")}</div>` : "";
+  return `${head}<div class="cv-sw">${cvMap()}</div>${route}${body}${panel}${last}${log}
+    <p class="cz-note">À chaque ville, la caravane vend une partie de chaque lot (tout à la dernière), au cours du village au chargement multiplié par le prix de la ville : +25 % si la ville aime ce genre de produit, ×1,5 pour son produit exotique. Ventes qui ne font pas baisser les cours. En chemin : pillage (−40 % de ce qui reste), tempête de sable (−20 %) ou douane (−30 % des ventes de la ville). L'assurance rembourse les marchandises perdues, payée par le voyageur. 3 lots par voyage et par joueur ; sans départ, la caravane part seule 3 h après le premier chargement.</p>`;
+}
+function cvLoadSheet(k){
+  const I = CV.info; if (!I) return;
+  const left = Math.max(0, cvHold() - cvUsed());
+  if (!k){
+    const ks = BX.CRAFT.concat(BX.AGED).filter(x => S.stock[x] >= 1).concat(Object.keys(S.exo || {}).filter(x => S.exo[x] >= 1 && lbRec(x)));
+    if (!ks.length){ toast("Rien à charger : la caravane ne prend que des produits transformés (recettes, luxe, exotiques)."); return; }
+    sheetCtx = null;
+    sheet(`<h3>🐫 Que veux-tu charger ?</h3><p>Seulement des produits transformés. Il reste ${fmtN(left)} places sur tes chameaux.</p>
+      <div class="b2-stock">${ks.map(x => `<button class="b2-tile" data-a="cv-pick" data-k="${x}"><div class="ic">${pInfo(x).e}</div><b>${fmtN(cvHas(x))}</b><small>${esc(pInfo(x).label)}</small></button>`).join("")}</div>`);
+    return;
+  }
+  const max = Math.min(Math.floor(cvHas(k)), left), rt = I.rt, ms = rt.cities.map(c => +c.m), insOk = I.ins != null && !cvIam();
+  const fav = rt.cities.filter(c => c.fav === cvCat(k)).map(c => c.c), r = lbRec(k);
+  if (max < 1){ toast("Plus de place sur tes chameaux."); return; }
+  sheetCtx = { type: "cara", k, ins: false };
+  sheet(`<h3>${pInfo(k).e} Charger la caravane</h3><p>Cours du village : <b>${fmtP(cvUnit(k))}</b>. Sur la ${esc(rt.name)}, les villes paient de ${cvX(Math.min(...ms))} à ${cvX(Math.max(...ms))} fois ce cours${fav.length ? ` (+25 % ${fav.map(cityAt).join(", ")})` : ""}${r && r.city ? (r.city === "Partout" ? ", et ×1,5 partout pour ce produit" : rt.cities.some(c => c.c === r.city) ? `, et ×1,5 ${cityAt(r.city)}` : "") : ""}. Voyage de ${cvX(+rt.h * rt.cities.length)} h.</p>
+    ${qtyBlock(max, max, "q")}${insOk ? `<button class="pt-ins" data-a="cv-ins"><span class="bx"></span><span class="sp"><b>🛡️ Assurer mon lot</b><small>Prime de ${+I.ins} % de la valeur estimée · les marchandises perdues sont remboursées</small></span></button>` : ""}
+    <div class="b2-sum" data-sum></div><button class="b2-btn gold big" data-a="confirm">Charger</button>`);
+  sheetSum();
+}
+const cvPrem = (q, k) => CV.info && CV.info.ins != null ? Math.ceil(q * cvUnit(k) * +CV.info.rt.est * +CV.info.ins / 100) : 0;
+function cvSum(q, k){
+  const I = CV.info, est = Math.floor(q * cvUnit(k) * +I.rt.est), fee = cvIam() ? 0 : Math.floor(est * +I.fee / 100), ins = sheetCtx && sheetCtx.ins, pr = ins ? cvPrem(q, k) : 0;
+  const b = wrapEl.querySelector("[data-a=confirm]"); if (b) b.disabled = q < 1 || pr > S.coins;
+  return `<span>Estimation au retour${fee ? ` <small>(après ${+I.fee} % du voyageur)</small>` : ""}${ins ? `<br><small>Prime payée maintenant : ${COIN}${fmtN(pr)}</small>` : ""}</span><span>≈ ${COIN}${fmtN(est - fee)}</span>`;
+}
+async function cvLoad(k, q, ins){
+  if (q < 1 || q > cvHas(k) || CV.busy) return;
+  const exo = cvCat(k) === "exo", unit = cvUnit(k), pr = ins ? cvPrem(q, k) : 0;
+  if (!(unit > 0)){ toast("Ce produit n'a pas encore de cours.", "err"); return; }
+  if (pr > S.coins){ toast("Pas assez de pièces pour la prime d'assurance."); return; }
+  CV.busy = true; if (exo) S.exo[k] -= q; else S.stock[k] -= q; S.coins -= pr; dirty = true; closeSheet(); live();
+  try{
+    const r = await queue(() => rpc("baron2_cara_load", { p_token: getToken(), p_state: S, p_product: k, p_qty: q, p_unit: unit, p_insure: !!ins }));
+    lastSave = now(); CV.info = r; applyCredits(r.credits);
+    sound("up"); buzz([20, 40, 20]); toast(`🐫 ${fmtN(q)} ${pInfo(k).e} chargés sur la caravane${ins ? ", assurés 🛡️" : ""} !`, "gold");
+  }catch(e){
+    if (exo) S.exo[k] += q; else S.stock[k] += q; S.coins += pr;
+    const m = String(e && e.message || "");
+    toast(m.includes("caravane partie") ? "Trop tard : la caravane vient de partir." : m.includes("chameaux") ? "C'est trop pour tes chameaux." : m.includes("trois lots") ? "Tu as déjà 3 lots sur ce voyage." : m.includes("assurance") ? "Le voyageur vient de retirer l'assurance." : m.includes("refusé") ? "La caravane ne prend que des produits transformés." : m.includes("pas de voyageur") ? "La caravane n'a pas encore de voyageur." : errText(e), "err");
+    loadCara();
+  }
+  CV.busy = false; draw();
+}
+async function cvUnload(id){
+  if (CV.busy) return; CV.busy = true; draw();
+  try{ const r = await queue(() => rpc("baron2_cara_unload", { p_token: getToken(), p_state: S, p_id: +id })); lastSave = now(); CV.info = r; applyCredits(r.credits); sound("tap"); }
+  catch(e){ toast(String(e && e.message || "").includes("partie") ? "Trop tard : la caravane est partie." : errText(e), "err"); loadCara(); }
+  CV.busy = false; draw();
+}
+async function cvGo(){
+  if (CV.busy) return; CV.busy = true;
+  try{ CV.info = await rpc("baron2_cara_go", { p_token: getToken() }); sound("up"); buzz([30, 30, 60]); toast(`🐫 La caravane prend la ${esc(CV.info.rt.name)} !`, "gold"); }
+  catch(e){ toast(String(e && e.message || "").includes("vide") ? "Personne n'a chargé la caravane." : errText(e), "err"); loadCara(); }
+  CV.busy = false; draw();
+}
+async function cvCfg(k, v){
+  if (CV.busy) return; CV.busy = true;
+  try{ CV.info = await rpc("baron2_cara_cfg", { p_token: getToken(), p_key: k, p_val: v }); sound("tap"); toast(k === "route" ? `${CV_R[v].e} Prochain voyage : ${CV_R[v].name}` : k === "fee" ? `Ta commission : ${v} %` : v === "off" ? "Plus d'assurance." : `Assurance à ${v} %`); }
+  catch(e){ const m = String(e && e.message || ""); toast(m.includes("attends") ? `Un réglage toutes les 10 minutes : ${esc(m.replace(/^.*attends/, "attends"))}.` : m.includes("partie") ? "Pas pendant le voyage." : errText(e), "err"); }
+  CV.busy = false; draw();
+}
+// les crédits de la caravane et du laboratoire (appelé depuis applyCredits) ; renvoie true si traité
+function lcCredit(c, acc){
+  const sp = String(c.buyer || "").split("|");
+  switch (c.product){
+    case "cara_sale": S.stats.earned += +c.coins || 0; acc.sale.push({ coins: +c.coins || 0, k: sp[0], city: sp[1], ev: sp[2] }); return true;
+    case "cara_fee": acc.fee.push(+c.coins || 0); return true;
+    case "labo_roy": acc.roy.push(+c.coins || 0); return true;
+    case "cara_lost": { const ev = CV_EV[sp[2]] || { e:"⚠️", label:"Coup dur" }; toast(`${ev.e} ${ev.label} ${cityAt(sp[1])} : ta caravane perd ${fmtN(c.qty)} ${pInfo(sp[0]).e}`, "err"); buzz([60, 40, 60]); return true; }
+    case "cara_insured": S.stats.earned += +c.coins || 0; toast(`🛡️ L'assurance de la caravane te rembourse : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); return true;
+    case "cara_ins": toast(+c.qty === 0 ? `🛡️ ${esc(c.buyer)} assure son lot : +${COIN}${fmtN(c.coins)} de prime` : +c.qty === 2 ? `${esc(c.buyer)} a repris son lot : prime rendue −${COIN}${fmtN(-c.coins)}` : `⚔️ Le lot assuré de ${esc(c.buyer)} a été touché : tu le rembourses −${COIN}${fmtN(-c.coins)}`, +c.qty === 0 ? "gold" : "err"); return true;
+    case "cara_back": { const k = c.buyer, q = +c.qty || 0; if (P[k]) S.stock[k] = (S.stock[k] || 0) + q; else { S.exo = S.exo || {}; S.exo[k] = (S.exo[k] || 0) + q; } toast(`🐫 Tu as repris ${fmtN(q)} ${pInfo(k).e}${+c.coins ? ` et ta prime (+${COIN}${fmtN(c.coins)})` : ""}.`); return true; }
+    case "cara_go": toast(`🐫 La caravane est partie sur la ${CV_R[c.buyer] ? CV_R[c.buyer].name : "route"} avec ton lot !`, "gold"); loadCara(); return true;
+  }
+  return false;
+}
+function lcCreditsDone(acc){
+  if (acc.sale.length){
+    const tot = acc.sale.reduce((a, x) => a + x.coins, 0), cities = [...new Set(acc.sale.map(x => x.city))], dou = acc.sale.some(x => x.ev === "douane");
+    toast(`🐫 La caravane a vendu ${cities.map(cityAt).join(", ")}${dou ? " (douane 🛃)" : ""} : +${COIN}${fmtN(tot)}`, "gold"); sound("coin");
+    if (view === "casino" && CZ.game === "cara") loadCara();
+  }
+  if (acc.fee.length){ const tot = acc.fee.reduce((a, x) => a + x, 0); toast(`🐫 Commission de la caravane : +${COIN}${fmtN(tot)}`, "gold"); }
+  if (acc.roy.length){ const tot = acc.roy.reduce((a, x) => a + x, 0); toast(`📜 Tes brevets du Laboratoire : +${COIN}${fmtN(tot)}`, "gold"); }
+}
+const LC_STYLE = `
+.cz.lb{background:radial-gradient(120% 70% at 50% 0,#1F7A6B,#0F3F3A 55%,#08221F)}
+.cz.cv{background:radial-gradient(120% 70% at 50% 0,#9A5A2A,#5A3016 55%,#2E170A)}
+.cz-room.lb{background:linear-gradient(135deg,#1F8A78,#0B3B35)!important;border:2px solid #8FF0D8!important}
+.cz-room.cv{background:linear-gradient(135deg,#C07A3A,#5A3016)!important;border:2px solid #FFD39A!important}
+.lb-flask{font-size:46px;line-height:1;filter:drop-shadow(0 0 14px rgba(143,240,216,.6))}
+.cz.cv .lb-flask{filter:drop-shadow(0 0 12px rgba(255,211,154,.6))}
+.b2-wrap .lb-rc{width:100%;display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid rgba(255,255,255,.08);text-align:left;color:#EFFFFA!important}
+.lb-rc .sp{flex:1;min-width:0}.lb-rc b{display:block;font:800 15px var(--round)}.lb-rc small{display:block;font:600 12px/1.35 var(--round);opacity:.72}
+.lb-rc small.lb-meta{opacity:.9;color:#9FF2DD;margin-top:2px}.lb-rc:not(.ok) .lb-ic{opacity:.55;filter:grayscale(1)}
+.lb-ic{font-size:26px;width:34px;text-align:center}.lb-tag{font-size:18px}
+.lb-riddle{display:flex;gap:10px;align-items:flex-start;background:rgba(0,0,0,.25);border-radius:16px;padding:12px 14px;margin:10px 0 14px}
+.lb-riddle span{font-size:26px}.lb-riddle p{margin:0;font:700 15px/1.4 var(--round)}.lb-riddle small{display:block;margin-top:4px;font:700 12px var(--round);color:#9FF2DD}
+.lb-back{margin:0 0 4px}
+.lb-table{background:linear-gradient(#8A5A34,#6B4022);border-radius:18px;padding:12px;box-shadow:inset 0 2px 0 rgba(255,255,255,.15),0 6px 0 #3E2412;max-width:300px;margin:0 auto}
+.lb-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.b2-wrap .lb-cell{aspect-ratio:1;border-radius:10px;background:#3E2A1C!important;box-shadow:inset 0 3px 6px rgba(0,0,0,.5);font-size:34px;display:flex;align-items:center;justify-content:center;border:2px solid transparent!important}
+.b2-wrap .lb-cell.on{background:#C9A27A!important;box-shadow:inset 0 -3px 0 rgba(0,0,0,.2)}.b2-wrap .lb-cell.low{border-color:#FF9C88!important;opacity:.75}
+.lb-res{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.lb-res span{background:rgba(0,0,0,.28);border-radius:14px;padding:10px;text-align:center;font:700 12px var(--round)}
+.lb-res b{display:block;font:900 30px var(--round);color:#FFE6B8}
+.lb-res span:first-child b::before{content:"🟢 ";font-size:20px}.lb-res span:last-child b::before{content:"🎯 ";font-size:20px}
+.lb-tip{font:600 12px/1.4 var(--round);opacity:.8;text-align:center;margin:10px 4px 0}
+.lb-tries{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}
+.lb-try{display:flex;align-items:center;gap:6px;background:rgba(0,0,0,.2);border-radius:10px;padding:6px}
+.lb-try span{font:800 11px/1.5 var(--round)}
+.lb-mini{display:grid;grid-template-columns:repeat(3,16px);gap:2px}.lb-mini i{width:16px;height:16px;border-radius:3px;background:rgba(255,255,255,.08);font-size:11px;line-height:16px;text-align:center;font-style:normal}
+.lb-gh{font:800 12px var(--round);text-transform:uppercase;letter-spacing:.05em;color:var(--ink2);margin:12px 2px 6px}
+.b2-tile.lb-low{opacity:.4}
+.lb-pot{display:flex;align-items:center;gap:10px;padding:8px 0}.lb-pot .sp{flex:1}.lb-pot b{display:block;font:800 15px var(--round)}.lb-pot small{font:600 12px var(--round);opacity:.75}.lb-pot i{font-style:normal}
+.lb-ic.bub{animation:lb-bub 1.6s ease-in-out infinite}@keyframes lb-bub{50%{transform:translateY(-4px) rotate(-6deg)}}
+.lb-inv{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.lb-inv span{display:flex;flex-direction:column;align-items:center;min-width:70px;background:rgba(0,0,0,.22);border-radius:12px;padding:8px;font-size:24px}
+.lb-inv b{font:900 14px var(--round)}.lb-inv small{font:600 10px var(--round);opacity:.7;text-align:center}
+.cv-sw{margin:4px 0 6px}.cv-map{width:100%;height:auto;display:block;border-radius:16px;box-shadow:0 6px 0 rgba(0,0,0,.25)}
+.cv-road{fill:none;stroke:#8A4E1E;stroke-width:3;stroke-dasharray:6 6;opacity:.7}
+.cv-dot{fill:#FFF4E0;stroke:#8A4E1E;stroke-width:3}.cv-dot.done{fill:#7FD08F}.cv-dot.home{fill:#C8312A;stroke:#7A1C16}
+.cv-city{font:800 11px ui-rounded,system-ui;fill:#4A2A10;text-anchor:middle}
+.cv-ev{font-size:14px;text-anchor:middle}.cv-camel{font-size:24px;text-anchor:middle}
+.b2-wrap .cv-take{padding:6px 12px!important;font-size:12px!important}
+.cv-h4{font:800 12px var(--round);text-transform:uppercase;letter-spacing:.05em;opacity:.75;margin:14px 0 6px}
+.cv-chips{display:flex;flex-direction:column;gap:6px}.cv-chips.row{flex-direction:row;flex-wrap:wrap}
+.b2-wrap .cv-chip{text-align:left;padding:9px 12px;border-radius:12px;background:rgba(0,0,0,.25)!important;color:#FFF3DE!important;font:800 13px var(--round);border:2px solid transparent!important}
+.b2-wrap .cv-chip small{display:block;font:600 11px var(--round);opacity:.75}.b2-wrap .cv-chip.on{border-color:#FFD39A!important;background:rgba(255,211,154,.18)!important}.b2-wrap .cv-chip:disabled{opacity:.5}
+`;
+try{ const lcs = document.createElement("style"); lcs.id = "lc-style"; lcs.textContent = LC_STYLE; document.head.appendChild(lcs); }catch(e){}
 /* =================== Les Réglages des lieux (14 nov. 2026) ===================
    Le propriétaire règle son lieu : chaque choix a un pour et un contre, et tout le monde voit les réglages.
    Un changement par lieu toutes les 10 minutes. */
@@ -4539,6 +4939,8 @@ function sheetSum(){
     const b = wrapEl.querySelector("[data-a=confirm]"); if (b) b.disabled = q < 1 || q + fee > S.coins; }
   if (c.type === "buy" || c.type === "colp"){ s.innerHTML = `<span>Tu paies</span><span>${COIN}${fmtN(q * c.price)}</span>`; const b = wrapEl.querySelector("[data-a=confirm]"); if (b) b.disabled = q < 1 || q * c.price > S.coins; }
   if (c.type === "port"){ s.innerHTML = ptSum(q, c.k); }
+  if (c.type === "cara"){ s.innerHTML = cvSum(q, c.k); }
+  if (c.type === "brew"){ s.innerHTML = `<span>Valeur au cours du village <small>(×2 à ×9 en caravane)</small></span><span>${COIN}${fmtN(q * exoUnit(c.k))}</span>`; }
   if (c.type === "bake"){ s.innerHTML = `<span>Cuisson</span><span>${fmtT(BX.ovenDur(S, c.k))}</span>`; }
 }
 function sellSheet(k){
@@ -4621,6 +5023,8 @@ async function confirm(){
   const q = qval("q"); if (q < 1) return;
   const btn = wrapEl.querySelector("[data-a=confirm]"); if (btn) btn.disabled = true;
   if (c.type === "port"){ ptSend(c.k, q, !!c.ins); return; }
+  if (c.type === "cara"){ cvLoad(c.k, q, !!c.ins); return; }
+  if (c.type === "brew"){ lbBrew(c.k, q); return; }
   if (c.type === "bet"){
     const b = BX.openBet(S, c.k, c.d, q, now());
     if (!b){ toast("Ce pari n'est pas possible.", "err"); closeSheet(); return; }
@@ -4723,7 +5127,7 @@ function onClick(e){
     }
     case "cz-spin": czSpin(); return;
     case "cz-game": if (FL.f) return; CZ.game = b.dataset.g; CZ.res = null; LT.pick = []; sound("tap"); wrapEl.querySelector("#b2-main").scrollTop = 0; draw();
-      if (CZ.game === "envol") loadFly(); if (CZ.game === "lotto") loadLotto(); if (CZ.game === "roulette" || CZ.game === "lobby") loadCasino(); if (CZ.game === "bureau" || CZ.game === "lobby") loadLoans(); if (CZ.game === "destin" || CZ.game === "lobby") loadDestin(); return;
+      if (CZ.game === "envol") loadFly(); if (CZ.game === "lotto") loadLotto(); if (CZ.game === "roulette" || CZ.game === "lobby") loadCasino(); if (CZ.game === "bureau" || CZ.game === "lobby") loadLoans(); if (CZ.game === "destin" || CZ.game === "lobby") loadDestin(); if (CZ.game === "labo" || CZ.game === "lobby") loadLabo(); if (CZ.game === "cara" || CZ.game === "lobby"){ loadCara(); loadLabo(); } return;
     case "fl-chip": FL.chip = +b.dataset.i; FL.res = null; sound("tap"); draw(); return;
     case "fl-start": flStart(); return;
     case "fl-cash": flCash(); return;
@@ -4737,6 +5141,19 @@ function onClick(e){
     case "ds-go": dsGo(b.dataset.k, b.dataset.t); return;
     case "ds-cancel": dsCancel(); return;
     case "ds-yes": dsYes(b.dataset.id, b.dataset.y === "1"); return;
+    case "lb-rec": lbRecTap(b.dataset.k); return;
+    case "lb-cell": sound("tap"); lbCellSheet(+b.dataset.i); return;
+    case "lb-put": if (LB.cell != null && LB.cell >= 0){ LB.grid[LB.cell] = b.dataset.k || null; } closeSheet(); sound("tap"); draw(); return;
+    case "lb-clear": LB.grid = [null, null, null, null, null, null, null, null, null]; sound("tap"); draw(); return;
+    case "lb-try": lbTry(); return;
+    case "lb-patent": lbPatent(b.dataset.k); return;
+    case "lb-brew": sound("tap"); lbBrewSheet(b.dataset.k); return;
+    case "cv-load": sound("tap"); cvLoadSheet(); return;
+    case "cv-pick": sound("tap"); cvLoadSheet(b.dataset.k); return;
+    case "cv-ins": if (sheetCtx && sheetCtx.type === "cara"){ sheetCtx.ins = !sheetCtx.ins; b.classList.toggle("on", sheetCtx.ins); sound("tap"); sheetSum(); } return;
+    case "cv-unload": cvUnload(b.dataset.id); return;
+    case "cv-go": cvGo(); return;
+    case "cv-cfg": cvCfg(b.dataset.k, b.dataset.v); return;
     case "ln-ask": lnAsk(); return;
     case "ln-cancel": lnCancel(); return;
     case "ln-yes": lnYes(b.dataset.id, +b.dataset.h); return;

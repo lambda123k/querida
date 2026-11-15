@@ -82,6 +82,14 @@ ne sont volontairement pas écrits ici : les demander à Naim.
   (70 % pour lui, 30 % dans la cagnotte de la Loterie, 10 par jour, protection 1 h contre les vœux néfastes). Serveur :
   `supabase/baron2_27_destin.sql` (à lancer à la mise en ligne ; le lieu n'a pas de maître tant que `baron2_destin.owner_id` est vide).
   Moteur : `BX.setWeather` (effets dans `tmOf`, saisons décalées dans `seasonAt`). À mettre en ligne avec les autres nouveaux lieux.
+- Le Laboratoire et la Caravane (15 nov., branche `baron-labo`, partie de `baron-destin`, PAS en ligne) : deux lieux sur La Place.
+  Laboratoire : 11 recettes exotiques cachées (table `baron2_recipes`, grilles secrètes côté serveur), grille 3×3 façon Minecraft,
+  réponse 🟢 bons ingrédients / 🎯 bonne case (`_baron2_labo_eval`), 30 essais par jour, découvreur seul à cuisiner sauf brevet
+  (2 % de la fortune moyenne, puis 5 % de chaque vente pour lui). Chaudron sur le téléphone (`S.lab`, 30 min), stock exotique dans `S.exo`.
+  Caravane : produits transformés seulement (recettes, luxe, exotiques), 3 routes (Levant 3 h, Épices 6 h, Soie 10 h), ventes ville par ville,
+  pillage / sable / douane, assurance payée par le voyageur, départ par le voyageur ou automatique 3 h après le 1er lot.
+  Serveur : `supabase/baron2_28_labo_caravane.sql` (à lancer après le 27 ; `_baron2_credits` et `_baron2_charges` redéfinis).
+  Attribution plus tard : `update baron2_labo set owner_id = '<id>'`, `update baron2_cara set owner_id = '<id>'`.
 - Coups de malice (Cartes Chance, Almanach, prête-nom, contrats) : codés sur la branche `baron-malice`, mis de côté par Naim.
 
 ## Tests
