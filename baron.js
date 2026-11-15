@@ -3933,15 +3933,15 @@ function laboHTML(){
       <small class="lb-meta">${lbCity(r)}${r.found ? ` · trouvée par ${esc(r.by_id === ME.id ? "toi" : r.by)}${r.patent ? ", brevetée" : ", secrète"}` : r.ntries ? ` · ${r.ntries} essai${r.ntries > 1 ? "s" : ""}` : ""}</small></span>${side}</button>`;
   }).join("");
   return `${head}
-    ${me ? `<div class="cz-bank"><h3>Tu es le chercheur</h3><p>Choisis une énigme, pose des produits dans la grille et lance un essai. ${+I.today >= +I.max ? "Le laboratoire a fait ses 30 essais du jour : reviens demain." : `Encore ${+I.max - +I.today} essai${+I.max - +I.today > 1 ? "s" : ""} aujourd'hui.`}</p>
+    ${me ? `<div class="cz-bank"><h3>Tu es le chercheur</h3><p>Choisis une énigme, pose des produits dans la grille et lance un essai. Les essais sont illimités, mais chacun brûle ses produits et coûte un peu.</p>
       ${+I.roy ? `<div class="cz-sum"><span>Tes brevets sur 24 h</span><b class="up">+${COIN}${fmtN(+I.roy)}</b></div>` : ""}</div>` : ""}
     <div class="cz-feed"><h3>Le livre des recettes</h3>${cards}</div>
     <div class="cz-feed"><h3>Le chaudron</h3>${pot}${invHTML}</div>
-    <p class="cz-note">Seul le chercheur fait des essais (30 par jour). Chaque essai brûle les produits posés et coûte un peu d'argent. La réponse dit combien d'ingrédients sont justes et combien sont à la bonne case, jamais lesquels. Une recette trouvée reste secrète tant que son découvreur ne dépose pas de brevet : ensuite tout le monde peut la cuisiner, et il touche 5 % de chaque vente. Les produits exotiques ne se vendent qu'en caravane.</p>`;
+    <p class="cz-note">Seul le chercheur fait des essais, autant qu'il veut. Chaque essai brûle les produits posés et coûte un peu d'argent. La réponse dit combien d'ingrédients sont justes et combien sont à la bonne case, jamais lesquels. Une recette trouvée reste secrète tant que son découvreur ne dépose pas de brevet : ensuite tout le monde peut la cuisiner, et il touche 5 % de chaque vente. Les produits exotiques ne se vendent qu'en caravane.</p>`;
 }
 // la paillasse : la grille de 3×3, la réponse du dernier essai et les essais précédents
 function lbBench(){
-  const r = lbRec(LB.k), I = LB.info, dose = lbDose(), cost = lbCost(), left = +I.max - +I.today;
+  const r = lbRec(LB.k), I = LB.info, dose = lbDose(), cost = lbCost(), left = Infinity;
   const need = {}; LB.grid.forEach(k => { if (k) need[k] = (need[k] || 0) + dose; });
   const miss = Object.keys(need).filter(k => (S.stock[k] || 0) < need[k]);
   const n = LB.grid.filter(Boolean).length, ok = n && !miss.length && S.coins >= cost && left > 0 && !LB.busy;
@@ -3952,7 +3952,7 @@ function lbBench(){
     <div class="lb-riddle"><span>❓</span><p>${esc(r.riddle)}<small>${lbCity(r)}</small></p></div>
     <div class="lb-table"><div class="lb-grid">${cells}</div></div>${res}
     <div class="b2-two" style="margin-top:12px"><button class="b2-btn ghost" data-a="lb-clear" ${n ? "" : "disabled"}>Vider</button><button class="b2-btn gold" data-a="lb-try" ${ok ? "" : "disabled"}>${LB.busy ? "L'alambic chauffe…" : `Essayer · ${COIN}${fmtN(cost)}`}</button></div>
-    <p class="lb-tip">Chaque case pose ${fmtN(dose)} unités du produit, brûlées à l'essai.${miss.length ? ` <b>Il te manque ${miss.map(k => P[k].e).join(" ")}.</b>` : ""} Essais restants aujourd'hui : ${Math.max(0, left)}.</p>
+    <p class="lb-tip">Chaque case pose ${fmtN(dose)} unités du produit, brûlées à l'essai.${miss.length ? ` <b>Il te manque ${miss.map(k => P[k].e).join(" ")}.</b>` : ""}</p>
     ${tries ? `<div class="cz-feed"><h3>Tes essais</h3><div class="lb-tries">${tries}</div></div>` : ""}
     <p class="cz-note">🟢 : combien de produits posés font partie de la recette, peu importe la case. 🎯 : combien sont exactement à la bonne case. Le nombre d'ingrédients de la recette n'est jamais dit.</p>`;
 }

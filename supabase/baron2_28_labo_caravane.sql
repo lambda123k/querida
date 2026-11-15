@@ -4,7 +4,7 @@
 --
 -- Le Laboratoire (un chercheur) : des recettes exotiques cachées, une grille de 3×3 façon Minecraft.
 -- · Le chercheur choisit une énigme et place des produits dans la grille. Chaque essai brûle les produits
---   posés et coûte un peu d'argent (retirés sur le téléphone), 30 essais par jour pour tout le laboratoire.
+--   posés et coûte un peu d'argent (retirés sur le téléphone). Essais illimités.
 -- · Réponse façon Mastermind, mais à moitié à l'aveugle : combien d'ingrédients sont justes et combien sont
 --   à la bonne case, sans jamais dire lesquels. On ne sait pas non plus combien d'ingrédients il faut.
 -- · Recette trouvée : seul son découvreur peut la cuisiner. Il peut déposer un brevet (payant) : tout le
@@ -43,26 +43,26 @@ alter table baron2_recipes enable row level security;
 
 insert into baron2_recipes(k, ord, name, e, city, riddle, grid) values
  ('zabaione', 1,  'Sabayon',         '🥂', 'Venise',     'Une crème mousseuse, fouettée au vin doux dans les palais de Venise.',
-    '[null,"sucre",null, null,"oeufs",null, null,"hydromel",null]'),
+    '["sucre",null,null, null,"oeufs",null, null,null,"hydromel"]'),
  ('loukoum',  2,  'Loukoums',        '🌹', 'Istanbul',   'De petits cubes moelleux qui sentent la rose, sur les bords du Bosphore.',
     '[null,null,null, "sucre","ble","fruits", null,null,null]'),
  ('baklava',  3,  'Baklava',         '🥮', 'Damas',      'Des feuilles très fines, des noix et beaucoup de miel. Damas en raffole.',
-    '[null,"crepes",null, null,"noyaux",null, null,"miel",null]'),
+    '["crepes",null,null, "noyaux",null,null, "miel","miel",null]'),
  ('basbousa', 4,  'Basbousa',        '🟨', 'Le Caire',   'Un gâteau de semoule imbibé de sirop, que l''on mange au pied des pyramides.',
     '["ble","sucre",null, "noyaux","lait",null, null,null,null]'),
  ('rhumarr',  5,  'Rhum arrangé',    '🍹', 'Zanzibar',   'Une bouteille où dorment des fruits, pour les marins de Zanzibar.',
-    '[null,"rhum",null, null,"fruits",null, null,"melasse",null]'),
+    '[null,"rhum",null, "fruits","melasse","fruits", null,null,null]'),
  ('chai',     6,  'Thé chaï',        '🫖', 'Bombay',     'Une boisson chaude qui réchauffe les rues de Bombay.',
     '[null,"miel",null, null,"lait",null, null,"sucre",null]'),
  ('encens',   7,  'Encens',          '🪔', 'Bagdad',     'Une fumée parfumée qui monte dans les palais de Bagdad.',
-    '[null,"sciure",null, "miel","cire","plumes", null,null,null]'),
+    '[null,"sciure",null, "miel","cire","plumes", null,"sciure",null]'),
  ('halva',    8,  'Halva',           '🟫', 'Samarcande', 'Une pâte de graines broyées et de sucre, vendue au grand marché de Samarcande.',
-    '["noyaux",null,"lait", null,"sucre",null, null,null,"miel"]'),
+    '["noyaux",null,"lait", null,"sucre",null, null,"miel",null]'),
  ('nan',      9,  'Nan aux noix',    '🫓', 'Kachgar',    'Un pain rond cuit contre les parois du four, pour les caravaniers de Kachgar.',
-    '[null,"noyaux",null, "oeufs","pain",null, null,"miel",null]'),
+    '[null,"pain",null, "noyaux",null,"oeufs", null,"miel",null]'),
  ('mochi',    10, 'Mochi',           '🍡', 'Kyoto',      'Une pâte de riz collante, fourrée d''une douceur rouge. Kyoto en est fou.',
-    '[null,"ble",null, null,"confiture",null, null,"sucre",null]'),
- ('elixir',   11, 'Élixir d''Orient', '⚗️', 'Partout',   'La recette légendaire : cinq trésors posés en croix. Toutes les villes se l''arrachent.',
+    '[null,null,"ble", null,"confiture",null, "sucre",null,null]'),
+ ('elixir',   11, 'Élixir d''Orient', '⚗️', 'Partout',   'La recette légendaire : cinq trésors précieux. Toutes les villes se l''arrachent.',
     '["hydromel",null,"rhum", null,"miel",null, "cire",null,"fromage"]')
 on conflict (k) do nothing;
 
@@ -114,7 +114,7 @@ begin
   return jsonb_build_object(
     'owner', (select jsonb_build_object('id', p.id, 'name', p.name) from baron2_players p where p.id = L.owner_id),
     'since', L.since,
-    'today', _baron2_labo_today(), 'max', 30,
+    'today', _baron2_labo_today(), 'max', null,
     'patent_price', _baron2_patent_price(),
     'book', coalesce((select jsonb_agg(jsonb_build_object(
         'k', r.k, 'riddle', r.riddle, 'city', r.city,
@@ -154,7 +154,6 @@ begin
     end if;
   end loop;
   if n < 1 then raise exception 'grille vide'; end if;
-  if _baron2_labo_today() >= 30 then raise exception 'plus d''essais'; end if;
   if coalesce((p_state->>'coins')::numeric, -1) < 0 then raise exception 'pas assez'; end if;
   perform _baron2_put(v, p_state);
   res := _baron2_labo_eval(p_grid, r.grid);
