@@ -151,7 +151,7 @@ ne sont volontairement pas écrits ici : les demander à Naim.
 - Sauvegarde : drapeau `v7` (refus des anciens clients qui effaceraient `S.rare`).
 - Charges : + spy_pay, spy_black, cara_rare, labo_prime.
 
-## Chantier en cours : les pouvoirs du Destin (demandé le 16 nov. 15 h 48, à coder, pas en ligne)
+## Les pouvoirs du Destin (baron2_36, client v57) — EN LIGNE le 16 nov. vers 16 h 15
 Le Destin devient un dieu : jauge de Foudre (+100/jour en continu, plafond 150, +5 par vœu accepté), dépensée librement.
 Prix baissés (validés « on baisse les prix ») : météo libre 4 (gel, soleil, brouillard, vent), fléau 12 (ferme à l'arrêt 10 min),
 bénédiction 10 (récolte ×2 15 min), main du Destin 15 (décide un pari en cours), naufrage/vent favorable 12, tempête/protection caravane 12,
@@ -159,3 +159,6 @@ jour de fête 20 (commandes ×2 un créneau), krach ou miracle 25 (bulle forcée
 exil 30 (plus d'accès à La Place 1 h), message du ciel 5, ciel du village (fond d'écran météo pour tous) 5, titre 24 h 5, Miracle 1/semaine.
 Vœux : toujours payants, acceptés/refusés ; + contre-proposition de prix, + exaucer « à l'envers » (coûte de la Foudre).
 Garde-fous : une même cible au plus une fois / 30 min ; tout est affiché sur La Place ; taxé 20 %.
+- Implémentation : pouvoirs = lignes de `baron2_wishes` avec `power = true`, `status = 'done'`, `arg` (produit, texte, ciel, prodige) ; `baron2_destin_power`,
+  `baron2_destin_reply(p_mode: yes|rev|counter|no)`, `baron2_destin_counter` ; effets client dans `godTick` (main du Destin sur `S.bets`, message plein écran,
+  ciel animé), `exileHTML`, `godFete` (primes ×2), `godLog` dans `fundLog` (krach/miracle), `WX_MUL` fleau 0 / beni 2, prodige récolte ×3, `godTag` au classement.
