@@ -1,8 +1,8 @@
 -- =====================================================================
--- Le Baron : le grand choix des lieux (17 nov. 2026, 9 h) et les titres de propriété
+-- Le Baron : le grand choix des lieux (16 nov. 2026, 9 h) et les titres de propriété
 -- À lancer après baron2_29_espions.sql.
 --
--- · Jusqu'au 17 nov. 9 h : rien ne change (la Roulette reste au Baron, le Port et l'Aérodrome à leurs patrons).
+-- · Jusqu'au 16 nov. 9 h : rien ne change (la Roulette reste au Baron, le Port et l'Aérodrome à leurs patrons).
 -- · À 9 h : les 7 lieux (Roulette, Port, Aérodrome, Destin, Laboratoire, Caravane, Réseau d'espions) sont repris
 --   à leurs patrons. Chaque joueur classe les 7 lieux, du préféré au moins voulu. Pas de limite de temps : le tirage
 --   se fait tout seul dès que tout le monde a voté (Naïm peut le lancer avant ; ceux qui n'ont pas voté prennent
@@ -25,7 +25,7 @@ create table if not exists baron2_choix (
   status text not null default 'avant' check (status in ('avant', 'voeux', 'fait')),
   drawn_at timestamptz,
   result jsonb);
-insert into baron2_choix(id, opens_at) values (1, '2026-11-17 09:00:00 Europe/Paris') on conflict do nothing;
+insert into baron2_choix(id, opens_at) values (1, '2026-11-16 09:00:00 Europe/Paris') on conflict do nothing;
 alter table baron2_choix enable row level security;
 
 create table if not exists baron2_choix_voeux (
