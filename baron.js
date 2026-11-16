@@ -4521,7 +4521,7 @@ function choixHTML(){
     const voters = pl.map(p => `<span class="ch-v ${p.voted ? "ok" : ""}">${p.voted ? "✓" : "…"} ${esc(p.id === ME.id ? "Toi" : p.name)}</span>`).join("");
     return `<div class="ds-hd"><div class="lb-flask">🗳️</div><p>Touche les lieux <b>dans l'ordre de tes envies</b> : le 1er est celui que tu veux le plus.</p>
         <div class="ds-cnt"><span>${n} / ${pl.length}</span>ont voté · tirage dès que tout le monde a voté</div></div>
-      <div class="ch-voters">${voters}</div>
+      <div class="ch-voters">${voters}</div>${chVotes(pl)}
       <div class="cz-feed"><h3>Tes vœux${R.length ? ` (${R.length}/7)` : ""}</h3>
         ${LIEU_ORDER.map(p => { const i = R.indexOf(p); return `<button class="ch-l pick ${i >= 0 ? "on" : ""}" data-a="ch-rank" data-p="${p}"><span class="num">${i >= 0 ? i + 1 : ""}</span><span class="ic">${LIEUX[p].e}</span><span class="sp"><b>${LIEUX[p].name}</b><small>${esc(LIEUX[p].sum)}</small>${p === "casino" ? chPrio() : ""}</span></button>`; }).join("")}</div>
       <div class="b2-two" style="margin-top:12px"><button class="b2-btn ghost" data-a="ch-reset" ${R.length ? "" : "disabled"}>Recommencer</button>
@@ -4542,13 +4542,20 @@ function choixHTML(){
     else if (l.sale) act = `<div class="ch-act"><button class="b2-btn gold" data-a="ch-buy" data-p="${l.place}" ${S.coins >= +l.sale.price && !GC.busy ? "" : "disabled"}>Acheter · ${COIN}${fmtN(+l.sale.price)}</button></div>`;
     return `<div class="ch-l ${me ? "mine" : ""}"><span class="ic">${L.e}</span><span class="sp"><b>${L.name}</b><small>${own ? `Patron : ${esc(me ? "toi" : own.name)}` : "Sans patron"}${l.sale ? ` · 📜 à vendre ${COIN}${fmtN(+l.sale.price)}` : ""}</small>${act}</span></div>`; }).join("");
   return `<div class="ds-hd"><div class="lb-flask">📜</div><p>${mine.length ? `Tu tiens <b>${mine.map(p => LIEUX[p].name).join(", ")}</b>.` : "Tu n'as pas de lieu pour l'instant : rachète-en un !"}</p></div>
-    ${swapsHTML}<div class="cz-feed"><h3>Les titres de propriété</h3>${rows}</div>${draw}
+    ${swapsHTML}<div class="cz-feed"><h3>Les titres de propriété</h3>${rows}</div>${draw}${chVotes(I.players)}
     <p class="cz-note">Un patron peut mettre son lieu en vente au prix qu'il veut : le premier qui paie le récupère, et l'argent va au vendeur. Il peut aussi proposer d'échanger son lieu contre celui d'un autre, qui accepte ou refuse.</p>`;
 }
 // la note de priorité du Baron sous la Roulette
 function chPrio(){
   const top = W && W.players && W.players.length ? ranking()[0] : null;
   return `<i class="ch-prio">👑 Le Baron${top ? ` (${esc(top.id === ME.id ? "toi" : top.name)})` : ""} est prioritaire : s'il la met en 1er vœu, elle est à lui, sans tirage au sort.</i>`;
+}
+// les vœux de ceux qui ont déjà voté (visibles de tous)
+function chVotes(pl){
+  const v = (pl || []).filter(p => Array.isArray(p.ranking) && p.ranking.length);
+  if (!v.length) return "";
+  return `<div class="cz-feed"><h3>Les vœux déjà envoyés</h3>${v.map(p => `<div class="ch-vote"><b>${esc(p.id === ME.id ? "Toi" : p.name)}</b><span>${p.ranking.map((k, i) => LIEUX[k] ? `<i title="${esc(LIEUX[k].name)}"><em>${i + 1}</em>${LIEUX[k].e}</i>` : "").join("")}</span></div>`).join("")}
+    <p class="b2-note" style="color:inherit;opacity:.7;margin:6px 0 0">Du 1er vœu (à gauche) au dernier. Chacun peut encore changer les siens jusqu'au tirage.</p></div>`;
 }
 function chRankTap(p){
   GC.rank = GC.rank || [];
@@ -4609,6 +4616,9 @@ const GC_STYLE = `
 .ch-l.mine{background:rgba(242,193,78,.1);border-radius:12px;padding-left:6px}
 .ch-act{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.b2-wrap .ch-act .b2-btn{padding:7px 12px!important;font-size:13px!important}
 .ch-prio{display:block;font:800 12px/1.35 var(--round);font-style:normal;color:#FFD877;margin-top:4px}
+.ch-vote{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid rgba(255,255,255,.08)}.ch-vote b{font:800 14px var(--round);width:76px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ch-vote span{display:flex;gap:4px;flex-wrap:wrap}.ch-vote i{font-style:normal;font-size:20px;position:relative;width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.25);border-radius:8px}
+.ch-vote em{position:absolute;top:-4px;left:-4px;font:900 10px var(--round);font-style:normal;background:#F2C14E;color:#3B1F17;border-radius:99px;min-width:15px;height:15px;line-height:15px;text-align:center}
 .ch-voters{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 4px;justify-content:center}.ch-v{font:800 12px var(--round);padding:4px 10px;border-radius:99px;background:rgba(0,0,0,.25);opacity:.7}.ch-v.ok{background:rgba(127,208,143,.25);opacity:1}
 .ch-sw{padding:8px 0;border-top:1px solid rgba(255,255,255,.12)}.ch-sw p{margin:0 0 8px;font:700 14px/1.4 var(--round)}
 .ch-in{width:100%;box-sizing:border-box;font:800 22px var(--round);text-align:center;padding:12px;border-radius:14px;border:2px solid #D8C49C;background:#FFF;margin:8px 0}
