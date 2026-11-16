@@ -4507,7 +4507,7 @@ function choixHTML(){
   if (st === "avant"){
     const t = new Date(I.opens_at).getTime();
     return `<div class="ds-hd"><div class="lb-flask">🗳️</div><p>Dans <b data-sp-end="${t}">${fmtT(t - now())}</b>, demain à 9 h, les 7 lieux de la ville sont repris à leurs patrons et remis en jeu.</p></div>
-      <div class="cz-bank"><h3>Comment ça marche</h3><p>1. À 9 h, chacun classe les 7 lieux, du préféré au moins voulu.<br>2. Pas de limite de temps : le tirage se fait dès que tout le monde a voté.<br>3. Chacun reçoit son premier vœu. Si plusieurs veulent le même lieu, tirage au sort ; les perdants passent à leur vœu suivant.<br>4. Ensuite, tu peux revendre ton lieu au prix que tu veux, ou l'échanger avec quelqu'un.</p></div>
+      <div class="cz-bank"><h3>Comment ça marche</h3><p>1. À 9 h, chacun classe les 7 lieux, du préféré au moins voulu.<br>2. Pas de limite de temps : le tirage se fait dès que tout le monde a voté.<br>3. Chacun reçoit son premier vœu. Si plusieurs veulent le même lieu, tirage au sort ; les perdants passent à leur vœu suivant.<br>4. Ensuite, tu peux revendre ton lieu au prix que tu veux, ou l'échanger avec quelqu'un.<br>👑 Le Baron du moment est prioritaire sur la Roulette : s'il la met en 1er vœu, elle est à lui, sans tirage au sort.</p></div>
       <div class="cz-feed"><h3>Les 7 lieux</h3>${LIEU_ORDER.map(p => card(p)).join("")}</div>
       <p class="cz-note">La Roulette n'est plus réservée au Baron : elle aura son patron comme les autres lieux. Le Baron garde le Tribut du matin et son Bureau (les prêts).</p>`;
   }
@@ -4518,7 +4518,7 @@ function choixHTML(){
         <div class="ds-cnt"><span>${n} / ${pl.length}</span>ont voté · tirage dès que tout le monde a voté</div></div>
       <div class="ch-voters">${voters}</div>
       <div class="cz-feed"><h3>Tes vœux${R.length ? ` (${R.length}/7)` : ""}</h3>
-        ${LIEU_ORDER.map(p => { const i = R.indexOf(p); return `<button class="ch-l pick ${i >= 0 ? "on" : ""}" data-a="ch-rank" data-p="${p}"><span class="num">${i >= 0 ? i + 1 : ""}</span><span class="ic">${LIEUX[p].e}</span><span class="sp"><b>${LIEUX[p].name}</b><small>${esc(LIEUX[p].sum)}</small></span></button>`; }).join("")}</div>
+        ${LIEU_ORDER.map(p => { const i = R.indexOf(p); return `<button class="ch-l pick ${i >= 0 ? "on" : ""}" data-a="ch-rank" data-p="${p}"><span class="num">${i >= 0 ? i + 1 : ""}</span><span class="ic">${LIEUX[p].e}</span><span class="sp"><b>${LIEUX[p].name}</b><small>${esc(LIEUX[p].sum)}</small>${p === "casino" ? chPrio() : ""}</span></button>`; }).join("")}</div>
       <div class="b2-two" style="margin-top:12px"><button class="b2-btn ghost" data-a="ch-reset" ${R.length ? "" : "disabled"}>Recommencer</button>
         <button class="b2-btn gold" data-a="ch-send" ${R.length === 7 && !sent && !GC.busy ? "" : "disabled"}>${sent ? "✓ Vœux envoyés" : R.length === 7 ? "Envoyer mes vœux" : `Encore ${7 - R.length} à classer`}</button></div>
       <p class="lb-tip">Tu peux changer tes vœux tant que le tirage n'a pas eu lieu.</p>
@@ -4526,7 +4526,7 @@ function choixHTML(){
   }
   // après le tirage : les titres
   const res = (I.result || []).slice().sort((a, b) => +a.round - +b.round);
-  const draw = res.length ? `<div class="cz-feed"><h3>Le tirage</h3>${res.map(r => `<div class="cz-row"><span class="ds-ic">${LIEUX[r.place] ? LIEUX[r.place].e : "📜"}</span><span class="sp">${esc(r.id === ME.id ? "Toi" : r.name)} · ${LIEUX[r.place] ? LIEUX[r.place].name : r.place}<small>${r.voted === false ? "N'avait pas voté : un lieu qui restait" : `${+r.round === 1 ? "1er vœu" : `${r.round}e vœu`}${r.others && r.others.length ? ` · tiré au sort contre ${r.others.map(esc).join(", ")}` : ""}`}</small></span></div>`).join("")}</div>` : "";
+  const draw = res.length ? `<div class="cz-feed"><h3>Le tirage</h3>${res.map(r => `<div class="cz-row"><span class="ds-ic">${LIEUX[r.place] ? LIEUX[r.place].e : "📜"}</span><span class="sp">${esc(r.id === ME.id ? "Toi" : r.name)} · ${LIEUX[r.place] ? LIEUX[r.place].name : r.place}<small>${r.prio ? `👑 Le Baron est prioritaire sur la Roulette${r.others && r.others.length ? ` (la voulaient aussi : ${r.others.map(esc).join(", ")})` : ""}` : r.voted === false ? "N'avait pas voté : un lieu qui restait" : `${+r.round === 1 ? "1er vœu" : `${r.round}e vœu`}${r.others && r.others.length ? ` · tiré au sort contre ${r.others.map(esc).join(", ")}` : ""}`}</small></span></div>`).join("")}</div>` : "";
   const mine = chMine(), inc = (I.swaps || []).filter(s => s.to_id === ME.id), out = (I.swaps || []).filter(s => s.from_id === ME.id);
   const swapsHTML = inc.length || out.length ? `<div class="cz-bank"><h3>Les échanges proposés</h3>
       ${inc.map(s => `<div class="ch-sw"><p><b>${esc(s.from_name)}</b> te propose ${LIEUX[s.from_place].e} ${LIEUX[s.from_place].name} contre ton ${LIEUX[s.to_place].e} ${LIEUX[s.to_place].name}.</p><div class="b2-two"><button class="b2-btn ghost" data-a="ch-swap-no" data-id="${s.id}" ${GC.busy ? "disabled" : ""}>Refuser</button><button class="b2-btn gold" data-a="ch-swap-ok" data-id="${s.id}" ${GC.busy ? "disabled" : ""}>Accepter</button></div></div>`).join("")}
@@ -4539,6 +4539,11 @@ function choixHTML(){
   return `<div class="ds-hd"><div class="lb-flask">📜</div><p>${mine.length ? `Tu tiens <b>${mine.map(p => LIEUX[p].name).join(", ")}</b>.` : "Tu n'as pas de lieu pour l'instant : rachète-en un !"}</p></div>
     ${swapsHTML}<div class="cz-feed"><h3>Les titres de propriété</h3>${rows}</div>${draw}
     <p class="cz-note">Un patron peut mettre son lieu en vente au prix qu'il veut : le premier qui paie le récupère, et l'argent va au vendeur. Il peut aussi proposer d'échanger son lieu contre celui d'un autre, qui accepte ou refuse.</p>`;
+}
+// la note de priorité du Baron sous la Roulette
+function chPrio(){
+  const top = W && W.players && W.players.length ? ranking()[0] : null;
+  return `<i class="ch-prio">👑 Le Baron${top ? ` (${esc(top.id === ME.id ? "toi" : top.name)})` : ""} est prioritaire : s'il la met en 1er vœu, elle est à lui, sans tirage au sort.</i>`;
 }
 function chRankTap(p){
   GC.rank = GC.rank || [];
@@ -4598,6 +4603,7 @@ const GC_STYLE = `
 .ch-l.pick.on .num{background:#F2C14E;border:2px solid #FFE6A8;color:#3B1F17}.ch-l.pick.on{background:rgba(242,193,78,.08)}
 .ch-l.mine{background:rgba(242,193,78,.1);border-radius:12px;padding-left:6px}
 .ch-act{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.b2-wrap .ch-act .b2-btn{padding:7px 12px!important;font-size:13px!important}
+.ch-prio{display:block;font:800 12px/1.35 var(--round);font-style:normal;color:#FFD877;margin-top:4px}
 .ch-voters{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 4px;justify-content:center}.ch-v{font:800 12px var(--round);padding:4px 10px;border-radius:99px;background:rgba(0,0,0,.25);opacity:.7}.ch-v.ok{background:rgba(127,208,143,.25);opacity:1}
 .ch-sw{padding:8px 0;border-top:1px solid rgba(255,255,255,.12)}.ch-sw p{margin:0 0 8px;font:700 14px/1.4 var(--round)}
 .ch-in{width:100%;box-sizing:border-box;font:800 22px var(--round);text-align:center;padding:12px;border-radius:14px;border:2px solid #D8C49C;background:#FFF;margin:8px 0}

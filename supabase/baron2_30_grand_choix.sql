@@ -104,6 +104,15 @@ declare free text[] := _baron2_lieux(); todo text[]; rnd int := 0; p record; wan
 begin
   select array_agg(id order by random()) into todo from baron2_players;
   for x in select unnest(_baron2_lieux()) loop perform _baron2_lieu_set(x, null); end loop;
+  -- le Baron est prioritaire sur la Roulette : s'il l'a mise en 1er vœu, elle est à lui, sans tirage
+  win := _baron2_top();
+  if win is not null and (select ranking->>0 from baron2_choix_voeux where player_id = win) = 'casino' then
+    perform _baron2_lieu_set('casino', win);
+    log := log || jsonb_build_object('place', 'casino', 'id', win, 'name', (select name from baron2_players where id = win), 'round', 1, 'prio', true,
+      'others', coalesce((select jsonb_agg(pl.name) from baron2_choix_voeux v join baron2_players pl on pl.id = v.player_id where v.ranking->>0 = 'casino' and v.player_id <> win), '[]'::jsonb),
+      'voted', true);
+    free := array_remove(free, 'casino'); todo := array_remove(todo, win);
+  end if;
   while coalesce(array_length(todo, 1), 0) > 0 and coalesce(array_length(free, 1), 0) > 0 loop
     rnd := rnd + 1;
     want := '{}'::jsonb;
