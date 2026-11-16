@@ -1,0 +1,5 @@
+-- Le Baron : moins de verrous (16 nov. 2026) — EN LIGNE
+-- Vers 10 h 10, la base a saturé (attentes en file sur les sauvegardes) : le grand choix et les charges verrouillaient
+-- une ligne à CHAQUE sauvegarde. Désormais on lit sans verrou et on ne verrouille que s'il y a vraiment quelque chose à faire.
+-- (Contenu appliqué en ligne : voir les définitions de _baron2_choix_settle et _baron2_charges dans Supabase,
+--  identiques à baron2_30 sauf la lecture sans verrou au début.)

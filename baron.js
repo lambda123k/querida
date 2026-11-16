@@ -907,7 +907,7 @@ async function loadWorld(force){
     const r = await rpc("baron2_world", {});
     BX.setMarket({ press: r.press || {}, med: r.med });
     W = { res: r.reserve || null, players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
-    await loadOrders(true); await loadEtb(); loadCasino(); loadPort(); loadLotto(); loadFly(); loadLoans(); loadCad(); loadDestin(); loadLabo(); loadCara(); loadSpy(); loadChoix();
+    await loadOrders(true); await loadEtb(); loadCasino(); loadPort(); loadLotto(); loadFly(); loadLoans(); loadCad();
     if (wrapEl && (view === "market" || view === "village" || view === "atelier") && !gestOpen && !sheetOpen) draw();
   }catch(e){}
 }
@@ -1829,6 +1829,7 @@ async function start(){
     if (reformMsg){ const m = reformMsg; reformMsg = null; dirty = true; setTimeout(() => reformSheet(m), 400); }
     else if (gained >= 1) setTimeout(() => toast(`Pendant ton absence, tes contremaîtres ont rentré ${fmtN(gained)} ${P[S.spec].e} dans la grange`, "gold"), 500);
     loop(); loadWorld(true); save(true);
+    setTimeout(() => { if (wrapEl){ loadDestin(); loadLabo(); loadCara(); loadSpy(); loadChoix(); } }, 3000);
   }catch(e){
     const m = String(e && e.message || "");
     if (m.includes("jeton inconnu")){ setToken(null); return showPick(); }
