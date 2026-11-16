@@ -97,19 +97,29 @@ ne sont volontairement pas écrits ici : les demander à Naim.
   Règle validée : la caravane et ses villes ne demandent/affichent JAMAIS un plat pas encore découvert (déjà le cas : `_baron2_cara_cat` et `exoOf` filtrent `found`) ; à garder pour les nouvelles villes.
   Prototype validé : artefact « Le Laboratoire · essai » (https://claude.ai/artifact/L29tUHTUapQuo97cwkfDib).
   Attribution plus tard : `update baron2_labo set owner_id = '<id>'`, `update baron2_cara set owner_id = '<id>'`.
-- À CODER (décidé le 16 nov. 2026, sur la branche `baron-labo`, rien en ligne) — le Réseau d'espions, dernier des 4 nouveaux lieux :
-  · Le maître espion vend des « dossiers » sur un joueur (argent exact, stock, paris en cours, lots de caravane, bateaux,
-    essais et recettes secrètes au Laboratoire). C'est LUI qui fixe le prix de chaque type de dossier ; il a 10 dossiers gratuits par jour.
-    La victime ne sait JAMAIS rien (pas de contre-espionnage, aucun message).
-  · Il voit toutes les commandes du village du prochain créneau 20 min avant tout le monde (et peut vendre l'info).
-  · Classement flou : partout, les fortunes des autres sont arrondies à 2 chiffres significatifs (352B → 350B) ; seule un dossier donne la vraie.
-  · Avec lui, changements du jeu pour que l'info ait de la valeur :
-    - Laboratoire en mélange libre (voir plus haut) ouvert à TOUS ; seul le chercheur a les indices (🟢/🎯 et indices des cartes),
-      les autres cherchent à l'aveugle. Brevet cher. Un dossier sur le chercheur montre ses essais et ses recettes non brevetées.
-    - Caravane qui sature : plus il y a de lots du même produit sur un voyage, moins les villes le paient.
-  · Refusés par Naim : appels d'offres secrets, nouvelles du village en avance, « grosses positions » (déjà visibles), contre-espionnage.
+- CODÉ le 16 nov. 2026 (branche `baron-labo`, PAS en ligne) — `supabase/baron2_29_espions.sql` (à lancer après 27 et 28), baron.js v49 :
+  · Laboratoire en MÉLANGE LIBRE ouvert à tous : grille recalée en haut à gauche (`_baron2_labo_norm`, la forme compte, pas la position),
+    38 plats de `.github/labo-recettes.json` (les 11 anciennes supprimées), pain perdu `known` (connu de tous, cuisinable par tous).
+    `baron2_labo_try(p_token, p_state, p_grid)` (plus de p_k) : découverte → `found_by` + annonce ; recette secrète d'un autre refaite →
+    apprise en secret (`baron2_labo_known`), cuisinable sans royalties, la victime n'en sait rien ; raté → 🟢/🎯 (recette inconnue la plus proche)
+    SEULEMENT pour le chercheur. Indices des cartes (nb d'ingrédients + indice) seulement pour le chercheur ; « Savoir ce que c'est »
+    = `baron2_labo_name` (0,5 % de la fortune moyenne). Brevet : 5 % de la fortune moyenne (min 50B). Livre en cartes n°1-38, essais illimités.
+  · Caravane : villes connues de tous (Europe : Bruxelles, Madrid, Rome ; Amériques : New York, La Havane, Rio ; Tour du monde : Londres,
+    Moscou, Pékin, Tokyo), chaque plat recherché dans une ville (×1,5), pièce montée partout. Saturation : ×1/(1+0,3×(lots du même produit −1)).
+    Avant le départ, les lots des autres sont cachés (« un lot, contenu inconnu »).
+  · Réseau d'espions : tables `baron2_spy` (prix par type dans `prices`, 10 gratuits/jour pour le maître) et `baron2_spy_files`.
+    Dossiers : argent (argent exact + vraie fortune), grange, paris, caravane (+ nb de lots par produit), bateaux, labo (essais + recettes
+    secrètes AVEC grilles : bouton « Poser » dans la grille), commandes (prochain créneau, sans cible). Prix fixés par le maître (Vendre / − / + / ✕),
+    payés au maître (`spy_fee`, charges 20 % « Espions »). Le maître voit toujours les commandes du prochain créneau.
+  · Classement flou : `baron2_world` arrondit les fortunes à 2 chiffres (`_baron2_round2`) et donne `stats.rk` (ordre exact) ; le client trie par rk
+    et affiche « ≈ » devant les fortunes des autres.
+  · Testé sur un Postgres local avec tous les fichiers SQL + Playwright (3 joueurs) : aucune erreur de page.
+  · Attribution plus tard : `update baron2_spy set owner_id = '<id>', since = now() where id = 1;`
+  · Remarque : le Destin ne paie pas de charges (déjà le cas avant, à décider).
   · Ensuite : attribution des 4 lieux (Destin, Laboratoire, Caravane, Espions) — chacun choisit, tirage au sort si deux veulent le même ;
-    le Casino reste au Baron ; mise en ligne de tout en même temps, seulement avec l'accord de Naim.
+    le Casino reste au Baron ; mise en ligne de tout en même temps (fichiers 27, 28, 29 puis baron.js), seulement avec l'accord de Naim.
+  · Refusés par Naim : appels d'offres secrets, nouvelles du village en avance, « grosses positions » (déjà visibles), contre-espionnage.
+  · `.github/baron-src/` n'est plus à jour : `baron.js` fait foi.
 - Coups de malice (Cartes Chance, Almanach, prête-nom, contrats) : codés sur la branche `baron-malice`, mis de côté par Naim.
 
 ## Tests

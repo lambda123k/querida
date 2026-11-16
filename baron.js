@@ -805,7 +805,7 @@ function applyCredits(list){
     if (c.product === "fly_fee" || c.product === "fly_bank"){ portFees.push(Object.assign({}, c, { fl: 1 })); continue; }
     if (c.product === "egg_dup") continue;
     if (c.product === "egg_fee"){ portFees.push(Object.assign({}, c, { eg: 1 })); continue; }
-    if (c.product === "charge"){ toast(`🧾 Charges ${c.buyer === "Casino" ? "du casino" : c.buyer === "Port" ? "du port" : c.buyer === "Loterie" ? "de la loterie" : c.buyer === "Œufs" ? "du Maître des œufs" : c.buyer === "Caravane" ? "de la caravane" : c.buyer === "Laboratoire" ? "de tes brevets" : "de l'aérodrome"} : −${COIN}${fmtN(-c.coins)}, versées au Baron (le Tribut)`); continue; }
+    if (c.product === "charge"){ toast(`🧾 Charges ${c.buyer === "Casino" ? "du casino" : c.buyer === "Port" ? "du port" : c.buyer === "Loterie" ? "de la loterie" : c.buyer === "Œufs" ? "du Maître des œufs" : c.buyer === "Caravane" ? "de la caravane" : c.buyer === "Laboratoire" ? "de tes brevets" : c.buyer === "Espions" ? "du réseau d'espions" : "de l'aérodrome"} : −${COIN}${fmtN(-c.coins)}, versées au Baron (le Tribut)`); continue; }
     if (c.product === "cad_sale"){ const [who, lieu] = String(c.buyer).split("|"); toast(`📜 ${esc(who)} a racheté ${lieu === "Port" ? "ton Port" : "ton Aérodrome"} au prix que tu avais fixé : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); loadCad(); loadPort(); loadFly(); continue; }
     if (c.product === "cad_tax"){ toast(`📜 Impôt sur ${c.buyer === "Port" ? "ton Port" : "ton Aérodrome"} : −${COIN}${fmtN(-c.coins)}, versés au Baron`); continue; }
     if (c.product === "notice"){ toast(esc(c.buyer), "gold"); continue; }
@@ -907,7 +907,7 @@ async function loadWorld(force){
     const r = await rpc("baron2_world", {});
     BX.setMarket({ press: r.press || {}, med: r.med });
     W = { res: r.reserve || null, players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
-    await loadOrders(true); await loadEtb(); loadCasino(); loadPort(); loadLotto(); loadFly(); loadLoans(); loadCad(); loadDestin(); loadLabo(); loadCara();
+    await loadOrders(true); await loadEtb(); loadCasino(); loadPort(); loadLotto(); loadFly(); loadLoans(); loadCad(); loadDestin(); loadLabo(); loadCara(); loadSpy();
     if (wrapEl && (view === "market" || view === "village" || view === "atelier") && !gestOpen && !sheetOpen) draw();
   }catch(e){}
 }
@@ -1876,6 +1876,7 @@ function loop(){
     if (n % 4 === 1) dsTick();
     if (n % 40 === 20 || (n % 16 === 6 && view === "casino" && CZ.game === "labo")) loadLabo();
     if (n % 40 === 28 || (n % 16 === 10 && view === "casino" && CZ.game === "cara")) loadCara();
+    if (n % 40 === 36 || (n % 16 === 14 && view === "casino" && CZ.game === "spy")) loadSpy();
     if (n % 4 === 3) lbTick();
     if (n % 40 === 32 && (view === "port" || view === "casino")) loadCad().then(() => { if ((view === "port" || (view === "casino" && CZ.game === "envol" && !FL.f)) && !sheetOpen) draw(); });
     if (view === "casino" && CZ.game === "bureau") lnTick();
@@ -2853,9 +2854,9 @@ function villageHTML(){
     <div class="b2-paper" style="background:#FFF4E0"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><h2 class="b2-h2" style="margin:0">Commandes du village<small>Les mêmes pour tout le village. La prime va au premier qui termine : les autres sont seulement payés au prix de base.</small></h2><span class="b2-clock">⏳ <span data-live="clock">${fmtT(((ORD ? ORD.slot : curSlot()) + 1) * BAL.slotMs - now())}</span></span></div></div>
     ${ORD && P[ORD.next_big] ? `<div class="b2-ann"><span>📣 Prochaine grande commande : <b>${P[ORD.next_big].e} ${esc(P[ORD.next_big].label)}</b><small>Fais ton stock avant les autres !</small></span></div>` : ""}
     <div class="b2-notes">${notes}</div>
-    ${top ? `<div class="b2-baron"><span class="crown">${CROWN}</span><div class="sp"><small>Le Baron du moment</small><b>${esc(top.id === ME.id ? "C'est toi !" : top.name)}</b><span class="f">${COIN}${fmtN(top.stats?.fortune || 0)} · ${P[top.specialty]?.e || ""} ${esc(P[top.specialty]?.label || "")}</span></div></div>` : ""}
+    ${top ? `<div class="b2-baron"><span class="crown">${CROWN}</span><div class="sp"><small>Le Baron du moment</small><b>${esc(top.id === ME.id ? "C'est toi !" : top.name)}</b><span class="f">${top.id === ME.id ? "" : "≈ "}${COIN}${fmtN(top.stats?.fortune || 0)} · ${P[top.specialty]?.e || ""} ${esc(P[top.specialty]?.label || "")}</span></div></div>` : ""}
     <div class="b2-paper b2-rank"><h2 class="b2-h2">Classement<small>Fortune : argent, stock et la moitié de ce que tu as construit.</small></h2>
-      ${players.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}${totTag(p.id)}${p.stats?.pio ? " 🎖️" : ""}<small>${esc(P[p.specialty]?.label || "")}${p.stats?.farms && p.stats.farms.length > 1 ? " + " + p.stats.farms.filter(x => x !== p.specialty).map(x => P[x]?.e).join("") : ""} · ${fmtN(p.stats?.prod || 0, 1)} pièces/s</small></span><span class="f">${COIN}${fmtN(p.stats?.fortune || 0)}</span></div>`).join("")}
+      ${players.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}${totTag(p.id)}${p.stats?.pio ? " 🎖️" : ""}<small>${esc(P[p.specialty]?.label || "")}${p.stats?.farms && p.stats.farms.length > 1 ? " + " + p.stats.farms.filter(x => x !== p.specialty).map(x => P[x]?.e).join("") : ""} · ${fmtN(p.stats?.prod || 0, 1)} pièces/s</small></span><span class="f">${p.id === ME.id ? "" : "≈ "}${COIN}${fmtN(p.stats?.fortune || 0)}</span></div>`).join("")}
     </div>
     <div class="b2-titles">${best("prod", "Gros producteur", "🏭")}${best("traded", "Meilleur trader", "📈")}${best("baked", "Pâtissier", "🧁")}${best("orders", "Ami du village", "📦")}</div>
   </div></div>`;
@@ -2958,6 +2959,7 @@ function casinoHTML(){
   if (CZ.game === "destin") return `<div class="cz ds"><div class="b2-col b2-pad">${back("✨ Le Destin")}${destinHTML()}</div></div>`;
   if (CZ.game === "labo") return `<div class="cz lb"><div class="b2-col b2-pad">${back("⚗️ Le Laboratoire")}${laboHTML()}</div></div>`;
   if (CZ.game === "cara") return `<div class="cz cv"><div class="b2-col b2-pad">${back("🐫 La Caravane")}${caravaneHTML()}</div></div>`;
+  if (CZ.game === "spy") return `<div class="cz sp"><div class="b2-col b2-pad">${back("🕵️ Le Réseau d'espions")}${spyHTML()}</div></div>`;
   return `<div class="cz"><div class="b2-col b2-pad">
     ${back("🎡 La Roulette")}
     <div class="cz-hd"><span class="cz-st ${open ? "on" : ""}">${open ? "Roulette ouverte" : "Roulette fermée"}</span></div>
@@ -2981,12 +2983,15 @@ function czLobby(){
     ${card("destin", "✨", "Le Destin", (() => { const D = DS.info, o = D && D.owner, n = D && D.asks ? D.asks.length : 0, sky = D ? (D.fx || []).filter(x => now() >= +x.start && now() < +x.end) : [];
       return !D ? "La météo du village" : dsIamDestin() ? (n ? `${n} vœu${n > 1 ? "x" : ""} en attente` : "Tu tiens le ciel") : o ? `${esc(o.name)} tient le ciel${sky.length ? ` · ${sky.map(x => dsW(x.kind).e).join(" ")}` : ""}` : "Bientôt…"; })(),
       dsIamDestin() && DS.info.asks.length ? `<span class="cz-st on">${DS.info.asks.length}</span>` : `<span class="go">›</span>`, "d")}
-    ${card("labo", "⚗️", "Le Laboratoire", (() => { if (!LB.info) return "Les recettes secrètes"; const b = lbBook(), f = b.filter(r => r.found).length;
+    ${card("labo", "⚗️", "Le Laboratoire", (() => { if (!LB.info) return "Les recettes secrètes"; const b = lbBook(), f = b.filter(r => r.found || r.known).length;
       return lbIam() ? `Tu cherches · ${f}/${b.length} trouvées` : lbOwner() ? `Chercheur : ${esc(lbOwner().name)} · ${f}/${b.length} trouvées` : "Bientôt…"; })(),
       S.lab ? `<span class="cz-st on">${exoInfo(S.lab.k).e}</span>` : `<span class="go">›</span>`, "lb")}
     ${card("cara", "🐫", "La Caravane", (() => { const I = CV.info, o = cvOwner(); if (!I) return "Les longs voyages"; if (!o) return "Bientôt…";
       return `${cvIam() ? "Ta caravane" : "Voyageur : " + esc(o.name)} · ${esc(I.rt.name)}`; })(),
       CV.info && cvOwner() ? `<span class="cz-st ${CV.info.on_road ? "on" : ""}">${CV.info.on_road ? "En route" : "Au départ"}</span>` : `<span class="go">›</span>`, "cv")}
+    ${card("spy", "🕵️", "Le Réseau d'espions", (() => { const I = SP.info, o = spOwner(); if (!I) return "Tout savoir sur les autres"; if (!o) return "Bientôt…";
+      return spIam() ? `Tu tiens le réseau · ${+I.free_left} dossier${+I.free_left > 1 ? "s" : ""} gratuit${+I.free_left > 1 ? "s" : ""}` : `Maître espion : ${esc(o.name)}`; })(),
+      `<span class="go">›</span>`, "sp")}
     ${card("lotto", "🎟️", "La Loterie", L ?`Cagnotte ${COIN}${fmtN(+L.jackpot)} · tirage à ${ltHour(L.draw_at)}` : "Bientôt…", `<span class="go">›</span>`, "l")}
     <button class="cz-room a" data-a="tab" data-v="port"><span class="ic">⚓</span><span class="sp"><b>Le Port</b><small>${ptOwner() ? (ptMine() ? "Ton port" : "Capitaine : " + esc(ptOwner().name)) : "Vendre à l'étranger"}${CAD.info && CAD.info.open && CAD.info.port && CAD.info.port.owner ? (CAD.info.port.priced ? ` · 📜 ${COIN}${fmtN(+CAD.info.port.price)}` : "") : ""}</small></span><span class="cz-st ${PT.info && PT.info.open ? "on" : ""}">${PT.info && PT.info.open ? "Ouvert" : "Fermé"}</span></button>
   </div></div>`;
@@ -3883,29 +3888,46 @@ const DS_STYLE = `
 .ds-fog h2{font:400 32px var(--disp);margin:8px 0}.ds-fog p{font:700 15px/1.45 var(--round)}
 `;
 try{ const dst = document.createElement("style"); dst.id = "ds-style"; dst.textContent = DS_STYLE; document.head.appendChild(dst); }catch(e){}
-/* =================== Le Laboratoire et la Caravane (15 nov. 2026) ===================
-   Le Laboratoire : un chercheur cherche des recettes exotiques cachées dans une grille de 3×3 (façon Minecraft).
-   Chaque essai brûle les produits posés ; la réponse dit combien d'ingrédients sont justes et combien sont à la
-   bonne case, jamais lesquels. Recette trouvée : son découvreur la cuisine seul, ou dépose un brevet (tout le monde
-   la cuisine, il touche 5 % des ventes). Les produits exotiques ne se vendent qu'en caravane.
-   La Caravane : un voyageur emmène les produits transformés (recettes, luxe, exotiques) sur de longues routes,
-   ville par ville, avec des risques en chemin (pillage, sable, douane) et une assurance qu'il fixe et qu'il paie. */
-const LB = { info:null, at:0, k:null, grid:[null, null, null, null, null, null, null, null, null], busy:false, res:null };
+/* =================== Le Laboratoire et la Caravane (15-16 nov. 2026) ===================
+   Le Laboratoire (ouvert à tous) : on pose ce qu'on veut dans une grille de 3×3. La forme compte, pas la position
+   (façon Minecraft). 38 plats connus de tous à découvrir, le pain perdu en exemple. Chaque mélange brûle les produits
+   posés et coûte un peu d'argent ; essais illimités.
+   · Seul le chercheur a des indices : 🟢/🎯 par rapport à la recette inconnue la plus proche, le nombre d'ingrédients
+     et l'indice de chaque carte, et « Savoir ce que c'est » (payant). Les autres cherchent à l'aveugle.
+   · Recette découverte : son découvreur la cuisine seul, ou dépose un brevet (cher) : tout le monde la cuisine et il
+     touche 5 % de chaque vente. Une recette secrète refaite par un autre (grâce à un dossier d'espion, par exemple) :
+     il l'apprend en secret et la cuisine sans rien payer.
+   · Les plats du Laboratoire ne se vendent qu'en caravane.
+   La Caravane : un voyageur emmène les produits transformés (recettes, luxe, plats du Laboratoire) sur de longues routes,
+   ville par ville, avec des risques en chemin et une assurance qu'il fixe et qu'il paie. Plus il y a de lots du même
+   produit sur un voyage, moins les villes le paient ; avant le départ, on ne voit pas ce que les autres ont chargé. */
+const LB = { info:null, at:0, grid:[null, null, null, null, null, null, null, null, null], busy:false, res:null, cell:-1 };
 const LB_BREW_MS = 30 * 60000;
 const lbBook = () => (LB.info && LB.info.book) || [];
 const lbRec = k => lbBook().find(r => r.k === k) || null;
 const lbOwner = () => LB.info && LB.info.owner ? LB.info.owner : null;
 const lbIam = () => !!(lbOwner() && lbOwner().id === ME.id);
-const exoInfo = k => { const r = lbRec(k); return r && r.name ? { e: r.e, label: r.name } : { e: "🧪", label: "Produit exotique" }; };
+const exoInfo = k => { const r = lbRec(k); return r && r.name ? { e: r.e, label: r.name } : { e: "🧪", label: "Plat du Laboratoire" }; };
 const pInfo = k => P[k] ? { e: P[k].e, label: P[k].label } : exoInfo(k);
-// le cours d'un produit exotique : 2× la somme du cours de ses ingrédients
+// le cours d'un plat du Laboratoire : 2× la somme du cours de ses ingrédients
 const exoUnit = k => { const r = lbRec(k); if (!r || !r.ings) return 0; return 2 * r.ings.reduce((a, x) => a + (P[x] ? BX.vPrice(x, now()) : 0), 0); };
 const lbDose = () => Math.max(10, Math.round(BX.effRate(S, now()) * 10));            // par case : ~10 s de ta production
 const lbCost = () => BX.nice(Math.max(1e6, BX.fortune(S, now()) * 0.002));
 const lbCap = () => Math.max(20, Math.round(BX.effRate(S, now()) * 300));             // chaudron : ~5 min de ta production
-const lbAvail = () => lbBook().filter(r => r.found && r.ings && (r.patent || r.by_id === ME.id));
+const lbAvail = () => lbBook().filter(r => r.cook && r.ings);
+const lbCount = ings => { const c = {}; (ings || []).forEach(x => c[x] = (c[x] || 0) + 1); return c; };
 const cityAt = c => c === "Le Caire" ? "au Caire" : "à " + esc(c);
-const lbCity = r => r.city === "Partout" ? "🌍 Recherchée dans toutes les villes" : `📍 Recherchée ${cityAt(r.city)}`;
+const lbCity = r => !r.city ? "" : r.city === "Partout" ? "🌍 Recherchée dans toutes les villes" : `📍 Recherchée ${cityAt(r.city)}`;
+// la grille recalée en haut à gauche : seule la forme compte
+function lbNorm(g){
+  let r0 = 3, c0 = 3; g.forEach((k, i) => { if (k){ r0 = Math.min(r0, Math.floor(i / 3)); c0 = Math.min(c0, i % 3); } });
+  const o = [null, null, null, null, null, null, null, null, null];
+  g.forEach((k, i) => { if (k) o[(Math.floor(i / 3) - r0) * 3 + (i % 3 - c0)] = k; });
+  return o;
+}
+const lbSame = (a, b) => { const x = lbNorm(a), y = lbNorm(b); return x.every((k, i) => (k || null) === (y[i] || null)); };
+const lbMini = g => `<div class="lb-mini">${(g || []).map(k => `<i>${k && P[k] ? P[k].e : ""}</i>`).join("")}</div>`;
+const lbGridView = g => `<div class="lb-table sm"><div class="lb-grid">${lbNorm(g || []).map(k => `<div class="lb-cell ${k ? "on" : ""}">${k && P[k] ? P[k].e : ""}</div>`).join("")}</div></div>`;
 async function loadLabo(){
   try{
     const r = await rpc("baron2_labo_get", { p_token: getToken() }); LB.info = r; LB.at = now();
@@ -3915,79 +3937,98 @@ async function loadLabo(){
 function laboHTML(){
   const I = LB.info;
   if (!I) return `<p class="cz-empty">Les alambics chauffent…</p>`;
-  const own = lbOwner(), me = lbIam(), book = lbBook(), nf = book.filter(r => r.found).length;
+  const own = lbOwner(), me = lbIam(), book = lbBook(), nf = book.filter(r => r.found || r.known).length, mine = book.filter(r => r.cook).length;
   const head = `<div class="ds-hd"><div class="lb-flask">⚗️</div><p>${own ? `Le chercheur : <b>${esc(me ? "toi" : own.name)}</b>` : "Le Laboratoire n'a pas encore de chercheur."}</p>
-    <div class="ds-cnt"><span>${nf} / ${book.length}</span>recettes découvertes</div></div>`;
-  if (me && LB.k && lbRec(LB.k) && !lbRec(LB.k).found) return head + lbBench();
+    <div class="ds-cnt"><span>${mine} / ${book.length}</span>recettes que tu sais faire${nf > mine ? ` · ${nf} trouvées au village` : ""}</div></div>`;
+  const ex = lbRec("painperdu");
+  const exBox = ex && ex.grid ? `<div class="lb-ex">${lbMini(ex.grid)}<p>Exemple : <b>${ex.e} ${esc(ex.name)}</b>, c'est ${ex.ings.map(x => P[x].e).join(" + ")} empilés. Chaque plat a sa forme : à toi de la trouver. Pose-la où tu veux dans la grille, seule la forme compte.</p></div>` : "";
+  const dose = lbDose(), cost = lbCost(), n = LB.grid.filter(Boolean).length;
+  const need = {}; LB.grid.forEach(k => { if (k) need[k] = (need[k] || 0) + dose; });
+  const miss = Object.keys(need).filter(k => (S.stock[k] || 0) < need[k]);
+  const ok = n && !miss.length && S.coins >= cost && !LB.busy;
+  const cells = LB.grid.map((k, i) => `<button class="lb-cell ${k ? "on" : ""} ${k && miss.includes(k) ? "low" : ""}" data-a="lb-cell" data-i="${i}" aria-label="Case ${i + 1}">${k ? P[k].e : ""}</button>`).join("");
+  let res = "";
+  if (LB.res){
+    const R = LB.res;
+    res = R.none ? `<div class="lb-res2 ${R.pop ? "pop" : ""}">Tu connais déjà toutes les recettes 🎉</div>`
+      : R.good != null ? `<div class="lb-res2 ${R.pop ? "pop" : ""}">Rien ne se passe… Mais une recette inconnue ressemble à ça :<div class="h"><span><b>🟢 ${R.good}</b>bon${R.good > 1 ? "s" : ""} ingrédient${R.good > 1 ? "s" : ""}</span><span><b>🎯 ${R.placed}</b>à la bonne place</span></div><small>On ne te dit pas laquelle, ni quels ingrédients.</small></div>`
+      : `<div class="lb-res2 ${R.pop ? "pop" : ""}">Rien ne se passe…<small>${own ? `Seul le chercheur (${esc(own.name)}) sait si l'on s'approche d'une recette.` : "Personne ne t'aide : tu cherches à l'aveugle."}</small></div>`;
+    R.pop = false;
+  }
+  const bench = `<div class="lb-table"><div class="lb-grid">${cells}</div></div>${res}
+    <div class="b2-two" style="margin-top:12px"><button class="b2-btn ghost" data-a="lb-clear" ${n ? "" : "disabled"}>Vider</button><button class="b2-btn gold" data-a="lb-try" ${ok ? "" : "disabled"}>${LB.busy ? "L'alambic chauffe…" : `⚗️ Mélanger · ${COIN}${fmtN(cost)}`}</button></div>
+    <p class="lb-tip">Touche une case vide pour y poser un produit, une case pleine pour l'enlever. Chaque case brûle ${fmtN(dose)} unités.${miss.length ? ` <b>Il te manque ${miss.map(k => P[k].e).join(" ")}.</b>` : ""}</p>`;
+  const cards = book.map((r, i) => {
+    const seen = r.found || r.known, cls = r.cook ? "ok" : seen ? "fd" : "";
+    const tag = r.cook ? (r.by_id === ME.id && !r.patent ? "🔒" : r.copied && !r.patent ? "🤫" : r.patent ? "📜" : "") : seen ? "🔒" : r.what ? "💡" : "";
+    return `<button class="lb-card ${cls} ${r.k === "piece" ? "leg" : ""}" data-a="lb-page" data-k="${r.k}"><span class="n">n°${i + 1}</span><span class="e">${seen ? r.e : "❓"}</span><small>${seen ? esc(r.name) : "???"}</small>${tag ? `<i class="t">${tag}</i>` : ""}</button>`;
+  }).join("");
   const t = now(), avail = lbAvail();
   const pot = S.lab ? `<div class="lb-pot"><span class="lb-ic bub">${exoInfo(S.lab.k).e}</span><span class="sp"><b>${fmtN(S.lab.q)} ${esc(exoInfo(S.lab.k).label)}</b><small>au chaudron · prêt dans <i data-lb-end="${S.lab.end}">${fmtT(S.lab.end - t)}</i></small></span></div>`
-    : avail.length ? avail.map(r => `<button class="ds-w" data-a="lb-brew" data-k="${r.k}"><span class="ds-ic">${r.e}</span><span class="sp"><b>${esc(r.name)}</b><small>${r.ings.map(x => P[x] ? P[x].e : "?").join(" + ")}${r.patent ? "" : " · ta recette secrète"}</small></span><span class="pr">${COIN}${fmtP(exoUnit(r.k))}</span></button>`).join("")
-    : `<p class="cz-empty">Aucune recette à cuisiner pour l'instant. Il faut qu'une recette soit découverte, puis brevetée.</p>`;
+    : avail.length ? avail.map(r => `<button class="ds-w" data-a="lb-brew" data-k="${r.k}"><span class="ds-ic">${r.e}</span><span class="sp"><b>${esc(r.name)}</b><small>${r.ings.map(x => P[x] ? P[x].e : "?").join(" + ")}${r.by_id === ME.id && !r.patent ? " · ta recette secrète" : r.copied && !r.patent ? " · apprise en secret" : ""}</small></span><span class="pr">${COIN}${fmtP(exoUnit(r.k))}</span></button>`).join("")
+    : `<p class="cz-empty">Aucune recette à cuisiner pour l'instant.</p>`;
   const inv = Object.keys(S.exo || {}).filter(k => S.exo[k] >= 1);
   const invHTML = inv.length ? `<div class="lb-inv">${inv.map(k => `<span>${exoInfo(k).e}<b>${fmtN(S.exo[k])}</b><small>${esc(exoInfo(k).label)}</small></span>`).join("")}</div>
     <button class="b2-btn gold" style="width:100%;margin-top:10px" data-a="cz-game" data-g="cara">🐫 Les vendre en caravane</button>` : "";
-  const cards = book.map(r => {
-    const side = r.found ? (r.by_id === ME.id && !r.patent ? `<span class="cz-st on">Brevet ?</span>` : r.patent ? `<span class="lb-tag">📜</span>` : `<span class="lb-tag">🔒</span>`)
-      : me ? `<span class="go">›</span>` : "";
-    return `<button class="lb-rc ${r.found ? "ok" : ""}" data-a="lb-rec" data-k="${r.k}"><span class="lb-ic">${r.found ? r.e : "❓"}</span><span class="sp"><b>${r.found ? esc(r.name) : "Recette inconnue"}</b><small>${esc(r.riddle)}</small>
-      <small class="lb-meta">${lbCity(r)}${r.found ? ` · trouvée par ${esc(r.by_id === ME.id ? "toi" : r.by)}${r.patent ? ", brevetée" : ", secrète"}` : r.ntries ? ` · ${r.ntries} essai${r.ntries > 1 ? "s" : ""}` : ""}</small></span>${side}</button>`;
-  }).join("");
+  const tries = (I.tries || []).map(x => `<div class="lb-try">${lbMini(x.grid)}<span>${x.hit ? `${lbRec(x.hit) ? lbRec(x.hit).e : "✅"}<br>${x.kind === "found" ? "trouvée" : x.kind === "copy" ? "apprise" : "connue"}` : +x.good >= 0 ? `🟢 ${x.good}<br>🎯 ${x.placed}` : "…"}</span></div>`).join("");
   return `${head}
-    ${me ? `<div class="cz-bank"><h3>Tu es le chercheur</h3><p>Choisis une énigme, pose des produits dans la grille et lance un essai. Les essais sont illimités, mais chacun brûle ses produits et coûte un peu.</p>
-      ${+I.roy ? `<div class="cz-sum"><span>Tes brevets sur 24 h</span><b class="up">+${COIN}${fmtN(+I.roy)}</b></div>` : ""}</div>` : ""}
-    <div class="cz-feed"><h3>Le livre des recettes</h3>${cards}</div>
+    ${me ? `<div class="cz-bank"><h3>Tu es le chercheur</h3><p>Toi seul as les indices : après chaque mélange raté, 🟢 et 🎯 te disent à quel point une recette inconnue est proche, et chaque carte du livre te donne son indice.</p>
+      ${+I.roy ? `<div class="cz-sum"><span>Tes brevets sur 24 h</span><b class="up">+${COIN}${fmtN(+I.roy)}</b></div>` : ""}</div>`
+      : `<p class="ln-tip" style="text-align:center">Tout le monde peut chercher, mais à l'aveugle : ${own ? `seul le chercheur, ${esc(own.name)}, a les indices` : "seul le chercheur aura les indices"}.</p>`}
+    ${exBox}${bench}
+    <div class="cz-feed"><h3>Le livre des recettes</h3><div class="lb-book">${cards}</div></div>
     <div class="cz-feed"><h3>Le chaudron</h3>${pot}${invHTML}</div>
-    <p class="cz-note">Seul le chercheur fait des essais, autant qu'il veut. Chaque essai brûle les produits posés et coûte un peu d'argent. La réponse dit combien d'ingrédients sont justes et combien sont à la bonne case, jamais lesquels. Une recette trouvée reste secrète tant que son découvreur ne dépose pas de brevet : ensuite tout le monde peut la cuisiner, et il touche 5 % de chaque vente. Les produits exotiques ne se vendent qu'en caravane.</p>`;
-}
-// la paillasse : la grille de 3×3, la réponse du dernier essai et les essais précédents
-function lbBench(){
-  const r = lbRec(LB.k), I = LB.info, dose = lbDose(), cost = lbCost(), left = Infinity;
-  const need = {}; LB.grid.forEach(k => { if (k) need[k] = (need[k] || 0) + dose; });
-  const miss = Object.keys(need).filter(k => (S.stock[k] || 0) < need[k]);
-  const n = LB.grid.filter(Boolean).length, ok = n && !miss.length && S.coins >= cost && left > 0 && !LB.busy;
-  const cells = LB.grid.map((k, i) => `<button class="lb-cell ${k ? "on" : ""} ${k && miss.includes(k) ? "low" : ""}" data-a="lb-cell" data-i="${i}" aria-label="Case ${i + 1}">${k ? P[k].e : ""}</button>`).join("");
-  const res = LB.res && LB.res.k === LB.k ? `<div class="lb-res"><span><b>${LB.res.good}</b>bon${LB.res.good > 1 ? "s" : ""} ingrédient${LB.res.good > 1 ? "s" : ""}</span><span><b>${LB.res.placed}</b>à la bonne case</span></div>` : "";
-  const tries = (r.tries || []).map(t => `<div class="lb-try"><div class="lb-mini">${(t.grid || []).map(k => `<i>${k && P[k] ? P[k].e : ""}</i>`).join("")}</div><span>🟢 ${t.good}<br>🎯 ${t.placed}</span></div>`).join("");
-  return `<button class="b2-btn ghost lb-back" data-a="lb-rec" data-k="">‹ Le livre des recettes</button>
-    <div class="lb-riddle"><span>❓</span><p>${esc(r.riddle)}<small>${lbCity(r)}</small></p></div>
-    <div class="lb-table"><div class="lb-grid">${cells}</div></div>${res}
-    <div class="b2-two" style="margin-top:12px"><button class="b2-btn ghost" data-a="lb-clear" ${n ? "" : "disabled"}>Vider</button><button class="b2-btn gold" data-a="lb-try" ${ok ? "" : "disabled"}>${LB.busy ? "L'alambic chauffe…" : `Essayer · ${COIN}${fmtN(cost)}`}</button></div>
-    <p class="lb-tip">Chaque case pose ${fmtN(dose)} unités du produit, brûlées à l'essai.${miss.length ? ` <b>Il te manque ${miss.map(k => P[k].e).join(" ")}.</b>` : ""}</p>
-    ${tries ? `<div class="cz-feed"><h3>Tes essais</h3><div class="lb-tries">${tries}</div></div>` : ""}
-    <p class="cz-note">🟢 : combien de produits posés font partie de la recette, peu importe la case. 🎯 : combien sont exactement à la bonne case. Le nombre d'ingrédients de la recette n'est jamais dit.</p>`;
+    ${tries ? `<div class="cz-feed"><h3>Tes derniers mélanges</h3><div class="lb-tries">${tries}</div></div>` : ""}
+    <p class="cz-note">Les essais sont illimités, mais chaque mélange brûle les produits posés et coûte un peu d'argent. Une recette découverte reste secrète tant que son découvreur ne dépose pas de brevet : ensuite tout le monde peut la cuisiner, et il touche 5 % de chaque vente. Qui refait la recette secrète d'un autre l'apprend en secret, sans rien lui payer. Les plats du Laboratoire ne se vendent qu'en caravane.</p>`;
 }
 function lbCellSheet(i){
   const dose = lbDose(), groups = [["Récoltes", BX.RAW], ["Recettes", BX.CRAFT], ["Sous-produits", BX.SUB], ["Produits de luxe", BX.AGED]];
   sheetCtx = null; LB.cell = i;
   sheet(`<h3>Case ${i + 1} : quel produit ?</h3><p class="b2-note">Il faut ${fmtN(dose)} unités par case. Les produits grisés te manquent.</p>
-    ${groups.map(([t, ks]) => `<h4 class="lb-gh">${t}</h4><div class="b2-stock">${ks.map(k => `<button class="b2-tile ${(S.stock[k] || 0) >= dose ? "" : "lb-low"}" data-a="lb-put" data-k="${k}"><div class="ic">${P[k].e}</div><b>${fmtN(S.stock[k] || 0)}</b><small>${esc(P[k].label)}</small></button>`).join("")}</div>`).join("")}
-    ${LB.grid[i] ? `<button class="b2-btn ghost big" style="margin-top:12px" data-a="lb-put" data-k="">Vider la case</button>` : ""}`);
+    ${groups.map(([t, ks]) => `<h4 class="lb-gh">${t}</h4><div class="b2-stock">${ks.map(k => `<button class="b2-tile ${(S.stock[k] || 0) >= dose ? "" : "lb-low"}" data-a="lb-put" data-k="${k}"><div class="ic">${P[k].e}</div><b>${fmtN(S.stock[k] || 0)}</b><small>${esc(P[k].label)}</small></button>`).join("")}</div>`).join("")}`);
+}
+function lbCellTap(i){
+  if (LB.grid[i]){ LB.grid[i] = null; LB.res = null; sound("tap"); draw(); return; }
+  sound("tap"); lbCellSheet(i);
 }
 async function lbTry(){
-  const k = LB.k, grid = LB.grid.slice(), dose = lbDose(), cost = lbCost();
-  if (LB.busy || !k || !grid.some(Boolean)) return;
+  const grid = LB.grid.slice(), dose = lbDose(), cost = lbCost();
+  if (LB.busy || !grid.some(Boolean)) return;
+  const known = lbBook().find(r => r.cook && r.grid && lbSame(grid, r.grid));
+  if (known){ toast(`${known.e} Tu sais déjà faire ${esc(known.name.toLowerCase())} : cuisine-le au chaudron.`); return; }
   const need = {}; grid.forEach(x => { if (x) need[x] = (need[x] || 0) + dose; });
-  if (Object.keys(need).some(x => (S.stock[x] || 0) < need[x]) || S.coins < cost){ toast("Il te manque des produits ou des pièces pour cet essai.", "err"); return; }
+  if (Object.keys(need).some(x => (S.stock[x] || 0) < need[x]) || S.coins < cost){ toast("Il te manque des produits ou des pièces pour ce mélange.", "err"); return; }
   LB.busy = true; for (const x in need) S.stock[x] -= need[x]; S.coins -= cost; dirty = true; draw();
   try{
-    const r = await queue(() => rpc("baron2_labo_try", { p_token: getToken(), p_state: S, p_k: k, p_grid: grid }));
-    lastSave = now(); LB.info = r; LB.res = r.res; if (r.credits) applyCredits(r.credits);
-    if (r.res && r.res.found){ sound("up"); buzz([40, 30, 40, 30, 120]); LB.busy = false; LB.k = null; LB.grid = [null, null, null, null, null, null, null, null, null]; draw(); lbFoundSheet(lbRec(k)); return; }
-    sound(r.res && r.res.good ? "coin" : "tap"); buzz(15);
+    const r = await queue(() => rpc("baron2_labo_try", { p_token: getToken(), p_state: S, p_grid: grid }));
+    lastSave = now(); LB.info = r; if (r.credits) applyCredits(r.credits);
+    const R = r.res || {};
+    if (R.hit && (R.kind === "found" || R.kind === "copy")){
+      sound("up"); buzz([40, 30, 40, 30, 120]); LB.busy = false; LB.res = null; LB.grid = [null, null, null, null, null, null, null, null, null]; draw(); lbFoundSheet(lbRec(R.hit), R.kind); return;
+    }
+    LB.res = Object.assign({ pop: true }, R);
+    sound(R.good ? "coin" : "tap"); buzz(15);
   }catch(e){
     for (const x in need) S.stock[x] += need[x]; S.coins += cost;
     const m = String(e && e.message || "");
-    toast(m.includes("plus d'essais") ? "Le laboratoire a fait ses 30 essais du jour." : m.includes("déjà trouvée") ? "Quelqu'un vient de trouver cette recette." : m.includes("pas le chercheur") || m.includes("pas de chercheur") ? "Tu n'es plus le chercheur du laboratoire." : m.includes("pas assez") ? "Il te manque des produits pour cet essai." : errText(e), "err");
+    toast(m.includes("pas assez") ? "Il te manque des produits pour ce mélange." : errText(e), "err");
     loadLabo();
   }
   LB.busy = false; draw();
 }
-function lbFoundSheet(r){
+function lbFoundSheet(r, kind){
   if (!r) return;
   sheetCtx = null;
-  const pr = +LB.info.patent_price || 0;
-  sheet(`<div class="ds-big">${r.e}</div><h3 style="text-align:center">${esc(r.name)} !</h3><p style="text-align:center">Tu as trouvé une recette exotique. ${r.ings ? r.ings.map(x => P[x] ? P[x].e : "").join(" + ") : ""}</p>
-    <p>Pour l'instant, elle est <b>secrète</b> : tu es le seul à pouvoir la cuisiner. Avec un <b>brevet</b>, tout le monde peut la cuisiner, et tu touches 5 % de chaque vente en caravane.</p>
+  const pr = +LB.info.patent_price || 0, i = lbBook().indexOf(r) + 1;
+  if (kind === "copy"){
+    sheet(`<div class="ds-big">${r.e}</div><h3 style="text-align:center">${esc(r.name)} !</h3><p style="text-align:center">Recette n°${i}, la recette secrète de ${esc(r.by)}.</p>
+      ${lbGridView(r.grid)}<p>Tu l'as refaite toi-même : tu peux la cuisiner au chaudron et la vendre en caravane, sans rien lui payer. <b>${esc(r.by)} n'en saura rien.</b></p>
+      <button class="b2-btn gold big" data-a="close-sheet">Motus</button>`);
+    return;
+  }
+  sheet(`<div class="ds-big">${r.e}</div><h3 style="text-align:center">${esc(r.name)} !</h3><p style="text-align:center">Nouvelle recette découverte, n°${i} du livre. Tout le village l'apprend, mais pas comment la faire.</p>
+    ${lbGridView(r.grid)}
+    <p>Pour l'instant, elle est <b>secrète</b> : tu es le seul à pouvoir la cuisiner (à moins qu'on la refasse en cachette). Avec un <b>brevet</b>, tout le monde peut la cuisiner, et tu touches 5 % de chaque vente en caravane.</p>
     <button class="b2-btn gold big" data-a="lb-patent" data-k="${r.k}" ${S.coins >= pr ? "" : "disabled"}>📜 Déposer le brevet · ${COIN}${fmtN(pr)}</button>
     <button class="b2-btn ghost big" style="margin-top:8px" data-a="close-sheet">La garder secrète</button>`);
 }
@@ -3998,49 +4039,71 @@ async function lbPatent(k){
   try{
     const r = await queue(() => rpc("baron2_labo_patent", { p_token: getToken(), p_state: S, p_k: k }));
     lastSave = now(); LB.info = r; if (r.credits) applyCredits(r.credits);
-    sound("up"); toast(`📜 Brevet déposé : tout le village peut cuisiner ${esc(exoInfo(k).label)}, et tu touches 5 % de chaque vente.`, "gold");
+    sound("up"); toast(`📜 Brevet déposé : tout le village peut cuisiner ${esc(exoInfo(k).label.toLowerCase())}, et tu touches 5 % de chaque vente.`, "gold");
   }catch(e){ S.coins += pr; toast(String(e && e.message || "").includes("déjà") ? "Cette recette est déjà brevetée." : errText(e), "err"); loadLabo(); }
   LB.busy = false; draw();
 }
-function lbRecTap(k){
-  if (!k){ LB.k = null; sound("tap"); draw(); return; }
+// la page d'une carte du livre
+function lbPage(k){
   const r = lbRec(k); if (!r) return;
-  if (!r.found){
-    if (!lbIam()){ toast(lbOwner() ? `Seul le chercheur (${esc(lbOwner().name)}) peut chercher les recettes.` : "Le Laboratoire n'a pas encore de chercheur."); return; }
-    if (LB.k !== k){ LB.k = k; LB.res = null; }
-    sound("tap"); wrapEl.querySelector("#b2-main").scrollTop = 0; draw(); return;
+  sheetCtx = null;
+  const i = lbBook().indexOf(r) + 1, me = lbIam(), seen = r.found || r.known;
+  if (r.cook){
+    const st = r.known ? "Connue de tous" : r.by_id === ME.id ? (r.patent ? "Trouvée par toi, brevetée : tu touches 5 % de chaque vente" : "Trouvée par toi · ta recette secrète") : r.patent ? `Trouvée par ${esc(r.by)}, brevetée (5 % pour ${esc(r.by)} à chaque vente)` : `La recette secrète de ${esc(r.by)}, apprise en cachette`;
+    sheet(`<div class="ds-big">${r.e}</div><h3 style="text-align:center">${esc(r.name)}</h3><p style="text-align:center">n°${i} · ${st}</p>
+      ${lbGridView(r.grid)}<p style="text-align:center" class="b2-note">${r.ings.map(x => P[x].e).join(" + ")} · ${lbCity(r)} (×1,5 en caravane)</p>
+      <button class="b2-btn gold big" data-a="lb-brew" data-k="${r.k}" ${S.lab ? "disabled" : ""}>${S.lab ? "Ton chaudron est occupé" : "🍳 La cuisiner au chaudron"}</button>
+      ${r.by_id === ME.id && !r.patent ? `<button class="b2-btn ghost big" style="margin-top:8px" data-a="lb-found" data-k="${r.k}">📜 Déposer le brevet</button>` : ""}`);
+    return;
   }
-  if (r.by_id === ME.id && !r.patent){ lbFoundSheet(r); return; }
-  if (r.ings && (r.patent || r.by_id === ME.id)){ lbBrewSheet(k); return; }
-  toast(`${r.e} ${esc(r.name)} : la recette secrète de ${esc(r.by)}.`);
+  const hints = me ? `<div class="lb-hint"><small>Nombre d'ingrédients</small>${r.n}</div><div class="lb-hint"><small>L'indice</small>${esc(r.hint || "")}</div>
+      ${seen ? "" : r.what ? `<div class="lb-hint"><small>Ce que c'est</small>${esc(r.what)}</div>` : `<button class="b2-btn gold big" data-a="lb-name" data-k="${r.k}" ${S.coins >= +LB.info.name_price ? "" : "disabled"}>💡 Savoir ce que c'est · ${COIN}${fmtN(+LB.info.name_price)}</button>`}`
+    : `<p class="b2-note" style="text-align:center">Seul le chercheur${lbOwner() ? ` (${esc(lbOwner().name)})` : ""} a les indices de cette recette. Toi, tu cherches à l'aveugle.</p>`;
+  sheet(`<div class="ds-big" ${seen ? "" : `style="opacity:.5"`}>${seen ? r.e : "❓"}</div><h3 style="text-align:center">${seen ? esc(r.name) : `Recette n°${i}`}</h3>
+    ${seen ? `<p style="text-align:center">n°${i} · trouvée par ${esc(r.by)}, secrète 🔒<br><small>${lbCity(r)}</small></p>` : ""}
+    ${hints}<button class="b2-btn ghost big" style="margin-top:10px" data-a="close-sheet">Fermer</button>`);
+}
+async function lbName(k){
+  const pr = +LB.info.name_price || 0;
+  if (LB.busy || S.coins < pr || !lbIam()) return;
+  LB.busy = true; S.coins -= pr; dirty = true;
+  try{
+    const r = await queue(() => rpc("baron2_labo_name", { p_token: getToken(), p_state: S, p_k: k }));
+    lastSave = now(); LB.info = r; if (r.credits) applyCredits(r.credits);
+    sound("coin"); LB.busy = false; lbPage(k); draw(); return;
+  }catch(e){ S.coins += pr; toast(errText(e), "err"); loadLabo(); }
+  LB.busy = false; draw();
 }
 function lbBrewSheet(k){
   const r = lbRec(k); if (!r || !r.ings) return;
   if (S.lab){ toast("Ton chaudron est déjà occupé."); return; }
-  const max = Math.min(lbCap(), ...r.ings.map(x => Math.floor(S.stock[x] || 0)));
+  const cnt = lbCount(r.ings), ks = Object.keys(cnt);
+  const max = Math.min(lbCap(), ...ks.map(x => Math.floor((S.stock[x] || 0) / cnt[x])));
   sheetCtx = { type: "brew", k };
-  sheet(`<div class="ds-big">${r.e}</div><h3 style="text-align:center">${esc(r.name)}</h3><p style="text-align:center">Pour 1 ${r.e} : ${r.ings.map(x => `1 ${P[x] ? P[x].e : "?"}`).join(" + ")}. Cuisson : 30 min.</p>
+  sheet(`<div class="ds-big">${r.e}</div><h3 style="text-align:center">${esc(r.name)}</h3><p style="text-align:center">Pour 1 ${r.e} : ${ks.map(x => `${cnt[x]} ${P[x] ? P[x].e : "?"}`).join(" + ")}. Cuisson : 30 min.</p>
     ${max >= 1 ? `${qtyBlock(max, max, "q")}<div class="b2-sum" data-sum></div><button class="b2-btn gold big" data-a="confirm">Lancer le chaudron</button><p class="b2-note">Ton chaudron cuit jusqu'à ${fmtN(lbCap())} d'un coup.</p>`
-      : `<p class="b2-note" style="text-align:center">Il te manque des ingrédients : ${r.ings.filter(x => !(S.stock[x] >= 1)).map(x => P[x] ? P[x].e + " " + P[x].label.toLowerCase() : x).join(", ")}.</p>`}`);
+      : `<p class="b2-note" style="text-align:center">Il te manque des ingrédients : ${ks.filter(x => (S.stock[x] || 0) < cnt[x]).map(x => P[x] ? P[x].e + " " + P[x].label.toLowerCase() : x).join(", ")}.</p>`}`);
   if (max >= 1) sheetSum();
 }
 function lbBrew(k, q){
-  const r = lbRec(k); if (!r || !r.ings || S.lab) return;
-  if (r.ings.some(x => (S.stock[x] || 0) < q)){ toast("Il te manque des ingrédients.", "err"); return; }
-  r.ings.forEach(x => S.stock[x] -= q);
+  const r = lbRec(k); if (!r || !r.ings || S.lab || q < 1) return;
+  const cnt = lbCount(r.ings);
+  if (Object.keys(cnt).some(x => (S.stock[x] || 0) < cnt[x] * q)){ toast("Il te manque des ingrédients.", "err"); return; }
+  for (const x in cnt) S.stock[x] -= cnt[x] * q;
   S.lab = { k, q, end: now() + LB_BREW_MS }; dirty = true; save(true); closeSheet();
-  sound("up"); toast(`🧪 ${fmtN(q)} ${r.e} au chaudron : prêts dans 30 min.`); draw();
+  sound("up"); toast(`🍳 ${fmtN(q)} ${r.e} au chaudron : prêts dans 30 min.`); draw();
 }
 function lbTick(){
   if (!S) return;
   if (S.lab && now() >= S.lab.end && LB.info){
     const { k, q } = S.lab; S.exo = S.exo || {}; S.exo[k] = (S.exo[k] || 0) + q; delete S.lab; dirty = true; save(true);
-    sound("coin"); toast(`🧪 Ton chaudron est prêt : ${fmtN(q)} ${exoInfo(k).e} ${esc(exoInfo(k).label)}. Ils se vendent en caravane.`, "gold");
+    sound("coin"); toast(`🍳 Ton chaudron est prêt : ${fmtN(q)} ${exoInfo(k).e} ${esc(exoInfo(k).label)}. Ils se vendent en caravane.`, "gold");
     if (view === "casino" && !sheetOpen) draw();
   }
   if (!wrapEl) return;
   wrapEl.querySelectorAll("[data-lb-end]").forEach(el => { el.textContent = fmtT(+el.dataset.lbEnd - now()); });
   wrapEl.querySelectorAll("[data-cv-end]").forEach(el => { const l = +el.dataset.cvEnd - (now() - (CV.skew || 0)); el.textContent = l > 0 ? fmtT(l) : "bientôt"; });
+  wrapEl.querySelectorAll("[data-sp-end]").forEach(el => { const l = +el.dataset.spEnd - now(); el.textContent = l > 0 ? fmtT(l) : "maintenant"; });
 }
 
 /* ---------- La Caravane ---------- */
@@ -4051,9 +4114,9 @@ const CV_EV = {
   douane:  { e:"🛃", label:"Douane",           txt:"30 % des ventes de la ville prises" }
 };
 const CV_R = {
-  levant: { name:"Route du Levant",  e:"🏛️", h:3,  risk:8,  x:"×2,2 à ×3" },
-  epices: { name:"Route des épices", e:"🌶️", h:6,  risk:12, x:"×2,8 à ×4" },
-  soie:   { name:"Route de la soie", e:"🏯", h:10, risk:15, x:"×3,2 à ×6" }
+  levant: { name:"Route d'Europe",      e:"🏰", h:3,  risk:8,  x:"×2,2 à ×3" },
+  epices: { name:"Route des Amériques", e:"🗽", h:6,  risk:12, x:"×2,8 à ×4" },
+  soie:   { name:"Le Tour du monde",    e:"🌏", h:10, risk:15, x:"×3,2 à ×6" }
 };
 const cvOwner = () => CV.info && CV.info.owner ? CV.info.owner : null;
 const cvIam = () => !!(cvOwner() && cvOwner().id === ME.id);
@@ -4104,9 +4167,10 @@ function caravaneHTML(){
       <b>${s ? `${fmtN(+s.sold)} vendus` : I.on_road ? `<span data-cv-end="${eta}">${fmtT(eta - t)}</span>` : `${i === n - 1 ? "tout" : Math.round(+c.share * 100) + " %"}`}</b></div>`; }).join("");
   const route = `<div class="cz-feed"><h3>${R.e} ${esc(rt.name)} · ${n} étapes de ${cvX(+rt.h)} h · risque ${Math.round(+rt.risk * 100)} % par étape</h3>${towns}</div>`;
   const myLots = cvMine(), used = cvUsed(), hold = cvHold();
-  const lotRow = l => { const pi = pInfo(l.product), mine = l.pid === ME.id;
+  const lotRow = l => { if (l.hidden) return `<div class="cz-row"><span class="ds-ic">📦</span><span class="sp">${esc(l.name)} · un lot<small>Contenu inconnu jusqu'au départ</small></span></div>`;
+    const pi = pInfo(l.product), mine = l.pid === ME.id;
     return `<div class="cz-row"><span class="ds-ic">${pi.e}</span><span class="sp">${esc(mine ? "Toi" : l.name)} · ${fmtN(+l.qty)} ${esc(pi.label.toLowerCase())}${l.ins ? " 🛡️" : ""}
-      <small>${I.on_road ? `${fmtN(+l.left)} encore à vendre${+l.lost ? ` · ${fmtN(+l.lost)} perdus` : ""}` : `au cours de ${fmtP(+l.unit)}`}</small></span>
+      <small>${I.on_road ? `${fmtN(+l.left)} encore à vendre${+l.lost ? ` · ${fmtN(+l.lost)} perdus` : ""}${l.sat != null && +l.sat < 0.999 ? ` · trop de lots pareils : ×${cvX(+l.sat)}` : ""}` : `au cours de ${fmtP(+l.unit)}`}</small></span>
       ${I.on_road ? `<b class="up">+${COIN}${fmtN(+l.earned)}</b>` : mine ? `<button class="b2-btn ghost cv-take" data-a="cv-unload" data-id="${l.id}" ${CV.busy ? "disabled" : ""}>Reprendre</button>` : ""}</div>`; };
   let body = "";
   if (!own) body = `<p class="ln-tip">La caravane partira dès qu'elle aura un voyageur.</p>`;
@@ -4114,7 +4178,7 @@ function caravaneHTML(){
     const auto = I.first_at ? new Date(I.auto_at).getTime() : 0;
     const full = myLots.length >= 3 || used >= hold;
     body = `<div class="cz-bank"><h3>Le chargement</h3>
-      <p>${auto ? `Départ ${me ? "quand tu veux" : `quand ${esc(own.name)} le décide`}, au plus tard dans <b data-cv-end="${auto}">${fmtT(auto - t)}</b>.` : "La caravane attend son premier chargement."} Seulement des produits transformés : recettes, produits de luxe et produits exotiques.</p>
+      <p>${auto ? `Départ ${me ? "quand tu veux" : `quand ${esc(own.name)} le décide`}, au plus tard dans <b data-cv-end="${auto}">${fmtT(auto - t)}</b>.` : "La caravane attend son premier chargement."} Seulement des produits transformés : recettes, produits de luxe et plats du Laboratoire.</p>
       <button class="b2-btn gold big" data-a="cv-load" ${full || CV.busy ? "disabled" : ""}>${full ? (myLots.length >= 3 ? "Tu as déjà 3 lots" : "Tes chameaux sont pleins") : "🐫 Charger la caravane"}</button>
       <p class="b2-note" style="color:inherit;opacity:.75;text-align:center">Tes chameaux : ${fmtN(used)} / ${fmtN(hold)} unités · ${myLots.length} / 3 lots</p></div>
       <div class="cz-feed"><h3>Dans la caravane</h3>${I.lots.length ? I.lots.map(lotRow).join("") : `<p class="cz-empty">Rien pour l'instant.</p>`}</div>`;
@@ -4133,14 +4197,14 @@ function caravaneHTML(){
   const last = I.last && I.last.length ? `<div class="cz-feed"><h3>Le dernier voyage</h3>${I.last.map(l => `<div class="cz-row"><span class="ds-ic">${pInfo(l.product).e}</span><span class="sp">${esc(l.pid === ME.id ? "Toi" : l.name)} · ${fmtN(+l.qty)}${l.ins ? " 🛡️" : ""}${+l.lost ? `<small>${fmtN(+l.lost)} perdus en route</small>` : ""}</span><b class="up">+${COIN}${fmtN(+l.earned)}</b></div>`).join("")}</div>` : "";
   const log = I.log && I.log.length ? `<div class="cz-feed"><h3>Le carnet de route</h3>${I.log.map(s => `<div class="cz-row"><span class="ds-ic">${s.event && CV_EV[s.event] ? CV_EV[s.event].e : "✅"}</span><span class="sp">${esc(s.city)}<small>${s.event && CV_EV[s.event] ? CV_EV[s.event].label + " · " : ""}${fmtAgo(new Date(s.at).getTime())}</small></span><b>${fmtN(+s.sold)} vendus</b></div>`).join("")}</div>` : "";
   return `${head}<div class="cv-sw">${cvMap()}</div>${route}${body}${panel}${last}${log}
-    <p class="cz-note">À chaque ville, la caravane vend une partie de chaque lot (tout à la dernière), au cours du village au chargement multiplié par le prix de la ville : +25 % si la ville aime ce genre de produit, ×1,5 pour son produit exotique. Ventes qui ne font pas baisser les cours. En chemin : pillage (−40 % de ce qui reste), tempête de sable (−20 %) ou douane (−30 % des ventes de la ville). L'assurance rembourse les marchandises perdues, payée par le voyageur. 3 lots par voyage et par joueur ; sans départ, la caravane part seule 3 h après le premier chargement.</p>`;
+    <p class="cz-note">À chaque ville, la caravane vend une partie de chaque lot (tout à la dernière), au cours du village au chargement multiplié par le prix de la ville : +25 % si la ville aime ce genre de produit, ×1,5 pour les plats qu'elle recherche. Plus il y a de lots du même produit sur un voyage, moins les villes le paient (2 lots : ×0,77, 3 lots : ×0,63…), et avant le départ on ne voit pas ce que les autres ont chargé. Ventes qui ne font pas baisser les cours. En chemin : pillage (−40 % de ce qui reste), tempête de sable (−20 %) ou douane (−30 % des ventes de la ville). L'assurance rembourse les marchandises perdues, payée par le voyageur. 3 lots par voyage et par joueur ; sans départ, la caravane part seule 3 h après le premier chargement.</p>`;
 }
 function cvLoadSheet(k){
   const I = CV.info; if (!I) return;
   const left = Math.max(0, cvHold() - cvUsed());
   if (!k){
     const ks = BX.CRAFT.concat(BX.AGED).filter(x => S.stock[x] >= 1).concat(Object.keys(S.exo || {}).filter(x => S.exo[x] >= 1 && lbRec(x)));
-    if (!ks.length){ toast("Rien à charger : la caravane ne prend que des produits transformés (recettes, luxe, exotiques)."); return; }
+    if (!ks.length){ toast("Rien à charger : la caravane ne prend que des produits transformés (recettes, luxe, plats du Laboratoire)."); return; }
     sheetCtx = null;
     sheet(`<h3>🐫 Que veux-tu charger ?</h3><p>Seulement des produits transformés. Il reste ${fmtN(left)} places sur tes chameaux.</p>
       <div class="b2-stock">${ks.map(x => `<button class="b2-tile" data-a="cv-pick" data-k="${x}"><div class="ic">${pInfo(x).e}</div><b>${fmtN(cvHas(x))}</b><small>${esc(pInfo(x).label)}</small></button>`).join("")}</div>`);
@@ -4150,7 +4214,7 @@ function cvLoadSheet(k){
   const fav = rt.cities.filter(c => c.fav === cvCat(k)).map(c => c.c), r = lbRec(k);
   if (max < 1){ toast("Plus de place sur tes chameaux."); return; }
   sheetCtx = { type: "cara", k, ins: false };
-  sheet(`<h3>${pInfo(k).e} Charger la caravane</h3><p>Cours du village : <b>${fmtP(cvUnit(k))}</b>. Sur la ${esc(rt.name)}, les villes paient de ${cvX(Math.min(...ms))} à ${cvX(Math.max(...ms))} fois ce cours${fav.length ? ` (+25 % ${fav.map(cityAt).join(", ")})` : ""}${r && r.city ? (r.city === "Partout" ? ", et ×1,5 partout pour ce produit" : rt.cities.some(c => c.c === r.city) ? `, et ×1,5 ${cityAt(r.city)}` : "") : ""}. Voyage de ${cvX(+rt.h * rt.cities.length)} h.</p>
+  sheet(`<h3>${pInfo(k).e} Charger la caravane</h3><p>Cours du village : <b>${fmtP(cvUnit(k))}</b>. Sur la ${esc(rt.name)}, les villes paient de ${cvX(Math.min(...ms))} à ${cvX(Math.max(...ms))} fois ce cours${fav.length ? ` (+25 % ${fav.map(cityAt).join(", ")})` : ""}${r && r.city ? (r.city === "Partout" ? ", et ×1,5 partout pour ce produit" : rt.cities.some(c => c.c === r.city) ? `, et ×1,5 ${cityAt(r.city)}` : "") : ""}. Voyage de ${cvX(+rt.h * rt.cities.length)} h. Attention : si d'autres chargent le même produit, les villes le paient moins.</p>
     ${qtyBlock(max, max, "q")}${insOk ? `<button class="pt-ins" data-a="cv-ins"><span class="bx"></span><span class="sp"><b>🛡️ Assurer mon lot</b><small>Prime de ${+I.ins} % de la valeur estimée · les marchandises perdues sont remboursées</small></span></button>` : ""}
     <div class="b2-sum" data-sum></div><button class="b2-btn gold big" data-a="confirm">Charger</button>`);
   sheetSum();
@@ -4204,6 +4268,7 @@ function lcCredit(c, acc){
     case "cara_sale": S.stats.earned += +c.coins || 0; acc.sale.push({ coins: +c.coins || 0, k: sp[0], city: sp[1], ev: sp[2] }); return true;
     case "cara_fee": acc.fee.push(+c.coins || 0); return true;
     case "labo_roy": acc.roy.push(+c.coins || 0); return true;
+    case "spy_fee": { const k = SP_K[sp[0]] || { e:"🕵️", label:"un dossier" }; toast(`🕵️ ${esc(sp[1] || "Quelqu'un")} t'achète un dossier ${k.e} ${esc(k.label)} : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); if (view === "casino" && CZ.game === "spy") loadSpy(); return true; }
     case "cara_lost": { const ev = CV_EV[sp[2]] || { e:"⚠️", label:"Coup dur" }; toast(`${ev.e} ${ev.label} ${cityAt(sp[1])} : ta caravane perd ${fmtN(c.qty)} ${pInfo(sp[0]).e}`, "err"); buzz([60, 40, 60]); return true; }
     case "cara_insured": S.stats.earned += +c.coins || 0; toast(`🛡️ L'assurance de la caravane te rembourse : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); return true;
     case "cara_ins": toast(+c.qty === 0 ? `🛡️ ${esc(c.buyer)} assure son lot : +${COIN}${fmtN(c.coins)} de prime` : +c.qty === 2 ? `${esc(c.buyer)} a repris son lot : prime rendue −${COIN}${fmtN(-c.coins)}` : `⚔️ Le lot assuré de ${esc(c.buyer)} a été touché : tu le rembourses −${COIN}${fmtN(-c.coins)}`, +c.qty === 0 ? "gold" : "err"); return true;
@@ -4221,6 +4286,159 @@ function lcCreditsDone(acc){
   if (acc.fee.length){ const tot = acc.fee.reduce((a, x) => a + x, 0); toast(`🐫 Commission de la caravane : +${COIN}${fmtN(tot)}`, "gold"); }
   if (acc.roy.length){ const tot = acc.roy.reduce((a, x) => a + x, 0); toast(`📜 Tes brevets du Laboratoire : +${COIN}${fmtN(tot)}`, "gold"); }
 }
+/* =================== Le Réseau d'espions (16 nov. 2026) ===================
+   Le maître espion vend des dossiers sur les joueurs : argent exact, grange, paris, caravane, bateaux, Laboratoire.
+   C'est lui qui fixe le prix de chaque type de dossier ; il a 10 dossiers gratuits par jour pour lui. La victime ne sait
+   jamais rien. Il voit les commandes du prochain créneau 20 min avant tout le monde, et peut vendre l'info.
+   Classement flou : partout, les fortunes des autres sont arrondies ; seul un dossier donne la vraie. */
+const SP = { info:null, at:0, busy:false };
+const SP_K = {
+  argent:    { e:"💰", label:"Argent",      txt:"Son argent exact et sa vraie fortune" },
+  stock:     { e:"🏚️", label:"Grange",      txt:"Tout ce qu'il a en stock, et son chaudron" },
+  paris:     { e:"🎲", label:"Paris",       txt:"Ses paris en cours au marché" },
+  caravane:  { e:"🐫", label:"Caravane",    txt:"Ce qu'il a chargé sur la caravane, et combien de lots de chaque produit" },
+  bateaux:   { e:"⚓", label:"Bateaux",     txt:"Ses bateaux en mer" },
+  labo:      { e:"⚗️", label:"Laboratoire", txt:"Ses derniers mélanges et ses recettes secrètes" },
+  commandes: { e:"📋", label:"Commandes",   txt:"Les commandes du prochain créneau, 20 min avant tout le monde", solo:true }
+};
+const spOwner = () => SP.info && SP.info.owner ? SP.info.owner : null;
+const spIam = () => !!(spOwner() && spOwner().id === ME.id);
+const spPrice = k => SP.info && SP.info.prices && SP.info.prices[k] != null ? +SP.info.prices[k] : null;
+const spSuggest = () => BX.nice(Math.max(1e6, (+(SP.info && SP.info.avg) || 0) * 0.005));
+async function loadSpy(){
+  try{
+    const r = await rpc("baron2_spy_get", { p_token: getToken() }); SP.info = r; SP.at = now();
+    if (view === "casino" && (CZ.game === "spy" || CZ.game === "lobby") && !sheetOpen && !CZ.spinning && !FL.f && !SP.busy) draw();
+  }catch(e){}
+}
+// les commandes d'un créneau, en petit
+function spOrders(nx){
+  if (!nx || !Array.isArray(nx.list)) return "";
+  const start = new Date(nx.starts).getTime();
+  return `<p class="sp-when">Elles arrivent au village dans <b data-sp-end="${start}">${fmtT(start - now())}</b></p>
+    ${nx.list.map(o => `<div class="cz-row"><span class="ds-ic">${P[o.k] ? P[o.k].e : "📦"}</span><span class="sp">${fmtN(+o.qty)} ${esc(P[o.k] ? P[o.k].label.toLowerCase() : o.k)}${o.big ? " · grande commande" : ""}<small>${esc((BX.CHARS[o.who] || BX.CHARS.epiciere).name)}</small></span><b class="up">+${COIN}${fmtN(+o.bonus)}</b></div>`).join("")}`;
+}
+function spyHTML(){
+  const I = SP.info;
+  if (!I) return `<p class="cz-empty">On ouvre les dossiers…</p>`;
+  const own = spOwner(), me = spIam();
+  const head = `<div class="ds-hd"><div class="lb-flask">🕵️</div><p>${own ? `Le maître espion : <b>${esc(me ? "toi" : own.name)}</b>` : "Le Réseau n'a pas encore de maître espion."}</p>
+    ${me ? `<div class="ds-cnt"><span>${+I.free_left} / 10</span>dossiers gratuits aujourd'hui</div>` : ""}</div>`;
+  if (!own) return head + `<p class="ln-tip" style="text-align:center">Les dossiers seront en vente dès qu'il y aura un maître espion.</p>`;
+  const kinds = Object.keys(SP_K).filter(k => !(me && SP_K[k].solo));
+  const shop = kinds.map(k => { const K = SP_K[k], pr = spPrice(k), sold = !me && pr == null, bought = k === "commandes" && I.next;
+    return `<button class="ds-w ${sold || bought ? "off" : ""}" data-a="sp-kind" data-k="${k}" ${sold || bought ? "disabled" : ""}><span class="ds-ic">${K.e}</span><span class="sp"><b>${esc(K.label)}</b><small>${esc(K.txt)}</small></span>
+      <span class="pr">${me ? "Gratuit" : bought ? "Acheté" : pr == null ? "Pas à vendre" : `${COIN}${fmtN(pr)}`}</span></button>`; }).join("");
+  const files = (I.files || []).map(f => { const K = SP_K[f.kind] || { e:"🕵️", label:f.kind };
+    return `<button class="ds-w" data-a="sp-file" data-id="${f.id}"><span class="ds-ic">${K.e}</span><span class="sp"><b>${esc(K.label)}${f.target_name ? ` · ${esc(f.target_name)}` : ""}</b><small>${fmtAgo(new Date(f.at).getTime())}</small></span><span class="go">›</span></button>`; }).join("");
+  let panel = "";
+  if (me){
+    const row = k => { const K = SP_K[k], pr = spPrice(k);
+      return `<div class="sp-pr"><span class="ds-ic">${K.e}</span><span class="sp"><b>${esc(K.label)}</b><small>${pr == null ? "Pas à vendre" : `${COIN}${fmtN(pr)}`}</small></span>
+        ${pr == null ? `<button class="b2-btn gold" data-a="sp-set" data-k="${k}" data-v="${spSuggest()}" ${SP.busy ? "disabled" : ""}>Vendre</button>`
+          : `<button class="b2-btn ghost" data-a="sp-set" data-k="${k}" data-v="${Math.max(1, pr * 0.8)}" ${SP.busy ? "disabled" : ""} aria-label="Moins cher">−</button><button class="b2-btn ghost" data-a="sp-set" data-k="${k}" data-v="${pr * 1.25}" ${SP.busy ? "disabled" : ""} aria-label="Plus cher">+</button><button class="b2-btn ghost" data-a="sp-set" data-k="${k}" data-v="" ${SP.busy ? "disabled" : ""} aria-label="Retirer de la vente">✕</button>`}</div>`; };
+    const sales = (I.sales || []).map(x => `<div class="cz-row"><span class="ds-ic">${(SP_K[x.kind] || {}).e || "🕵️"}</span><span class="sp">${esc(x.buyer)}<small>${esc((SP_K[x.kind] || {}).label || x.kind)}${x.target ? ` sur ${esc(x.target)}` : ""} · ${fmtAgo(new Date(x.at).getTime())}</small></span><b class="up">+${COIN}${fmtN(+x.price)}</b></div>`).join("");
+    panel = `<div class="cz-bank"><h3>Tu es le maître espion</h3><p>Personne ne sait jamais qu'on l'espionne. Tu fixes le prix de chaque dossier ; l'argent est pour toi.</p>
+        <div class="cz-sum"><span>Tes ventes sur 24 h</span><b class="up">+${COIN}${fmtN(+I.gains || 0)}</b></div></div>
+      <div class="cz-feed"><h3>📋 Les commandes du prochain créneau</h3>${spOrders(I.next)}</div>
+      <div class="cz-feed"><h3>Tes prix</h3>${Object.keys(SP_K).map(row).join("")}<p class="b2-note" style="color:inherit;opacity:.7">Prix conseillé pour commencer : ${COIN}${fmtN(spSuggest())}, ½ % de la fortune moyenne du village.</p></div>
+      ${sales ? `<div class="cz-feed"><h3>Tes derniers clients</h3>${sales}</div>` : ""}${chargeNote()}`;
+  }
+  return `${head}${panel}
+    ${!me && I.next ? `<div class="cz-feed"><h3>📋 Les commandes du prochain créneau</h3>${spOrders(I.next)}</div>` : ""}
+    <div class="cz-feed"><h3>${me ? "Ouvrir un dossier" : "Acheter un dossier"}</h3>${shop}</div>
+    ${files ? `<div class="cz-feed"><h3>Tes dossiers</h3>${files}</div>` : ""}
+    <p class="cz-note">Un dossier montre l'état du joueur à sa dernière sauvegarde. La victime ne sait jamais rien. Au classement, les fortunes des autres sont arrondies : seul un dossier « Argent » donne la vraie.</p>`;
+}
+function spKindSheet(k){
+  const K = SP_K[k], I = SP.info; if (!K || !I) return;
+  const me = spIam(), pr = me ? 0 : spPrice(k);
+  if (!me && pr == null){ toast("Ce dossier n'est pas à vendre."); return; }
+  if (me && +I.free_left <= 0){ toast("Tu as ouvert tes 10 dossiers du jour. Reviens demain."); return; }
+  sheetCtx = null;
+  const cost = me ? "gratuit" : `${COIN}${fmtN(pr)}`;
+  if (K.solo){
+    sheet(`<div class="ds-big">${K.e}</div><h3 style="text-align:center">${esc(K.label)}</h3><p style="text-align:center">${esc(K.txt)}.</p>
+      <button class="b2-btn gold big" data-a="sp-buy" data-k="${k}" data-t="" ${!me && S.coins < pr ? "disabled" : ""}>Acheter · ${cost}</button>`);
+    return;
+  }
+  const ts = (I.targets || []);
+  sheet(`<div class="ds-big">${K.e}</div><h3 style="text-align:center">Dossier ${esc(K.label.toLowerCase())}</h3><p style="text-align:center">${esc(K.txt)}. ${me ? "Gratuit pour toi." : `Prix : ${cost}.`} Sur qui ?</p>
+    ${ts.map(p => `<button class="ds-w sp-tg" data-a="sp-buy" data-k="${k}" data-t="${esc(p.id)}" ${SP.busy || (!me && S.coins < pr) ? "disabled" : ""}><span class="ds-ic">${P[p.specialty] ? P[p.specialty].e : "👤"}</span><span class="sp"><b>${esc(p.name)}</b></span><span class="go">›</span></button>`).join("")}`);
+}
+async function spBuy(k, t){
+  const I = SP.info, me = spIam(), pr = me ? 0 : spPrice(k);
+  if (SP.busy || !I || (!me && (pr == null || S.coins < pr))) return;
+  SP.busy = true; if (pr) S.coins -= pr; dirty = true; closeSheet();
+  try{
+    const r = await queue(() => rpc("baron2_spy_buy", { p_token: getToken(), p_state: S, p_kind: k, p_target: t || null, p_price: me ? null : pr }));
+    lastSave = now(); SP.info = r; if (r.credits) applyCredits(r.credits);
+    sound("up"); buzz([20, 30, 20]); SP.busy = false; draw(); spFileSheet(+r.file_id); return;
+  }catch(e){
+    if (pr) S.coins += pr;
+    const m = String(e && e.message || "");
+    toast(m.includes("prix changé") ? "Le maître espion vient de changer son prix." : m.includes("pas à vendre") ? "Ce dossier n'est plus à vendre." : m.includes("gratuits") ? "Tu as ouvert tes 10 dossiers du jour." : m.includes("déjà acheté") ? "Tu as déjà ces commandes." : errText(e), "err");
+    loadSpy();
+  }
+  SP.busy = false; draw();
+}
+async function spSet(k, v){
+  if (SP.busy || !spIam()) return;
+  SP.busy = true;
+  try{ const r = await rpc("baron2_spy_price", { p_token: getToken(), p_kind: k, p_price: v === "" ? null : Math.max(1, +v) }); SP.info = r; sound("tap"); }
+  catch(e){ toast(errText(e), "err"); }
+  SP.busy = false; draw();
+}
+// le contenu d'un dossier
+function spFileSheet(id){
+  const f = SP.info && (SP.info.files || []).find(x => +x.id === +id); if (!f) return;
+  const K = SP_K[f.kind] || { e:"🕵️", label:f.kind }, d = f.data || {};
+  const ago = t => t ? fmtAgo(new Date(t).getTime()) : "";
+  const tiles = (o, info) => { const ks = Object.keys(o || {}).filter(x => +o[x] >= 1); return ks.length ? `<div class="b2-stock">${ks.map(x => `<div class="b2-tile"><div class="ic">${info(x).e}</div><b>${fmtN(+o[x])}</b><small>${esc(info(x).label)}</small></div>`).join("")}</div>` : `<p class="cz-empty">Rien.</p>`; };
+  let body = "";
+  switch (f.kind){
+    case "argent": body = `<div class="b2-sum"><span>Son argent</span><span>${COIN}${fmtN(+d.coins || 0)}</span></div><div class="b2-sum"><span>Sa vraie fortune</span><span>${COIN}${fmtN(+d.fortune || 0)}</span></div>`; break;
+    case "stock": body = `<h4 class="lb-gh">Sa grange</h4>${tiles(d.stock, x => pInfo(x))}${Object.keys(d.exo || {}).length ? `<h4 class="lb-gh">Ses plats du Laboratoire</h4>${tiles(d.exo, exoInfo)}` : ""}${d.lab ? `<p class="b2-note">Au chaudron : ${fmtN(+d.lab.q)} ${exoInfo(d.lab.k).e} ${esc(exoInfo(d.lab.k).label)}.</p>` : ""}`; break;
+    case "paris": body = (d.bets || []).length ? d.bets.map(b => `<div class="sp-li"><span class="ds-ic">${pInfo(b.k).e}</span><span class="sp"><b>${+b.d > 0 ? "📈 À la hausse" : "📉 À la baisse"} sur ${esc(pInfo(b.k).label.toLowerCase())}</b><small>Mise ${COIN}${fmtN(+b.m)} · au cours de ${fmtP(+b.p0)} · ${ago(+b.t0)}</small></span></div>`).join("") : `<p class="cz-empty">Aucun pari en cours.</p>`; break;
+    case "caravane": { const all = d.all || {}, ks = Object.keys(all);
+      body = `${(d.lots || []).length ? d.lots.map(l => `<div class="sp-li"><span class="ds-ic">${pInfo(l.product).e}</span><span class="sp"><b>${fmtN(+l.qty)} ${esc(pInfo(l.product).label.toLowerCase())}${l.ins ? " 🛡️" : ""}</b></span></div>`).join("") : `<p class="cz-empty">Rien sur la caravane${d.on_road ? " (elle est en route)" : ""}.</p>`}
+        ${ks.length ? `<h4 class="lb-gh">Toute la caravane</h4><p class="b2-note">${ks.map(x => `${pInfo(x).e} ${all[x]} lot${all[x] > 1 ? "s" : ""}`).join(" · ")}</p>` : ""}`; break; }
+    case "bateaux": body = (d.ships || []).length ? d.ships.map(b => `<div class="sp-li"><span class="ds-ic">${pInfo(b.product).e}</span><span class="sp"><b>${fmtN(+b.qty)} ${esc(pInfo(b.product).label.toLowerCase())}${b.ins ? " 🛡️" : ""}</b><small>L'étranger paiera ${COIN}${fmtN(+b.value)} · arrive dans ${fmtT(new Date(b.arrive).getTime() - now())}</small></span></div>`).join("") : `<p class="cz-empty">Aucun bateau en mer.</p>`; break;
+    case "labo": body = `${(d.secrets || []).length ? `<h4 class="lb-gh">Ses recettes secrètes</h4>${d.secrets.map(r => { const mine = lbRec(r.k) && lbRec(r.k).cook;
+        return `<div class="sp-li">${lbMini(r.grid)}<span class="sp"><b>${r.e} ${esc(r.name)}</b><small>${mine ? "Tu sais déjà la faire" : "Refais-la au Laboratoire pour l'apprendre"}</small></span>${mine ? "" : `<button class="b2-btn gold sp-copy" data-a="sp-copy" data-id="${f.id}" data-k="${esc(r.k)}">Poser</button>`}</div>`; }).join("")}` : `<p class="cz-empty">Aucune recette secrète.</p>`}
+      ${(d.tries || []).length ? `<h4 class="lb-gh">Ses derniers mélanges (${fmtN(+d.ntries || 0)} en tout)</h4><div class="lb-tries">${d.tries.map(x => `<div class="lb-try">${lbMini(x.grid)}<span>${x.hit && lbRec(x.hit) && lbRec(x.hit).e ? lbRec(x.hit).e : x.hit ? "✅" : "…"}</span></div>`).join("")}</div>` : ""}`; break;
+    case "commandes": body = spOrders(d); break;
+  }
+  sheetCtx = null;
+  sheet(`<div class="sp-file"><div class="sp-stamp">Confidentiel</div><h3>${K.e} ${esc(K.label)}${f.target_name ? ` · ${esc(f.target_name)}` : ""}</h3>
+    <p class="b2-note">${f.kind === "commandes" ? "Les commandes du prochain créneau" : `État à sa dernière sauvegarde${d.saved_at ? `, ${ago(d.saved_at)}` : ""}`} · dossier ouvert ${ago(f.at)}</p>${body}</div>
+    <button class="b2-btn ghost big" style="margin-top:12px" data-a="close-sheet">Refermer le dossier</button>`);
+}
+// poser la recette secrète d'un dossier dans la grille du Laboratoire
+function spCopy(id, k){
+  const f = SP.info && (SP.info.files || []).find(x => +x.id === +id), r = f && f.data && (f.data.secrets || []).find(x => x.k === k);
+  if (!r) return;
+  LB.grid = lbNorm(r.grid); LB.res = null; closeSheet(); CZ.game = "labo"; sound("tap"); loadLabo(); draw();
+  const m = wrapEl.querySelector("#b2-main"); if (m) m.scrollTop = 0;
+  toast(`${r.e} La recette est posée dans ta grille : mélange-la pour l'apprendre.`);
+}
+const SP_STYLE = `
+.cz.sp{background:radial-gradient(120% 70% at 50% 0,#3A3550,#1E1B2C 55%,#0E0C16)}
+.cz-room.sp{background:linear-gradient(135deg,#4A4466,#1E1B2C)!important;border:2px solid #C9C3E6!important}
+.cz.sp .lb-flask{filter:drop-shadow(0 0 12px rgba(201,195,230,.55))}
+.b2-wrap .ds-w.off{opacity:.5}
+.sp-pr{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,.08)}.sp-pr .sp{flex:1;min-width:0}
+.sp-pr b{display:block;font:800 14px var(--round)}.sp-pr small{font:700 12px var(--round);opacity:.75}
+.b2-wrap .sp-pr .b2-btn{padding:7px 11px!important;font-size:13px!important;min-width:38px}
+.sp-when{font:700 12px var(--round);opacity:.8;margin:0 0 6px}
+.sp-file{position:relative;background:#F4E9D2;border-radius:6px;padding:14px 14px 10px;box-shadow:inset 0 0 0 1px #D8C49C,0 3px 0 #C9B48A;color:#3B2A14}
+.sp-file h3{margin:2px 0 4px}.sp-stamp{position:absolute;top:10px;right:10px;transform:rotate(8deg);border:2px solid #B3261E;color:#B3261E;font:900 11px var(--round);letter-spacing:.08em;text-transform:uppercase;padding:2px 6px;border-radius:4px;opacity:.8}
+.sp-file .cz-row{border-color:rgba(0,0,0,.08)!important;color:#3B2A14!important}.sp-file .up{color:#2E7D32}
+.sp-li{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid rgba(0,0,0,.08)}.sp-li .sp{flex:1;min-width:0}.sp-li b{display:block;font:800 14px var(--round)}.sp-li small{font:600 12px var(--round);opacity:.75}
+.sp-file .lb-mini i{background:rgba(0,0,0,.08)}.sp-file .lb-try{background:rgba(0,0,0,.06)}
+.b2-wrap .sp-copy{padding:6px 12px!important;font-size:12px!important}
+`;
+try{ const sps = document.createElement("style"); sps.id = "sp-style"; sps.textContent = SP_STYLE; document.head.appendChild(sps); }catch(e){}
 const LC_STYLE = `
 .cz.lb{background:radial-gradient(120% 70% at 50% 0,#1F7A6B,#0F3F3A 55%,#08221F)}
 .cz.cv{background:radial-gradient(120% 70% at 50% 0,#9A5A2A,#5A3016 55%,#2E170A)}
@@ -4255,6 +4473,24 @@ const LC_STYLE = `
 .lb-inv{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .lb-inv span{display:flex;flex-direction:column;align-items:center;min-width:70px;background:rgba(0,0,0,.22);border-radius:12px;padding:8px;font-size:24px}
 .lb-inv b{font:900 14px var(--round)}.lb-inv small{font:600 10px var(--round);opacity:.7;text-align:center}
+.lb-ex{display:flex;gap:12px;align-items:center;background:rgba(242,213,138,.12);border:1.5px solid rgba(242,213,138,.4);border-radius:16px;padding:10px 12px;margin:4px 0 14px}
+.lb-ex p{margin:0;font:700 13px/1.4 var(--round);flex:1}.lb-ex b{color:#FFE6B8}
+.lb-mini{flex:none}.lb-mini i .b2-ic{width:14px;height:14px;vertical-align:0}.lb-mini i{display:flex;align-items:center;justify-content:center}
+.b2-wrap .lb-cell .b2-ic{width:.95em;height:.95em}
+.lb-table.sm{max-width:180px;padding:8px;margin:10px auto}.lb-table.sm .lb-grid{gap:5px}.lb-table.sm .lb-cell{font-size:26px;border-radius:8px}
+.lb-res2{margin-top:14px;background:rgba(0,0,0,.28);border-radius:16px;padding:12px;text-align:center;font:700 14px var(--round)}
+.lb-res2.pop{animation:lb-pop .35s}@keyframes lb-pop{40%{transform:scale(1.05)}}
+.lb-res2 .h{display:flex;justify-content:center;gap:18px;margin-top:6px}.lb-res2 .h span{font:700 12px var(--round)}.lb-res2 .h b{display:block;font:900 26px var(--round);color:#FFE6B8}
+.lb-res2 small{display:block;opacity:.7;font:600 12px var(--round);margin-top:4px}
+.lb-book{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.b2-wrap .lb-card{position:relative;aspect-ratio:3/4;border-radius:14px;background:rgba(255,255,255,.07)!important;border:2px solid rgba(255,255,255,.1)!important;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:4px;color:#EFFFFA!important}
+.lb-card .e{font-size:30px;line-height:1}.lb-card small{font:800 10px/1.15 var(--round);text-align:center}.lb-card .n{font:800 10px var(--round);opacity:.5}
+.lb-card .t{position:absolute;top:3px;right:4px;font-style:normal;font-size:12px}
+.b2-wrap .lb-card.ok{background:linear-gradient(160deg,#2FA88F,#136155)!important;border-color:#8FF0D8!important}
+.b2-wrap .lb-card.fd{background:rgba(255,255,255,.12)!important}.lb-card.fd .e{opacity:.7}
+.lb-card:not(.ok):not(.fd) .e{opacity:.5}.b2-wrap .lb-card.leg{border-color:#F2D58A!important}
+.lb-hint{background:#F3E4CC;border-radius:14px;padding:10px 12px;margin-top:8px;font:700 14px/1.4 var(--round);color:#3B1F17}
+.lb-hint small{display:block;font:800 11px var(--round);text-transform:uppercase;letter-spacing:.05em;color:#8A6A55;margin-bottom:2px}
 .cv-sw{margin:4px 0 6px}.cv-map{width:100%;height:auto;display:block;border-radius:16px;box-shadow:0 6px 0 rgba(0,0,0,.25)}
 .cv-road{fill:none;stroke:#8A4E1E;stroke-width:3;stroke-dasharray:6 6;opacity:.7}
 .cv-dot{fill:#FFF4E0;stroke:#8A4E1E;stroke-width:3}.cv-dot.done{fill:#7FD08F}.cv-dot.home{fill:#C8312A;stroke:#7A1C16}
@@ -4829,9 +5065,11 @@ async function claimOrder(c){
 /* ---------- Classement (la couronne en haut) ---------- */
 function ranking(){
   const me = publicStats();
-  const players = W.players.map(p => p.id === ME.id ? Object.assign({}, p, { stats: me }) : p);
+  const players = W.players.map(p => p.id === ME.id ? Object.assign({}, p, { stats: Object.assign({}, me, { rk: p.stats && p.stats.rk }) }) : p);
   if (!players.some(p => p.id === ME.id)) players.push({ id: ME.id, name: ME.name, specialty: S.spec, stats: me });
-  return players.sort((a, b) => (+b.stats?.fortune || 0) - (+a.stats?.fortune || 0));
+  // les fortunes des autres sont arrondies (classement flou) : l'ordre exact vient du serveur
+  const allRk = players.every(p => +p.stats?.rk > 0);
+  return players.sort((a, b) => allRk ? (+a.stats.rk - +b.stats.rk) : (+b.stats?.fortune || 0) - (+a.stats?.fortune || 0));
 }
 let lastRank = null;
 function rankTick(){
@@ -4852,10 +5090,10 @@ function rankSheet(){
   const f = p => +p.stats?.fortune || 0;
   const gap = above ? f(above) - f(pl[r]) : 0;
   sheet(`<div class="b2-throne"><span class="c">${CROWN}</span><small>Le Baron du moment</small><b>${esc(top.id === ME.id ? "Toi !" : top.name)}</b>
-      <span class="f">${COIN}${fmtN(f(top))} ${P[top.specialty]?.e || ""}</span></div>
-    ${above ? `<div class="b2-chase">Encore ${COIN}<b>${fmtN(gap)}</b> pour dépasser ${esc(above.name)}</div>` : `<div class="b2-chase win">Garde ta couronne !</div>`}
-    <div class="b2-rank">${pl.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}${totTag(p.id)}${p.stats?.pio ? " 🎖️" : ""}</span><span class="f">${COIN}${fmtN(f(p))}</span></div>`).join("")}</div>
-    <p class="b2-note" style="text-align:center">Fortune = pièces + stock + la moitié de ce que tu as construit</p>`);
+      <span class="f">${top.id === ME.id ? "" : "≈ "}${COIN}${fmtN(f(top))} ${P[top.specialty]?.e || ""}</span></div>
+    ${above ? `<div class="b2-chase">Encore ≈ ${COIN}<b>${fmtN(Math.max(0, gap))}</b> pour dépasser ${esc(above.name)}</div>` : `<div class="b2-chase win">Garde ta couronne !</div>`}
+    <div class="b2-rank">${pl.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}${totTag(p.id)}${p.stats?.pio ? " 🎖️" : ""}</span><span class="f">${p.id === ME.id ? "" : "≈ "}${COIN}${fmtN(f(p))}</span></div>`).join("")}</div>
+    <p class="b2-note" style="text-align:center">Fortune = pièces + stock + la moitié de ce que tu as construit. Celles des autres sont arrondies : seul un dossier d'espion donne la vraie.</p>`);
 }
 
 /* ---------- Choix de la spécialité ---------- */
@@ -5127,7 +5365,7 @@ function onClick(e){
     }
     case "cz-spin": czSpin(); return;
     case "cz-game": if (FL.f) return; CZ.game = b.dataset.g; CZ.res = null; LT.pick = []; sound("tap"); wrapEl.querySelector("#b2-main").scrollTop = 0; draw();
-      if (CZ.game === "envol") loadFly(); if (CZ.game === "lotto") loadLotto(); if (CZ.game === "roulette" || CZ.game === "lobby") loadCasino(); if (CZ.game === "bureau" || CZ.game === "lobby") loadLoans(); if (CZ.game === "destin" || CZ.game === "lobby") loadDestin(); if (CZ.game === "labo" || CZ.game === "lobby") loadLabo(); if (CZ.game === "cara" || CZ.game === "lobby"){ loadCara(); loadLabo(); } return;
+      if (CZ.game === "envol") loadFly(); if (CZ.game === "lotto") loadLotto(); if (CZ.game === "roulette" || CZ.game === "lobby") loadCasino(); if (CZ.game === "bureau" || CZ.game === "lobby") loadLoans(); if (CZ.game === "destin" || CZ.game === "lobby") loadDestin(); if (CZ.game === "labo" || CZ.game === "lobby") loadLabo(); if (CZ.game === "spy" || CZ.game === "lobby") loadSpy(); if (CZ.game === "cara" || CZ.game === "lobby"){ loadCara(); loadLabo(); } return;
     case "fl-chip": FL.chip = +b.dataset.i; FL.res = null; sound("tap"); draw(); return;
     case "fl-start": flStart(); return;
     case "fl-cash": flCash(); return;
@@ -5141,11 +5379,18 @@ function onClick(e){
     case "ds-go": dsGo(b.dataset.k, b.dataset.t); return;
     case "ds-cancel": dsCancel(); return;
     case "ds-yes": dsYes(b.dataset.id, b.dataset.y === "1"); return;
-    case "lb-rec": lbRecTap(b.dataset.k); return;
-    case "lb-cell": sound("tap"); lbCellSheet(+b.dataset.i); return;
-    case "lb-put": if (LB.cell != null && LB.cell >= 0){ LB.grid[LB.cell] = b.dataset.k || null; } closeSheet(); sound("tap"); draw(); return;
-    case "lb-clear": LB.grid = [null, null, null, null, null, null, null, null, null]; sound("tap"); draw(); return;
+    case "lb-page": sound("tap"); lbPage(b.dataset.k); return;
+    case "lb-name": lbName(b.dataset.k); return;
+    case "lb-found": sound("tap"); lbFoundSheet(lbRec(b.dataset.k), "found"); return;
+    case "lb-cell": lbCellTap(+b.dataset.i); return;
+    case "lb-put": if (LB.cell != null && LB.cell >= 0){ LB.grid[LB.cell] = b.dataset.k || null; LB.res = null; } LB.cell = -1; closeSheet(); sound("tap"); draw(); return;
+    case "lb-clear": LB.grid = [null, null, null, null, null, null, null, null, null]; LB.res = null; sound("tap"); draw(); return;
     case "lb-try": lbTry(); return;
+    case "sp-kind": sound("tap"); spKindSheet(b.dataset.k); return;
+    case "sp-buy": spBuy(b.dataset.k, b.dataset.t); return;
+    case "sp-set": spSet(b.dataset.k, b.dataset.v); return;
+    case "sp-file": sound("tap"); spFileSheet(+b.dataset.id); return;
+    case "sp-copy": spCopy(+b.dataset.id, b.dataset.k); return;
     case "lb-patent": lbPatent(b.dataset.k); return;
     case "lb-brew": sound("tap"); lbBrewSheet(b.dataset.k); return;
     case "cv-load": sound("tap"); cvLoadSheet(); return;
