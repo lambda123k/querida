@@ -1896,6 +1896,8 @@ function loop(){
     if (n % 40 === 24) loadLoans();
     if (n % 240 === 16 || (n % 16 === 4 && view === "casino" && CZ.game === "destin")) loadDestin();
     if (n % 4 === 1) dsTick();
+    if (n % 2400 === 1200) loadLotto();
+    if (n % 40 === 17) ltAd();
     if (n % 240 === 60 || (n % 40 === 6 && view === "casino" && CZ.game === "labo")) loadLabo();
     if (n % 240 === 100 || (n % 24 === 10 && view === "casino" && CZ.game === "cara")) loadCara();
     if (n % 240 === 140 || (n % 40 === 14 && view === "casino" && CZ.game === "spy")) loadSpy();
@@ -3364,6 +3366,26 @@ function ltReveal(){
   if (!seenId) setTimeout(() => toast(`🎟️ Le bug ? C'était un piège ! ${esc(o.name)} s'est sacrifié pour le village et devient le patron de la Loterie.`, "gold"), 1200);
   else setTimeout(() => toast(`🎟️ La Loterie a un nouveau patron : ${esc(o.name)}.`, "gold"), 1200);
 }
+// la pub de la Loterie : un rappel toutes les 12 min de jeu, et un « dernière chance » 10 min avant le tirage
+function ltAd(){
+  const L = LT.info; if (!L || !S || view === "lotto" || (view === "casino" && CZ.game === "lotto") || sheetOpen) return;
+  if (typeof unlocked === "function" && !unlocked(S, "village")) return;
+  const t = now(), draw = new Date(L.draw_at).getTime(), left = draw - t;
+  if (left > 0 && left < 10 * 60000 && LT.adDraw !== L.draw_at){
+    LT.adDraw = L.draw_at; LT.adAt = t;
+    toast(`⏳ Dernière chance ! Tirage de la Loterie à ${ltHour(L.draw_at)} : cagnotte de ${COIN}${fmtN(+L.jackpot)}. Ticket à ${COIN}${fmtN(+L.ticket)} sur La Place.`, "gold");
+    return;
+  }
+  if (!LT.adAt){ LT.adAt = t - 9 * 60000; return; }
+  if (t - LT.adAt < 12 * 60000) return;
+  LT.adAt = t;
+  const msgs = [
+    `🎟️ La cagnotte de la Loterie est à ${COIN}${fmtN(+L.jackpot)} ! Tirage à ${ltHour(L.draw_at)}.`,
+    `🎟️ Et si c'était toi ? ${COIN}${fmtN(+L.jackpot)} à gagner à la Loterie, tirage à ${ltHour(L.draw_at)}.`,
+    `🎟️ Chaque bateau coulé et chaque caravane pillée remplissent la cagnotte : ${COIN}${fmtN(+L.jackpot)} en jeu !`
+  ];
+  toast(msgs[Math.floor(Math.random() * msgs.length)], "gold");
+}
 const ltHour = t => { const d = new Date(t); return d.getHours() + " h" + (d.getMinutes() ? String(d.getMinutes()).padStart(2, "0") : ""); };
 function ltBall(n, cls){ return `<span class="lt-b ${cls || ""}">${n}</span>`; }
 function lottoHTML(){
@@ -3389,7 +3411,7 @@ function lottoHTML(){
       <button class="b2-btn gold" data-a="lt-buy" ${LT.pick.length === 2 && !full && !LT.busy ? "" : "disabled"}>${full ? "25 tickets max" : `Jouer · ${COIN}${fmtN(+L.ticket)}`}</button></div>
       ${tk.length ? `<div class="lt-mine"><span>Tes tickets pour ce tirage (${tk.length}/25)</span><div>${tk.map(([a, b]) => `<i>${a} · ${b}</i>`).join("")}</div></div>` : ""}</div>
     ${last}${panel}
-    <p class="pt-note">Le ticket coûte ${COIN}${fmtN(+L.ticket)}, et tout va dans la cagnotte : la Loterie appartient au village. S'il y a plusieurs gagnants, ils se partagent la cagnotte. Sans gagnant, elle grossit jusqu'au tirage suivant, ${(L.every ?? 2) === 1 ? "1 h" : (L.every ?? 2) + " h"} plus tard.</p>
+    <p class="pt-note">Le ticket coûte ${COIN}${fmtN(+L.ticket)}, et tout va dans la cagnotte : la Loterie appartient au village. S'il y a plusieurs gagnants, ils se partagent la cagnotte. Les petites pertes du village la nourrissent aussi : une part des bateaux coulés, des caravanes pillées et des charges des lieux. Sans gagnant, elle grossit jusqu'au tirage suivant, ${(L.every ?? 2) === 1 ? "1 h" : (L.every ?? 2) + " h"} plus tard.</p>
   </div></div>`;
 }
 function ltNum(n){
