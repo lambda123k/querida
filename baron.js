@@ -4146,6 +4146,7 @@ const lbDose = () => Math.max(10, Math.round(BX.effRate(S, now()) * 10));
 const lbDoseOf = k => RARE[k] ? 3 : lbDose();                                          // une matière exotique : 3 par case            // par case : ~10 s de ta production
 const lbCost = () => BX.nice(Math.max(1e5, BX.fortune(S, now()) * 0.0001));   // 20× moins cher qu'avant ; les produits ne sont plus brûlés
 const lbCap = () => Math.max(20, Math.round(BX.effRate(S, now()) * 300));             // chaudron : ~5 min de ta production
+const lbNear = k => { const i = k ? lbBook().findIndex(r => r.k === k) : -1; return i >= 0 ? i + 1 : 0; };
 const lbAvail = () => lbBook().filter(r => r.cook && r.ings);
 const lbCount = ings => { const c = {}; (ings || []).forEach(x => c[x] = (c[x] || 0) + 1); return c; };
 const cityAt = c => c === "Le Caire" ? "au Caire" : "à " + esc(c);
@@ -4183,7 +4184,7 @@ function laboHTML(){
   if (LB.res){
     const R = LB.res;
     res = R.none ? `<div class="lb-res2 ${R.pop ? "pop" : ""}">Tu connais déjà toutes les recettes 🎉</div>`
-      : R.good != null ? `<div class="lb-res2 ${R.pop ? "pop" : ""}">Rien ne se passe… Mais une recette inconnue ressemble à ça :<div class="h"><span><b>🟢 ${R.good}</b>bon${R.good > 1 ? "s" : ""} ingrédient${R.good > 1 ? "s" : ""}</span><span><b>🎯 ${R.placed}</b>à la bonne place</span></div><small>On ne te dit pas laquelle, ni quels ingrédients.</small></div>`
+      : R.good != null ? `<div class="lb-res2 ${R.pop ? "pop" : ""}">Rien ne se passe… Mais ${lbNear(R.near) ? `la recette <b>n°${lbNear(R.near)}</b>` : "une recette inconnue"} ressemble à ça :<div class="h"><span><b>🟢 ${R.good}</b>bon${R.good > 1 ? "s" : ""} ingrédient${R.good > 1 ? "s" : ""}</span><span><b>🎯 ${R.placed}</b>à la bonne place</span></div><small>C'est la recette inconnue la plus proche de ton mélange. On ne te dit pas quels ingrédients.</small></div>`
       : `<div class="lb-res2 ${R.pop ? "pop" : ""}">Rien ne se passe…<small>${own ? `Seul le chercheur (${esc(own.name)}) sait si l'on s'approche d'une recette.` : "Personne ne t'aide : tu cherches à l'aveugle."}</small></div>`;
     R.pop = false;
   }
@@ -4204,7 +4205,7 @@ function laboHTML(){
     <button class="b2-btn gold" style="width:100%;margin-top:10px" data-a="cz-game" data-g="cara">🐫 Les vendre en caravane</button>
     ${me ? `<button class="b2-btn" style="width:100%;margin-top:8px" data-a="lb-shop">🏪 Les vendre à ton échoppe, tout de suite</button>` : ""}` : "";
   const jp = +I.jackpot ? `<div class="lb-jp"><span>🏆</span><div><b>Grand prix de la pièce montée : ${COIN}${fmtN(+I.jackpot)}</b><small>Pour qui trouvera la recette légendaire. Chaque mélange raté au village fait grossir la cagnotte.</small></div></div>` : "";
-  const tries = (I.tries || []).map(x => `<div class="lb-try">${lbMini(x.grid)}<span>${x.hit ? `${lbRec(x.hit) ? lbRec(x.hit).e : "✅"}<br>${x.kind === "found" ? "trouvée" : x.kind === "copy" ? "apprise" : "connue"}` : +x.good >= 0 ? `🟢 ${x.good}<br>🎯 ${x.placed}` : "…"}</span></div>`).join("");
+  const tries = (I.tries || []).map(x => `<div class="lb-try">${lbMini(x.grid)}<span>${x.hit ? `${lbRec(x.hit) ? lbRec(x.hit).e : "✅"}<br>${x.kind === "found" ? "trouvée" : x.kind === "copy" ? "apprise" : "connue"}` : +x.good >= 0 ? `${lbNear(x.near) ? `n°${lbNear(x.near)}<br>` : ""}🟢 ${x.good}<br>🎯 ${x.placed}` : "…"}</span></div>`).join("");
   return `${head}
     ${me ? `<div class="cz-bank"><h3>Tu es le chercheur</h3><p>Toi seul as les indices : après chaque mélange raté, 🟢 et 🎯 te disent à quel point une recette inconnue est proche, et chaque carte du livre te donne son indice.</p>
       <p>Chaque recette découverte au village, par toi ou par un autre, te rapporte une prime de ${COIN}${fmtN(+I.prime || 0)}. Tu sais cuisiner toutes les recettes trouvées, même les secrètes, et tu peux les vendre à ton échoppe sans attendre la caravane.</p>
