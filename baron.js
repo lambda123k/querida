@@ -901,15 +901,19 @@ async function save(force){
   }catch(e){ dirty = true; }
   saving = false;
 }
+let wBusy = false, wReq = 0;
 async function loadWorld(force){
   if (!force && now() - W.at < 25000) return;
+  // garde-fou : jamais plus d'un chargement du monde à la fois, ni plus d'un toutes les 4 s (même forcé)
+  if (wBusy || now() - wReq < 4000) return;
+  wBusy = true; wReq = now();
   try{
     const r = await rpc("baron2_world", {});
     BX.setMarket({ press: r.press || {}, med: r.med });
     W = { res: r.reserve || null, players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
     await loadOrders(true); await loadEtb(); loadCasino(); loadPort(); loadLotto(); loadFly(); loadLoans(); loadCad();
     if (wrapEl && (view === "market" || view === "village" || view === "atelier") && !gestOpen && !sheetOpen) draw();
-  }catch(e){}
+  }catch(e){} finally { wBusy = false; }
 }
 const groupProd = () => {
   const p = W.players.map(x => +(x.stats && x.stats.prod) || 0).filter(x => x > 0);
