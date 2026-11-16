@@ -4144,7 +4144,7 @@ const pInfo = k => P[k] ? { e: P[k].e, label: P[k].label } : exoInfo(k);
 const exoUnit = k => { const r = lbRec(k); if (!r || !r.ings) return 0; return 2 * r.ings.reduce((a, x) => a + (P[x] ? BX.vPrice(x, now()) : RARE[x] ? rareVal(x) : 0), 0); };
 const lbDose = () => Math.max(10, Math.round(BX.effRate(S, now()) * 10));
 const lbDoseOf = k => RARE[k] ? 3 : lbDose();                                          // une matière exotique : 3 par case            // par case : ~10 s de ta production
-const lbCost = () => BX.nice(Math.max(1e6, BX.fortune(S, now()) * 0.002));
+const lbCost = () => BX.nice(Math.max(1e5, BX.fortune(S, now()) * 0.0001));   // 20× moins cher qu'avant ; les produits ne sont plus brûlés
 const lbCap = () => Math.max(20, Math.round(BX.effRate(S, now()) * 300));             // chaudron : ~5 min de ta production
 const lbAvail = () => lbBook().filter(r => r.cook && r.ings);
 const lbCount = ings => { const c = {}; (ings || []).forEach(x => c[x] = (c[x] || 0) + 1); return c; };
@@ -4189,7 +4189,7 @@ function laboHTML(){
   }
   const bench = `<div class="lb-table"><div class="lb-grid">${cells}</div></div>${res}
     <div class="b2-two" style="margin-top:12px"><button class="b2-btn ghost" data-a="lb-clear" ${n ? "" : "disabled"}>Vider</button><button class="b2-btn gold" data-a="lb-try" ${ok ? "" : "disabled"}>${LB.busy ? "L'alambic chauffe…" : `⚗️ Mélanger · ${COIN}${fmtN(cost)}`}</button></div>
-    <p class="lb-tip">Touche une case vide pour y poser un produit, une case pleine pour l'enlever. Chaque case brûle ${fmtN(dose)} unités.${miss.length ? ` <b>Il te manque ${miss.map(k => PX(k).e).join(" ")}.</b>` : ""}</p>`;
+    <p class="lb-tip">Touche une case vide pour y poser un produit, une case pleine pour l'enlever. Il faut avoir ${fmtN(dose)} unités par case (3 pour une matière exotique), mais rien n'est consommé : seul le mélange coûte un peu d'argent.${miss.length ? ` <b>Il te manque ${miss.map(k => PX(k).e).join(" ")}.</b>` : ""}</p>`;
   const cards = book.map((r, i) => {
     const seen = r.found || r.known, cls = r.cook ? "ok" : seen ? "fd" : "";
     const tag = r.cook ? (r.by_id === ME.id && !r.patent ? "🔒" : r.copied && !r.patent ? "🤫" : r.patent ? "📜" : "") : seen ? "🔒" : r.what ? "💡" : "";
@@ -4214,7 +4214,7 @@ function laboHTML(){
     <div class="cz-feed"><h3>Le livre des recettes</h3><div class="lb-book">${cards}</div></div>
     <div class="cz-feed"><h3>Le chaudron</h3>${pot}${invHTML}</div>
     ${tries ? `<div class="cz-feed"><h3>Tes derniers mélanges</h3><div class="lb-tries">${tries}</div></div>` : ""}
-    <p class="cz-note">Les essais sont illimités, mais chaque mélange brûle les produits posés et coûte un peu d'argent. Une recette découverte reste secrète tant que son découvreur ne dépose pas de brevet : ensuite tout le monde peut la cuisiner, et il touche 5 % de chaque vente. Qui refait la recette secrète d'un autre l'apprend en secret, sans rien lui payer. Les plats du Laboratoire ne se vendent qu'en caravane.</p>`;
+    <p class="cz-note">Les essais sont illimités : il faut avoir les produits posés, mais ils ne sont pas consommés, et chaque mélange coûte un tout petit peu d'argent. Une recette découverte reste secrète tant que son découvreur ne dépose pas de brevet : ensuite tout le monde peut la cuisiner, et il touche 5 % de chaque vente. Qui refait la recette secrète d'un autre l'apprend en secret, sans rien lui payer. Les plats du Laboratoire ne se vendent qu'en caravane.</p>`;
 }
 function lbCellSheet(i){
   const dose = lbDose(), groups = [["Récoltes", BX.RAW], ["Recettes", BX.CRAFT], ["Sous-produits", BX.SUB], ["Produits de luxe", BX.AGED]];
@@ -4234,7 +4234,7 @@ async function lbTry(){
   if (known){ toast(`${known.e} Tu sais déjà faire ${esc(known.name.toLowerCase())} : cuisine-le au chaudron.`); return; }
   const need = {}; grid.forEach(x => { if (x) need[x] = (need[x] || 0) + lbDoseOf(x); });
   if (Object.keys(need).some(x => haveOf(x) < need[x]) || S.coins < cost){ toast("Il te manque des produits ou des pièces pour ce mélange.", "err"); return; }
-  LB.busy = true; for (const x in need) takeOf(x, need[x]); S.coins -= cost; dirty = true; draw();
+  LB.busy = true; S.coins -= cost; dirty = true; draw();
   try{
     const r = await queue(() => rpc("baron2_labo_try", { p_token: getToken(), p_state: S, p_grid: grid }));
     lastSave = now(); LB.info = r; if (r.credits) applyCredits(r.credits);
@@ -4245,7 +4245,7 @@ async function lbTry(){
     LB.res = Object.assign({ pop: true }, R);
     sound(R.good ? "coin" : "tap"); buzz(15);
   }catch(e){
-    for (const x in need) takeOf(x, -need[x]); S.coins += cost;
+    S.coins += cost;
     const m = String(e && e.message || "");
     toast(m.includes("pas assez") ? "Il te manque des produits pour ce mélange." : errText(e), "err");
     loadLabo();
