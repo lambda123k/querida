@@ -805,7 +805,7 @@ function applyCredits(list){
     if (c.product === "fly_fee" || c.product === "fly_bank"){ portFees.push(Object.assign({}, c, { fl: 1 })); continue; }
     if (c.product === "egg_dup") continue;
     if (c.product === "egg_fee"){ portFees.push(Object.assign({}, c, { eg: 1 })); continue; }
-    if (c.product === "charge"){ toast(`🧾 Charges ${c.buyer === "Casino" ? "du casino" : c.buyer === "Port" ? "du port" : c.buyer === "Loterie" ? "de la loterie" : c.buyer === "Œufs" ? "du Maître des œufs" : c.buyer === "Caravane" ? "de la caravane" : c.buyer === "Laboratoire" ? "de tes brevets" : c.buyer === "Espions" ? "du réseau d'espions" : "de l'aérodrome"} : −${COIN}${fmtN(-c.coins)}, versées au Baron (le Tribut)`); continue; }
+    if (c.product === "charge"){ toast(`🧾 Charges ${c.buyer === "Casino" ? "du casino" : c.buyer === "Port" ? "du port" : c.buyer === "Loterie" ? "de la loterie" : c.buyer === "Œufs" ? "du Maître des œufs" : c.buyer === "Caravane" ? "de la caravane" : c.buyer === "Laboratoire" ? "de tes brevets" : c.buyer === "Espions" ? "du réseau d'espions" : c.buyer === "Destin" ? "du Destin" : "de l'aérodrome"} : −${COIN}${fmtN(-c.coins)}, versées au Baron (le Tribut)`); continue; }
     if (c.product === "cad_sale"){ const [who, lieu] = String(c.buyer).split("|"); toast(`📜 ${esc(who)} a racheté ${lieu === "Port" ? "ton Port" : "ton Aérodrome"} au prix que tu avais fixé : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); loadCad(); loadPort(); loadFly(); continue; }
     if (c.product === "cad_tax"){ toast(`📜 Impôt sur ${c.buyer === "Port" ? "ton Port" : "ton Aérodrome"} : −${COIN}${fmtN(-c.coins)}, versés au Baron`); continue; }
     if (c.product === "notice"){ toast(esc(c.buyer), "gold"); continue; }
@@ -907,7 +907,7 @@ async function loadWorld(force){
     const r = await rpc("baron2_world", {});
     BX.setMarket({ press: r.press || {}, med: r.med });
     W = { res: r.reserve || null, players: r.players || [], listings: r.listings || [], trades: (r.trades || []).map(t => Object.assign({}, t, { ts: new Date(t.at).getTime() })).sort((a, b) => a.ts - b.ts), at: now() };
-    await loadOrders(true); await loadEtb(); loadCasino(); loadPort(); loadLotto(); loadFly(); loadLoans(); loadCad(); loadDestin(); loadLabo(); loadCara(); loadSpy();
+    await loadOrders(true); await loadEtb(); loadCasino(); loadPort(); loadLotto(); loadFly(); loadLoans(); loadCad(); loadDestin(); loadLabo(); loadCara(); loadSpy(); loadChoix();
     if (wrapEl && (view === "market" || view === "village" || view === "atelier") && !gestOpen && !sheetOpen) draw();
   }catch(e){}
 }
@@ -1877,6 +1877,7 @@ function loop(){
     if (n % 40 === 20 || (n % 16 === 6 && view === "casino" && CZ.game === "labo")) loadLabo();
     if (n % 40 === 28 || (n % 16 === 10 && view === "casino" && CZ.game === "cara")) loadCara();
     if (n % 40 === 36 || (n % 16 === 14 && view === "casino" && CZ.game === "spy")) loadSpy();
+    if (n % 40 === 38 || (n % 16 === 2 && view === "casino" && (CZ.game === "choix" || CZ.game === "lobby"))) loadChoix();
     if (n % 4 === 3) lbTick();
     if (n % 40 === 32 && (view === "port" || view === "casino")) loadCad().then(() => { if ((view === "port" || (view === "casino" && CZ.game === "envol" && !FL.f)) && !sheetOpen) draw(); });
     if (view === "casino" && CZ.game === "bureau") lnTick();
@@ -2942,16 +2943,16 @@ function casinoHTML(){
   const chips = czChips(), stake = czStake();
   let body;
   if (!info) body = `<p class="cz-empty">Le croupier arrive…</p>`;
-  else if (me) body = `<div class="cz-bank"><h3>Tu tiens la banque</h3><p>Tant que tu es le Baron, ce que les joueurs perdent est à toi et c'est toi qui paies leurs gains, même si tu passes en négatif. Tu ne peux pas jouer.</p>
+  else if (me) body = `<div class="cz-bank"><h3>Tu tiens la banque</h3><p>${info.tied ? "Tant que tu es le Baron" : "Tant que tu es le croupier"}, ce que les joueurs perdent est à toi et c'est toi qui paies leurs gains, même si tu passes en négatif. Tu ne peux pas jouer.</p>
       <div class="cz-sum"><span>Banque sur 24 h</span><b class="${+info.bank >= 0 ? "up" : "dn"}">${+info.bank >= 0 ? "+" : "−"}${COIN}${fmtN(Math.abs(+info.bank))}</b></div>
-      <button class="b2-btn big ${open ? "red" : "gold"}" data-a="cz-toggle">${open ? "Fermer le casino" : "Ouvrir le casino"}</button>${rgPanel("casino")}<p class="b2-note fl-charge">👑 Tu es le Baron : tu ne paies pas de charges, c'est toi qui touches le Tribut.</p></div>`;
+      <button class="b2-btn big ${open ? "red" : "gold"}" data-a="cz-toggle">${open ? "Fermer le casino" : "Ouvrir le casino"}</button>${rgPanel("casino")}${info.tied || (W.at && ranking()[0] && ranking()[0].id === ME.id) ? `<p class="b2-note fl-charge">👑 Tu es le Baron : tu ne paies pas de charges, c'est toi qui touches le Tribut.</p>` : chargeNote()}</div>`;
   else body = `<div class="cz-play ${open ? "" : "shut"}">
-      ${open ? "" : `<div class="cz-closed">🔒 Le casino est fermé<small>Seul le Baron peut l'ouvrir.</small></div>`}
+      ${open ? "" : `<div class="cz-closed">🔒 Le casino est fermé<small>${info && !info.tied ? (bar ? `Seul le croupier (${esc(bar.name)}) peut l'ouvrir.` : "La Roulette n'a pas de croupier pour l'instant.") : "Seul le Baron peut l'ouvrir."}</small></div>`}
       <div class="cz-chips">${chips.map((v, i) => `<button class="cz-tok t${i} ${CZ.chip === i ? "on" : ""}" data-a="cz-chip" data-i="${i}">${fmtN(v)}</button>`).join("")}<button class="cz-tok all ${CZ.chip === 99 ? "on" : ""}" data-a="cz-chip" data-i="99">Tapis</button></div>
       ${czTable()}
       <div class="cz-acts"><button class="b2-btn ghost" data-a="cz-clear" ${stake ? "" : "disabled"}>Effacer</button><button class="b2-btn ghost" data-a="cz-again" ${CZ.last && !stake ? "" : "disabled"}>Rejouer</button></div>
       <button class="b2-btn big gold cz-go" data-a="cz-spin" ${stake && open && !CZ.spinning ? "" : "disabled"}>${stake ? `Lancer · ${COIN}${fmtN(stake)}` : "Pose tes jetons"}</button></div>`;
-  const back = t => `<div class="cz-top"><button class="b2-btn ghost cz-back" data-a="cz-game" data-g="lobby">‹ La Place</button><span>${t}</span></div>`;
+  const back = t => `<div class="cz-top"><button class="b2-btn ghost cz-back" data-a="cz-game" data-g="lobby">‹ La Place</button><span>${t}</span></div>${chSum(CZ.game)}`;
   if (CZ.game === "lobby") return czLobby();
   if (CZ.game === "lotto") return `<div class="cz cz-lt"><div class="b2-col b2-pad" style="padding-bottom:0">${back("🎟️ La Loterie")}</div>${lottoHTML()}</div>`;
   if (CZ.game === "envol") return `<div class="cz"><div class="b2-col b2-pad">${back("✈️ L'Aérodrome")}${envolHTML()}</div></div>`;
@@ -2959,6 +2960,7 @@ function casinoHTML(){
   if (CZ.game === "destin") return `<div class="cz ds"><div class="b2-col b2-pad">${back("✨ Le Destin")}${destinHTML()}</div></div>`;
   if (CZ.game === "labo") return `<div class="cz lb"><div class="b2-col b2-pad">${back("⚗️ Le Laboratoire")}${laboHTML()}</div></div>`;
   if (CZ.game === "cara") return `<div class="cz cv"><div class="b2-col b2-pad">${back("🐫 La Caravane")}${caravaneHTML()}</div></div>`;
+  if (CZ.game === "choix") return `<div class="cz ch"><div class="b2-col b2-pad">${back(chStatus() === "fait" ? "📜 Les titres" : "🗳️ Le grand choix")}${choixHTML()}</div></div>`;
   if (CZ.game === "spy") return `<div class="cz sp"><div class="b2-col b2-pad">${back("🕵️ Le Réseau d'espions")}${spyHTML()}</div></div>`;
   return `<div class="cz"><div class="b2-col b2-pad">
     ${back("🎡 La Roulette")}
@@ -2976,9 +2978,9 @@ function czLobby(){
   const fh = F && F.hist.length ? F.hist.slice(0, 5).map(h => `<span class="fl-h ${flCol(+h.c)}">${flFmt(+h.c)}</span>`).join("") : "";
   const card = (g, ic, name, line, side, cls) => `<button class="cz-room ${cls}" data-a="cz-game" data-g="${g}"><span class="ic">${ic}</span><span class="sp"><b>${name}</b><small>${line}</small></span>${side}</button>`;
   return `<div class="cz"><div class="b2-col b2-pad">
-    <h2 class="cz-ttl">La Place</h2><p class="cz-lead">Tous les lieux de la ville.</p>
+    <h2 class="cz-ttl">La Place</h2><p class="cz-lead">Tous les lieux de la ville.</p>${chBanner()}
     ${card("bureau", "🤝", "Le Bureau du Baron", LN.info && LN.info.baron ? (lnIamBaron() ? (LN.info.asks.length ? `${LN.info.asks.length} demande${LN.info.asks.length > 1 ? "s" : ""} de prêt` : "Ton tribut et tes prêts") : (LN.info.mine && LN.info.mine.status === "live" ? `Tu dois ${COIN}${fmtN(+LN.info.mine.owed)}` : "Emprunter au Baron")) : "Prêts et tribut", lnIamBaron() && LN.info.asks.length ? `<span class="cz-st on">${LN.info.asks.length}</span>` : `<span class="go">›</span>`, "r")}
-    ${card("roulette", "🎡", "La Roulette", bar ? (czIamBaron() ? "Tu tiens la banque" : "Banque : " + esc(bar.name)) : "Roulette européenne", `<span class="cz-st ${open ? "on" : ""}">${open ? "Ouverte" : "Fermée"}</span>`, "r")}
+    ${card("roulette", "🎡", "La Roulette", bar ? (czIamBaron() ? "Tu tiens la banque" : "Banque : " + esc(bar.name)) : ci && ci.tied === false ? "Pas de croupier" : "Roulette européenne", `<span class="cz-st ${open ? "on" : ""}">${open ? "Ouverte" : "Fermée"}</span>`, "r")}
     ${card("envol", "✈️", "L'Aérodrome", F && F.owner ? `Patron : ${esc(F.owner.id === ME.id ? "toi" : F.owner.name)}${CAD.info && CAD.info.open && CAD.info.fly ? (CAD.info.fly.priced ? ` · 📜 ${COIN}${fmtN(+CAD.info.fly.price)}` : "") : ""}${fh ? `<span class="cz-mini">${fh}</span>` : ""}` : "Encaisse avant le crash", F && F.owner ? `<span class="cz-st ${F.open !== false ? "on" : ""}">${F.open !== false ? "Ouvert" : "Fermé"}</span>` : `<span class="go">›</span>`, "a")}
     ${card("destin", "✨", "Le Destin", (() => { const D = DS.info, o = D && D.owner, n = D && D.asks ? D.asks.length : 0, sky = D ? (D.fx || []).filter(x => now() >= +x.start && now() < +x.end) : [];
       return !D ? "La météo du village" : dsIamDestin() ? (n ? `${n} vœu${n > 1 ? "x" : ""} en attente` : "Tu tiens le ciel") : o ? `${esc(o.name)} tient le ciel${sky.length ? ` · ${sky.map(x => dsW(x.kind).e).join(" ")}` : ""}` : "Bientôt…"; })(),
@@ -3050,7 +3052,7 @@ async function czSpin(){
 async function czToggle(){
   if (!CZ.info) return;
   try{ CZ.info = await rpc("baron2_casino_set", { p_token: getToken(), p_open: !CZ.info.open }); sound("up"); toast(CZ.info.open ? "🎰 Le casino est ouvert : à toi la banque !" : "Le casino est fermé."); }
-  catch(e){ toast(String(e && e.message || "").includes("pas le baron") ? "Tu n'es plus le Baron : la banque est passée à quelqu'un d'autre." : errText(e)); loadCasino(); }
+  catch(e){ toast(String(e && e.message || "").includes("pas le") ? "Tu ne tiens plus la Roulette : la banque est passée à quelqu'un d'autre." : errText(e)); loadCasino(); }
   draw();
 }
 function casinoCard(){
@@ -3182,7 +3184,7 @@ function portHTML(){
   const log = info.log.length ? info.log.map(s => `<div class="pt-row"><span class="pt-ic">${s.storm ? "🌊" : "⚓"}</span><span class="sp">${esc(s.pid === ME.id ? "Toi" : s.name)} · ${fmtN(s.qty)} ${P[s.product] ? P[s.product].e : ""}<small>${fmtAgo(new Date(s.at).getTime())}</small></span><b class="${s.storm && !s.ins ? "dn" : "up"}">${s.storm ? (s.ins ? "Coulé · remboursé 🛡️" : "Coulé") : "+" + COIN + fmtN(s.value)}</b></div>`).join("") : `<p class="cz-empty">Aucun bateau n'est encore rentré.</p>`;
   return `<div class="pt"><div class="b2-col b2-pad">
     <div class="cz-hd"><span class="cz-st ${open ? "on" : ""}">${open ? "Ouvert" : "Fermé"}</span></div>
-    <h2 class="pt-ttl">Le Port</h2><div class="pt-cap">⚓ ${cap}</div>${wxBanner(["tempete", "mer"])}
+    <h2 class="pt-ttl">Le Port</h2><div class="pt-cap">⚓ ${cap}</div>${chSum("port")}${wxBanner(["tempete", "mer"])}
     ${info.prev && own && info.prev.id !== own.id && now() - new Date(info.since).getTime() < 864e5 ? `<div class="pt-news">Le port est passé de <b>${esc(info.prev.id === ME.id ? "toi" : info.prev.name)}</b> à <b>${esc(mine ? "toi" : own.name)}</b> ${fmtAgo(new Date(info.since).getTime())}.</div>` : ""}
     <div class="pt-sw">${ptScene()}</div>${stats}
     ${send}
@@ -4268,6 +4270,12 @@ function lcCredit(c, acc){
     case "cara_sale": S.stats.earned += +c.coins || 0; acc.sale.push({ coins: +c.coins || 0, k: sp[0], city: sp[1], ev: sp[2] }); return true;
     case "cara_fee": acc.fee.push(+c.coins || 0); return true;
     case "labo_roy": acc.roy.push(+c.coins || 0); return true;
+    case "choix_go": toast("🗳️ Le grand choix des lieux commence ! Va sur La Place classer les lieux que tu veux.", "gold"); sound("up"); loadChoix(); loadCasino(); loadPort(); loadFly(); return true;
+    case "choix_fait": { const L = LIEUX[sp[0]]; toast(L ? `🎉 Tirage au sort : tu obtiens ${L.e} ${L.name} !` : "🗳️ Le tirage des lieux a eu lieu.", "gold"); sound("up"); buzz([40, 30, 40, 30, 120]); loadChoix(); loadCasino(); loadPort(); loadFly(); loadDestin(); loadLabo(); loadCara(); loadSpy(); return true; }
+    case "lieu_sale": { const L = LIEUX[sp[0]] || { e:"📜", name:"Ton lieu" }; toast(`📜 ${esc(sp[1] || "Quelqu'un")} a racheté ${L.e} ${L.name} : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); loadChoix(); return true; }
+    case "lieu_swap_ask": { const A = LIEUX[sp[0]], B = LIEUX[sp[1]]; if (A && B) toast(`🤝 ${esc(sp[2] || "")} te propose ${A.e} ${A.name} contre ton ${B.e} ${B.name}. Réponds sur La Place.`, "gold"); loadChoix(); return true; }
+    case "lieu_swap_ok": { const B = LIEUX[sp[1]]; if (B) toast(`🤝 ${esc(sp[2] || "")} a accepté : ${B.e} ${B.name} est à toi !`, "gold"); sound("up"); loadChoix(); loadCasino(); loadPort(); loadFly(); loadDestin(); loadLabo(); loadCara(); loadSpy(); return true; }
+    case "lieu_swap_no": toast(`🤝 ${esc(sp[2] || "")} a refusé ton échange.`); loadChoix(); return true;
     case "spy_fee": { const k = SP_K[sp[0]] || { e:"🕵️", label:"un dossier" }; toast(`🕵️ ${esc(sp[1] || "Quelqu'un")} t'achète un dossier ${k.e} ${esc(k.label)} : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); if (view === "casino" && CZ.game === "spy") loadSpy(); return true; }
     case "cara_lost": { const ev = CV_EV[sp[2]] || { e:"⚠️", label:"Coup dur" }; toast(`${ev.e} ${ev.label} ${cityAt(sp[1])} : ta caravane perd ${fmtN(c.qty)} ${pInfo(sp[0]).e}`, "err"); buzz([60, 40, 60]); return true; }
     case "cara_insured": S.stats.earned += +c.coins || 0; toast(`🛡️ L'assurance de la caravane te rembourse : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); return true;
@@ -4439,6 +4447,166 @@ const SP_STYLE = `
 .b2-wrap .sp-copy{padding:6px 12px!important;font-size:12px!important}
 `;
 try{ const sps = document.createElement("style"); sps.id = "sp-style"; sps.textContent = SP_STYLE; document.head.appendChild(sps); }catch(e){}
+/* =================== Le grand choix des lieux (17 nov. 2026, 9 h) et les titres de propriété ===================
+   À 9 h, les 7 lieux sont repris à leurs patrons. Chacun classe les 7 lieux ; dès que tout le monde a voté, tirage
+   tour par tour (à plusieurs sur le même lieu : au sort ; les perdants passent à leur vœu suivant).
+   Ensuite, chaque patron peut vendre son lieu au prix qu'il veut, ou proposer un échange lieu contre lieu. */
+const GC = { info:null, at:0, busy:false, rank:null };
+const LIEUX = {
+  casino: { e:"🎡", name:"La Roulette", g:"roulette", sum:"Tu tiens la banque de la roulette : ce que les joueurs perdent est à toi, et c'est toi qui paies leurs gains (même si tu passes en négatif). Tu l'ouvres et la fermes, tu fixes la mise max et la règle du zéro. Tu ne peux pas jouer." },
+  port:   { e:"⚓", name:"Le Port", g:"port", sum:"Les joueurs envoient leurs récoltes à l'étranger par bateau. Tu prends ta part sur chaque cargaison, tu choisis la route et tu proposes une assurance (si un bateau assuré coule, c'est toi qui rembourses). Tu ouvres et fermes le port." },
+  fly:    { e:"✈️", name:"L'Aérodrome", g:"envol", sum:"Le jeu de l'avion : le multiplicateur monte, il faut encaisser avant le crash. Tu es la banque : les mises perdues sont à toi, tu paies les gains. Tu choisis l'avion, ta part et la mise max, tu ouvres et tu fermes." },
+  destin: { e:"✨", name:"Le Destin", g:"destin", sum:"Tu tiens le ciel du village. Les joueurs te paient des vœux (gel sur un joueur, rayon de soleil, pluie, tempête au Port…) : tu les exauces ou tu les refuses. Tu gardes 70 % du prix. 10 vœux par jour, et tu subis ton propre ciel." },
+  labo:   { e:"⚗️", name:"Le Laboratoire", g:"labo", sum:"Tout le monde peut chercher les 38 recettes cachées, mais toi seul as les indices (à quel point on s'approche, l'indice de chaque carte). Une recette trouvée est secrète ; avec un brevet, son découvreur touche 5 % de chaque vente." },
+  cara:   { e:"🐫", name:"La Caravane", g:"cara", sum:"Tu emmènes les produits transformés des joueurs (recettes, luxe, plats du Laboratoire) sur de longs voyages. Tu choisis la route, ta commission et l'assurance, et tu donnes le départ. En chemin : pillage, tempête de sable, douane." },
+  spy:    { e:"🕵️", name:"Le Réseau d'espions", g:"spy", sum:"Tu vends des dossiers sur les joueurs (argent exact, grange, paris, caravane, bateaux, Laboratoire) au prix que tu fixes, et tu vois les commandes du village 20 min avant tout le monde. 10 dossiers gratuits par jour. La victime ne sait jamais rien." }
+};
+const LIEU_ORDER = ["casino", "port", "fly", "destin", "labo", "cara", "spy"];
+const LIEU_G = { roulette:"casino", envol:"fly", destin:"destin", labo:"labo", cara:"cara", spy:"spy", port:"port" };
+const chStatus = () => GC.info ? GC.info.status : null;
+const chLieu = p => GC.info && (GC.info.lieux || []).find(l => l.place === p) || null;
+const chMine = () => GC.info ? (GC.info.lieux || []).filter(l => l.owner && l.owner.id === ME.id).map(l => l.place) : [];
+// « 500B », « 2,5T », « 1 200 000 » → nombre
+function parseAmt(s){
+  const m = String(s || "").trim().replace(/\s/g, "").replace(",", ".").match(/^([0-9]*\.?[0-9]+)([kmbtq]?)$/i);
+  if (!m) return NaN;
+  const mul = { "":1, k:1e3, m:1e6, b:1e9, t:1e12, q:1e15 }[m[2].toLowerCase()];
+  return Math.floor(+m[1] * mul);
+}
+async function loadChoix(){
+  try{
+    const r = await rpc("baron2_choix_get", { p_token: getToken() }); GC.info = r; GC.at = now();
+    if (GC.rank === null && Array.isArray(r.mine)) GC.rank = r.mine.slice();
+    if (view === "casino" && (CZ.game === "choix" || CZ.game === "lobby") && !sheetOpen && !CZ.spinning && !FL.f && !GC.busy) draw();
+  }catch(e){}
+}
+// le bandeau en haut de La Place
+function chBanner(){
+  const I = GC.info; if (!I) return "";
+  const st = I.status, n = (I.players || []).filter(p => p.voted).length, tot = (I.players || []).length;
+  if (st === "avant"){ const t = new Date(I.opens_at).getTime();
+    return `<button class="ch-ban" data-a="cz-game" data-g="choix"><span class="ic">🗳️</span><span class="sp"><b>Le grand choix des lieux</b><small>Dans <i data-sp-end="${t}">${fmtT(t - now())}</i>, tous les lieux sont remis en jeu. Découvre-les dès maintenant.</small></span><span class="go">›</span></button>`; }
+  if (st === "voeux"){ const me = (I.players || []).find(p => p.id === ME.id);
+    return `<button class="ch-ban hot" data-a="cz-game" data-g="choix"><span class="ic">🗳️</span><span class="sp"><b>Le grand choix des lieux</b><small>${me && me.voted ? `Tes vœux sont envoyés · ${n}/${tot} ont voté` : `Classe les lieux que tu veux ! ${n}/${tot} ont voté`}</small></span><span class="go">›</span></button>`; }
+  const mine = chMine(), inc = (I.swaps || []).filter(s => s.to_id === ME.id).length;
+  return `<button class="ch-ban done" data-a="cz-game" data-g="choix"><span class="ic">📜</span><span class="sp"><b>Les titres de propriété</b><small>${mine.length ? `Tu tiens ${mine.map(p => LIEUX[p].name.replace(/^L[ea]s? |^L'/, m => m.toLowerCase())).join(", ")}` : "Tu n'as pas de lieu"} · vendre, acheter, échanger</small></span>${inc ? `<span class="cz-st on">${inc}</span>` : `<span class="go">›</span>`}</button>`;
+}
+// le résumé en haut de chaque lieu
+function chSum(g){
+  const p = LIEU_G[g]; if (!p || !LIEUX[p]) return "";
+  const l = chLieu(p), st = chStatus();
+  const who = st === "voeux" ? "En jeu : le grand choix est en cours" : l && l.owner ? `Patron : ${esc(l.owner.id === ME.id ? "toi" : l.owner.name)}${l.sale ? ` · 📜 à vendre ${COIN}${fmtN(+l.sale.price)}` : ""}` : "";
+  return `<details class="ch-sum"><summary>En bref${who ? ` · ${who}` : ""}</summary><p>${esc(LIEUX[p].sum)}</p><p class="b2-note">Chaque matin à 8 h, le patron paie 20 % de ce que son lieu a rapporté en 24 h (le Tribut, pour le Baron).</p>
+    ${st === "fait" ? `<button class="b2-btn ghost" data-a="cz-game" data-g="choix">📜 Les titres de propriété</button>` : ""}</details>`;
+}
+function choixHTML(){
+  const I = GC.info;
+  if (!I) return `<p class="cz-empty">On prépare les titres…</p>`;
+  const st = I.status, pl = I.players || [], n = pl.filter(p => p.voted).length;
+  const card = (p, extra, cls) => `<div class="ch-l ${cls || ""}"><span class="ic">${LIEUX[p].e}</span><span class="sp"><b>${LIEUX[p].name}</b><small>${esc(LIEUX[p].sum)}</small>${extra || ""}</span></div>`;
+  if (st === "avant"){
+    const t = new Date(I.opens_at).getTime();
+    return `<div class="ds-hd"><div class="lb-flask">🗳️</div><p>Dans <b data-sp-end="${t}">${fmtT(t - now())}</b>, demain à 9 h, les 7 lieux de la ville sont repris à leurs patrons et remis en jeu.</p></div>
+      <div class="cz-bank"><h3>Comment ça marche</h3><p>1. À 9 h, chacun classe les 7 lieux, du préféré au moins voulu.<br>2. Pas de limite de temps : le tirage se fait dès que tout le monde a voté.<br>3. Chacun reçoit son premier vœu. Si plusieurs veulent le même lieu, tirage au sort ; les perdants passent à leur vœu suivant.<br>4. Ensuite, tu peux revendre ton lieu au prix que tu veux, ou l'échanger avec quelqu'un.</p></div>
+      <div class="cz-feed"><h3>Les 7 lieux</h3>${LIEU_ORDER.map(p => card(p)).join("")}</div>
+      <p class="cz-note">La Roulette n'est plus réservée au Baron : elle aura son patron comme les autres lieux. Le Baron garde le Tribut du matin et son Bureau (les prêts).</p>`;
+  }
+  if (st === "voeux"){
+    const R = GC.rank || [], sent = I.mine && I.mine.length === 7 && R.length === 7 && R.every((p, i) => I.mine[i] === p);
+    const voters = pl.map(p => `<span class="ch-v ${p.voted ? "ok" : ""}">${p.voted ? "✓" : "…"} ${esc(p.id === ME.id ? "Toi" : p.name)}</span>`).join("");
+    return `<div class="ds-hd"><div class="lb-flask">🗳️</div><p>Touche les lieux <b>dans l'ordre de tes envies</b> : le 1er est celui que tu veux le plus.</p>
+        <div class="ds-cnt"><span>${n} / ${pl.length}</span>ont voté · tirage dès que tout le monde a voté</div></div>
+      <div class="ch-voters">${voters}</div>
+      <div class="cz-feed"><h3>Tes vœux${R.length ? ` (${R.length}/7)` : ""}</h3>
+        ${LIEU_ORDER.map(p => { const i = R.indexOf(p); return `<button class="ch-l pick ${i >= 0 ? "on" : ""}" data-a="ch-rank" data-p="${p}"><span class="num">${i >= 0 ? i + 1 : ""}</span><span class="ic">${LIEUX[p].e}</span><span class="sp"><b>${LIEUX[p].name}</b><small>${esc(LIEUX[p].sum)}</small></span></button>`; }).join("")}</div>
+      <div class="b2-two" style="margin-top:12px"><button class="b2-btn ghost" data-a="ch-reset" ${R.length ? "" : "disabled"}>Recommencer</button>
+        <button class="b2-btn gold" data-a="ch-send" ${R.length === 7 && !sent && !GC.busy ? "" : "disabled"}>${sent ? "✓ Vœux envoyés" : R.length === 7 ? "Envoyer mes vœux" : `Encore ${7 - R.length} à classer`}</button></div>
+      <p class="lb-tip">Tu peux changer tes vœux tant que le tirage n'a pas eu lieu.</p>
+      ${I.admin ? `<button class="b2-btn ghost big" style="margin-top:14px" data-a="ch-force">Lancer le tirage sans attendre (${pl.length - n} n'ont pas voté)</button><p class="lb-tip">Ceux qui n'ont pas voté prendront les lieux qui restent, au hasard.</p>` : ""}`;
+  }
+  // après le tirage : les titres
+  const res = (I.result || []).slice().sort((a, b) => +a.round - +b.round);
+  const draw = res.length ? `<div class="cz-feed"><h3>Le tirage</h3>${res.map(r => `<div class="cz-row"><span class="ds-ic">${LIEUX[r.place] ? LIEUX[r.place].e : "📜"}</span><span class="sp">${esc(r.id === ME.id ? "Toi" : r.name)} · ${LIEUX[r.place] ? LIEUX[r.place].name : r.place}<small>${r.voted === false ? "N'avait pas voté : un lieu qui restait" : `${+r.round === 1 ? "1er vœu" : `${r.round}e vœu`}${r.others && r.others.length ? ` · tiré au sort contre ${r.others.map(esc).join(", ")}` : ""}`}</small></span></div>`).join("")}</div>` : "";
+  const mine = chMine(), inc = (I.swaps || []).filter(s => s.to_id === ME.id), out = (I.swaps || []).filter(s => s.from_id === ME.id);
+  const swapsHTML = inc.length || out.length ? `<div class="cz-bank"><h3>Les échanges proposés</h3>
+      ${inc.map(s => `<div class="ch-sw"><p><b>${esc(s.from_name)}</b> te propose ${LIEUX[s.from_place].e} ${LIEUX[s.from_place].name} contre ton ${LIEUX[s.to_place].e} ${LIEUX[s.to_place].name}.</p><div class="b2-two"><button class="b2-btn ghost" data-a="ch-swap-no" data-id="${s.id}" ${GC.busy ? "disabled" : ""}>Refuser</button><button class="b2-btn gold" data-a="ch-swap-ok" data-id="${s.id}" ${GC.busy ? "disabled" : ""}>Accepter</button></div></div>`).join("")}
+      ${out.map(s => `<div class="ch-sw"><p>Tu proposes ${LIEUX[s.from_place].e} ${LIEUX[s.from_place].name} à <b>${esc(s.to_name)}</b> contre ${LIEUX[s.to_place].e} ${LIEUX[s.to_place].name}. En attente…</p><button class="b2-btn ghost" data-a="ch-swap-no" data-id="${s.id}" ${GC.busy ? "disabled" : ""}>Annuler</button></div>`).join("")}</div>` : "";
+  const rows = (I.lieux || []).map(l => { const L = LIEUX[l.place], own = l.owner, me = own && own.id === ME.id;
+    let act = "";
+    if (me) act = `<div class="ch-act"><button class="b2-btn gold" data-a="ch-sell" data-p="${l.place}">${l.sale ? "Changer le prix" : "Mettre en vente"}</button>${l.sale ? `<button class="b2-btn ghost" data-a="ch-unsell" data-p="${l.place}">Retirer</button>` : ""}<button class="b2-btn ghost" data-a="ch-swap" data-p="${l.place}">Échanger</button></div>`;
+    else if (l.sale) act = `<div class="ch-act"><button class="b2-btn gold" data-a="ch-buy" data-p="${l.place}" ${S.coins >= +l.sale.price && !GC.busy ? "" : "disabled"}>Acheter · ${COIN}${fmtN(+l.sale.price)}</button></div>`;
+    return `<div class="ch-l ${me ? "mine" : ""}"><span class="ic">${L.e}</span><span class="sp"><b>${L.name}</b><small>${own ? `Patron : ${esc(me ? "toi" : own.name)}` : "Sans patron"}${l.sale ? ` · 📜 à vendre ${COIN}${fmtN(+l.sale.price)}` : ""}</small>${act}</span></div>`; }).join("");
+  return `<div class="ds-hd"><div class="lb-flask">📜</div><p>${mine.length ? `Tu tiens <b>${mine.map(p => LIEUX[p].name).join(", ")}</b>.` : "Tu n'as pas de lieu pour l'instant : rachète-en un !"}</p></div>
+    ${swapsHTML}<div class="cz-feed"><h3>Les titres de propriété</h3>${rows}</div>${draw}
+    <p class="cz-note">Un patron peut mettre son lieu en vente au prix qu'il veut : le premier qui paie le récupère, et l'argent va au vendeur. Il peut aussi proposer d'échanger son lieu contre celui d'un autre, qui accepte ou refuse.</p>`;
+}
+function chRankTap(p){
+  GC.rank = GC.rank || [];
+  const i = GC.rank.indexOf(p);
+  if (i >= 0) GC.rank.splice(i, 1); else GC.rank.push(p);
+  sound("tap"); draw();
+}
+async function chCall(fn, args, ok){
+  if (GC.busy) return null;
+  GC.busy = true; draw();
+  let r = null;
+  try{ r = await queue(() => rpc(fn, Object.assign({ p_token: getToken() }, args))); GC.info = r; if (r.credits) applyCredits(r.credits); if (ok) ok(r); }
+  catch(e){
+    const m = String(e && e.message || "");
+    toast(m.includes("prix changé") ? "Le prix vient de changer." : m.includes("pas à vendre") ? "Ce lieu n'est plus à vendre." : m.includes("expirée") ? "Cette proposition n'est plus valable." : m.includes("choix fermé") ? "Le tirage a déjà eu lieu." : m.includes("déjà proposé") ? "Tu as déjà fait cette proposition." : errText(e), "err");
+    loadChoix();
+  }
+  GC.busy = false; draw(); return r;
+}
+function chSellSheet(p){
+  const l = chLieu(p); sheetCtx = null;
+  const avg = (W.players || []).reduce((a, x) => a + (+x.stats?.fortune || 0), 0) / Math.max(1, (W.players || []).length);
+  const sug = [0.05, 0.1, 0.25, 0.5].map(f => BX.nice(Math.max(1e6, avg * f)));
+  sheet(`<div class="ds-big">${LIEUX[p].e}</div><h3 style="text-align:center">Vendre ${LIEUX[p].name.replace(/^L[ea] |^L'/, m => m.toLowerCase())}</h3>
+    <p style="text-align:center">Fixe le prix que tu veux. Le premier joueur qui paie récupère le lieu, et l'argent est pour toi.</p>
+    <input class="ch-in" data-ch-price inputmode="decimal" placeholder="ex : 500B, 2T" value="${l && l.sale ? fmtN(+l.sale.price).replace(/\s/g, "") : ""}">
+    <div class="b2-quick">${sug.map(v => `<button data-a="ch-sug" data-v="${v}">${fmtN(v)}</button>`).join("")}</div>
+    <p class="b2-note" data-ch-hint style="text-align:center">Écris un nombre, avec K, M, B ou T si tu veux.</p>
+    <button class="b2-btn gold big" data-a="ch-sell-go" data-p="${p}">📜 Mettre en vente</button>`);
+}
+function chSwapSheet(p){
+  const others = (GC.info.lieux || []).filter(l => l.owner && l.owner.id !== ME.id);
+  sheetCtx = null;
+  sheet(`<div class="ds-big">🤝</div><h3 style="text-align:center">Échanger ${LIEUX[p].e} ${LIEUX[p].name}</h3><p style="text-align:center">Contre quel lieu ? Son patron recevra ta proposition et pourra accepter ou refuser.</p>
+    ${others.length ? others.map(l => `<button class="ds-w" data-a="ch-swap-go" data-p="${p}" data-q="${l.place}"><span class="ds-ic">${LIEUX[l.place].e}</span><span class="sp"><b>${LIEUX[l.place].name}</b><small>Patron : ${esc(l.owner.name)}</small></span><span class="go">›</span></button>`).join("") : `<p class="cz-empty">Aucun autre lieu n'a de patron.</p>`}`);
+}
+async function chBuy(p){
+  const l = chLieu(p); if (!l || !l.sale || GC.busy) return;
+  const pr = +l.sale.price;
+  if (S.coins < pr){ toast("Pas assez de pièces."); return; }
+  S.coins -= pr; dirty = true;
+  const r = await chCall("baron2_lieu_buy", { p_state: S, p_place: p, p_price: pr }, () => { lastSave = now(); sound("up"); buzz([40, 30, 40]); toast(`📜 ${LIEUX[p].name} est à toi !`, "gold"); });
+  if (!r) S.coins += pr;
+  else { loadCasino(); loadPort(); loadFly(); loadDestin(); loadLabo(); loadCara(); loadSpy(); }
+}
+const GC_STYLE = `
+.cz.ch{background:radial-gradient(120% 70% at 50% 0,#7A5A1E,#3E2A10 55%,#1E1408)}
+.cz.ch{overflow-x:hidden}.b2-wrap .cz.ch .b2-btn{white-space:normal;line-height:1.25}.b2-wrap button.ch-l{min-width:0;max-width:100%;box-sizing:border-box}.ch-l small{overflow-wrap:anywhere}
+.b2-wrap .ch-ban{width:100%;display:flex;align-items:center;gap:12px;text-align:left;padding:14px;border-radius:18px;margin:0 0 14px;background:linear-gradient(135deg,#F2C14E,#B9821A)!important;color:#3B1F17!important;border:2px solid #FFE6A8!important;box-shadow:0 4px 0 rgba(0,0,0,.25)}
+.ch-ban .ic{font-size:34px}.ch-ban .sp{flex:1;min-width:0}.ch-ban b{display:block;font:400 24px var(--disp)}.ch-ban small{display:block;font:700 13px/1.35 var(--round)}.ch-ban i{font-style:normal}
+.b2-wrap .ch-ban.hot{animation:ch-glow 1.6s ease-in-out infinite}@keyframes ch-glow{50%{box-shadow:0 4px 0 rgba(0,0,0,.25),0 0 22px rgba(255,214,120,.8)}}
+.b2-wrap .ch-ban.done{background:linear-gradient(135deg,#E9D3A8,#B99A62)!important}
+.ch-l{width:100%;display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-top:1px solid rgba(255,255,255,.08);text-align:left;color:inherit}
+.b2-wrap button.ch-l{color:#FFF3DE!important}
+.ch-l .ic{font-size:28px;width:36px;text-align:center;flex:none}.ch-l .sp{flex:1;min-width:0}.ch-l b{display:block;font:800 15px var(--round)}.ch-l small{display:block;font:600 12px/1.4 var(--round);opacity:.78}
+.ch-l .num{flex:none;width:28px;height:28px;border-radius:50%;border:2px dashed rgba(255,255,255,.35);display:flex;align-items:center;justify-content:center;font:900 15px var(--round);margin-top:4px}
+.ch-l.pick.on .num{background:#F2C14E;border:2px solid #FFE6A8;color:#3B1F17}.ch-l.pick.on{background:rgba(242,193,78,.08)}
+.ch-l.mine{background:rgba(242,193,78,.1);border-radius:12px;padding-left:6px}
+.ch-act{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.b2-wrap .ch-act .b2-btn{padding:7px 12px!important;font-size:13px!important}
+.ch-voters{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 4px;justify-content:center}.ch-v{font:800 12px var(--round);padding:4px 10px;border-radius:99px;background:rgba(0,0,0,.25);opacity:.7}.ch-v.ok{background:rgba(127,208,143,.25);opacity:1}
+.ch-sw{padding:8px 0;border-top:1px solid rgba(255,255,255,.12)}.ch-sw p{margin:0 0 8px;font:700 14px/1.4 var(--round)}
+.ch-in{width:100%;box-sizing:border-box;font:800 22px var(--round);text-align:center;padding:12px;border-radius:14px;border:2px solid #D8C49C;background:#FFF;margin:8px 0}
+details.ch-sum{background:rgba(0,0,0,.22);border-radius:14px;padding:10px 12px;margin:0 0 12px}
+details.ch-sum summary{font:800 13px var(--round);cursor:pointer;list-style:none}details.ch-sum summary::before{content:"ℹ️ "}details.ch-sum summary::-webkit-details-marker{display:none}
+details.ch-sum p{font:600 13px/1.45 var(--round);margin:8px 0 0}details.ch-sum .b2-note{color:inherit;opacity:.75}details.ch-sum .b2-btn{margin-top:8px}
+.b2-port details.ch-sum{background:rgba(255,255,255,.55);color:#3B1F17}
+`;
+try{ const gcs = document.createElement("style"); gcs.id = "gc-style"; gcs.textContent = GC_STYLE; document.head.appendChild(gcs); }catch(e){}
 const LC_STYLE = `
 .cz.lb{background:radial-gradient(120% 70% at 50% 0,#1F7A6B,#0F3F3A 55%,#08221F)}
 .cz.cv{background:radial-gradient(120% 70% at 50% 0,#9A5A2A,#5A3016 55%,#2E170A)}
@@ -5079,7 +5247,7 @@ function rankTick(){
   const cr = wrapEl.querySelector(".b2-crown"); if (cr) cr.classList.toggle("top", r === 1);
   if (lastRank !== null && r < lastRank){
     const passed = pl[r]; sound("done"); buzz([20, 40, 20]);
-    toast(r === 1 ? `${CROWN} Tu es le nouveau Baron ! Tu tiens la banque du casino.` : `Tu passes ${r}e, devant ${esc(passed ? passed.name : "un voisin")} !`, "gold");
+    toast(r === 1 ? (CZ.info && CZ.info.tied === false ? `${CROWN} Tu es le nouveau Baron ! À toi le Tribut du matin et le Bureau.` : `${CROWN} Tu es le nouveau Baron ! Tu tiens la banque du casino.`) : `Tu passes ${r}e, devant ${esc(passed ? passed.name : "un voisin")} !`, "gold");
     if (cr){ cr.classList.remove("b2-pop"); void cr.offsetWidth; cr.classList.add("b2-pop"); }
   }
   lastRank = r;
@@ -5365,7 +5533,7 @@ function onClick(e){
     }
     case "cz-spin": czSpin(); return;
     case "cz-game": if (FL.f) return; CZ.game = b.dataset.g; CZ.res = null; LT.pick = []; sound("tap"); wrapEl.querySelector("#b2-main").scrollTop = 0; draw();
-      if (CZ.game === "envol") loadFly(); if (CZ.game === "lotto") loadLotto(); if (CZ.game === "roulette" || CZ.game === "lobby") loadCasino(); if (CZ.game === "bureau" || CZ.game === "lobby") loadLoans(); if (CZ.game === "destin" || CZ.game === "lobby") loadDestin(); if (CZ.game === "labo" || CZ.game === "lobby") loadLabo(); if (CZ.game === "spy" || CZ.game === "lobby") loadSpy(); if (CZ.game === "cara" || CZ.game === "lobby"){ loadCara(); loadLabo(); } return;
+      if (CZ.game === "envol") loadFly(); if (CZ.game === "lotto") loadLotto(); if (CZ.game === "roulette" || CZ.game === "lobby") loadCasino(); if (CZ.game === "bureau" || CZ.game === "lobby") loadLoans(); if (CZ.game === "destin" || CZ.game === "lobby") loadDestin(); if (CZ.game === "labo" || CZ.game === "lobby") loadLabo(); if (CZ.game === "spy" || CZ.game === "lobby") loadSpy(); loadChoix(); if (CZ.game === "cara" || CZ.game === "lobby"){ loadCara(); loadLabo(); } return;
     case "fl-chip": FL.chip = +b.dataset.i; FL.res = null; sound("tap"); draw(); return;
     case "fl-start": flStart(); return;
     case "fl-cash": flCash(); return;
@@ -5386,6 +5554,21 @@ function onClick(e){
     case "lb-put": if (LB.cell != null && LB.cell >= 0){ LB.grid[LB.cell] = b.dataset.k || null; LB.res = null; } LB.cell = -1; closeSheet(); sound("tap"); draw(); return;
     case "lb-clear": LB.grid = [null, null, null, null, null, null, null, null, null]; LB.res = null; sound("tap"); draw(); return;
     case "lb-try": lbTry(); return;
+    case "ch-rank": chRankTap(b.dataset.p); return;
+    case "ch-reset": GC.rank = []; sound("tap"); draw(); return;
+    case "ch-send": chCall("baron2_choix_vote", { p_ranking: GC.rank }, () => { sound("up"); toast("🗳️ Tes vœux sont envoyés. Le tirage aura lieu dès que tout le monde aura voté.", "gold"); }); return;
+    case "ch-force": if (b.dataset.armed){ chCall("baron2_choix_force", {}, () => sound("up")); } else { b.dataset.armed = "1"; b.textContent = "Sûr ? Touche encore pour lancer le tirage"; } return;
+    case "ch-sell": sound("tap"); chSellSheet(b.dataset.p); return;
+    case "ch-sug": { const i = wrapEl.querySelector("[data-ch-price]"); if (i) i.value = fmtN(+b.dataset.v).replace(/\s/g, ""); return; }
+    case "ch-sell-go": { const i = wrapEl.querySelector("[data-ch-price]"), v = parseAmt(i && i.value);
+      if (!(v >= 1)){ const h = wrapEl.querySelector("[data-ch-hint]"); if (h) h.textContent = "Ce prix n'est pas valable. Exemple : 500B ou 2T."; return; }
+      closeSheet(); chCall("baron2_lieu_sell", { p_place: b.dataset.p, p_price: v }, () => toast(`📜 ${LIEUX[b.dataset.p].name} est en vente à ${COIN}${fmtN(v)}.`, "gold")); return; }
+    case "ch-unsell": chCall("baron2_lieu_sell", { p_place: b.dataset.p, p_price: null }, () => toast("Ton lieu n'est plus en vente.")); return;
+    case "ch-buy": if (b.dataset.armed){ chBuy(b.dataset.p); } else { b.dataset.armed = "1"; b.textContent = "Touche encore pour confirmer"; } return;
+    case "ch-swap": sound("tap"); chSwapSheet(b.dataset.p); return;
+    case "ch-swap-go": closeSheet(); chCall("baron2_lieu_swap", { p_mine: b.dataset.p, p_theirs: b.dataset.q }, () => toast("🤝 Proposition envoyée.", "gold")); return;
+    case "ch-swap-ok": chCall("baron2_lieu_swap_answer", { p_id: +b.dataset.id, p_ok: true }, () => { sound("up"); toast("🤝 Échange fait !", "gold"); loadCasino(); loadPort(); loadFly(); loadDestin(); loadLabo(); loadCara(); loadSpy(); }); return;
+    case "ch-swap-no": chCall("baron2_lieu_swap_answer", { p_id: +b.dataset.id, p_ok: false }); return;
     case "sp-kind": sound("tap"); spKindSheet(b.dataset.k); return;
     case "sp-buy": spBuy(b.dataset.k, b.dataset.t); return;
     case "sp-set": spSet(b.dataset.k, b.dataset.v); return;

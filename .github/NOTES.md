@@ -120,6 +120,18 @@ ne sont volontairement pas écrits ici : les demander à Naim.
     le Casino reste au Baron ; mise en ligne de tout en même temps (fichiers 27, 28, 29 puis baron.js), seulement avec l'accord de Naim.
   · Refusés par Naim : appels d'offres secrets, nouvelles du village en avance, « grosses positions » (déjà visibles), contre-espionnage.
   · `.github/baron-src/` n'est plus à jour : `baron.js` fait foi.
+- LE GRAND CHOIX DES LIEUX (codé le 16 nov. 2026, branche `baron-labo`) — `supabase/baron2_30_grand_choix.sql` :
+  · `baron2_choix` : status avant → voeux (le 17 nov. 2026 à 9 h, Paris, au premier appel : les 7 lieux sont repris) → fait.
+    Les 7 lieux : casino (la Roulette), port, fly, destin, labo, cara, spy. Helpers `_baron2_lieu_owner` / `_baron2_lieu_set`.
+  · Vœux (`baron2_choix_voeux`, les 7 lieux classés), tirage automatique dès que tout le monde a voté, tour par tour, au sort en cas
+    de conflit ; ceux qui n'ont pas voté passent en dernier (lieux restants au hasard). Naïm peut lancer le tirage (`baron2_choix_force`,
+    id admin en dur : 232590e0-…).
+  · La Roulette a son propre patron (`baron2_casino.owner_id`) : `_baron2_croupier()` = le Baron avant le choix, le patron après.
+    Le Baron garde le Tribut et son Bureau (prêts). Les charges (20 %) touchent aussi la Roulette et le Destin (le Baron reste exempté).
+  · Titres : vente au prix libre (`baron2_lieu_sales`, `baron2_lieu_buy`), échange lieu contre lieu (`baron2_lieu_swaps`, accepter/refuser).
+  · Client : bandeau en haut de La Place, page « choix » (vœux / titres / résultat du tirage), « En bref » (résumé) en haut de chaque lieu.
+  · `supabase/baron2_26b_rattrapage_prod.sql` : ce qui avait été changé directement en ligne (cad_open, sucre dans commandes/réserve).
+  · Ordre de mise en ligne : 27, 28, 29, 30 sur Supabase, puis fusion de `baron-labo` dans `main`.
 - Coups de malice (Cartes Chance, Almanach, prête-nom, contrats) : codés sur la branche `baron-malice`, mis de côté par Naim.
 
 ## Tests
