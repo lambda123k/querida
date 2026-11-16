@@ -162,13 +162,14 @@ function tmOf(s, key, now){
 }
 /* ---------- Le ciel du Destin (15 nov. 2026) : effets venus du serveur ---------- */
 const WX = { fx: [], shifts: [], me: null };
-const WX_MUL = { gel:.5, soleil:2, pluie:1.5 };
+const WX_MUL = { gel:.5, soleil:2, pluie:1.5, fleau:0, beni:2 };
 function setWeather(d, me){ WX.fx = (d && d.fx) || []; WX.shifts = (d && d.shifts) || []; WX.me = me || null; }
 const wxOn = (x, t) => t >= +x.start && t < +x.end;
 const wxMine = x => !x.target || x.target === WX.me;
 function wxMul(t){
   if (!t || !WX.fx.length) return 1;
-  let m = 1; for (const x of WX.fx) if (WX_MUL[x.kind] && wxOn(x, t) && wxMine(x)) m *= WX_MUL[x.kind];
+  let m = 1; for (const x of WX.fx) if (WX_MUL[x.kind] != null && wxOn(x, t) && wxMine(x)) m *= WX_MUL[x.kind];
+  for (const x of WX.fx) if (x.kind === "prodige" && x.arg === "recolte" && wxOn(x, t)) m *= 3;
   return m;
 }
 // les effets en cours qui me concernent (gel, soleil, brouillard sur moi ; pluie, tempête, mer d'huile pour tous)
@@ -570,7 +571,17 @@ function bubbleAt(k, t){
 }
 // les liens entre produits (cachés) : qui entraîne qui
 const LINKS = { oeufs:[["lait", 0.35]], lait:[["oeufs", 0.35]], fruits:[["miel", 0.3]], miel:[["fruits", 0.3], ["sucre", -0.25]], sucre:[["miel", -0.25]], ble:[["bois", -0.3]], bois:[["ble", -0.3]] };
-function fundLog(k, t){ return waveLog(k, t) + seasonLog(k, t) + newsLog(k, t) + phareLog(k, t) + LN2 * pressAt(k, t); }
+// le Destin : krach (le cours s'effondre puis se remet) ou miracle (il s'envole 20 min, puis la bulle éclate)
+function godLog(k, t){
+  let x = 0;
+  for (const f of WX.fx){
+    if (f.arg !== k || (f.kind !== "krach" && f.kind !== "miracle") || t < +f.start || t >= +f.end) continue;
+    const d = (t - +f.start) / 60000;
+    x += f.kind === "miracle" ? (d < 20 ? 0.5 * d / 20 : d < 30 ? 0.5 - (d - 20) / 10 : -0.5 * (1 - (d - 30) / 20)) : (d < 5 ? -0.6 * d / 5 : -0.6 * (1 - (d - 5) / 45));
+  }
+  return x;
+}
+function fundLog(k, t){ return waveLog(k, t) + seasonLog(k, t) + newsLog(k, t) + phareLog(k, t) + LN2 * pressAt(k, t) + godLog(k, t); }
 function linkLog(k, t){
   if (P[k].rec){ const ks = Object.keys(P[k].rec); return 0.7 * ks.reduce((a, x) => a + fundLog(x, t), 0) / ks.length; }
   if (P[k].sub) return 0.6 * fundLog(P[k].of, t);
@@ -814,6 +825,12 @@ function applyCredits(list){
     if (c.product === "destin_back"){ toast(+c.qty === 2 ? `✨ Le Destin a refusé ton vœu (${dsW(c.buyer).label}) : +${COIN}${fmtN(c.coins)} remboursés` : +c.qty === 1 ? `✨ Vœu retiré : +${COIN}${fmtN(c.coins)} remboursés` : `✨ Le Destin n'a pas répondu à ton vœu : +${COIN}${fmtN(c.coins)} remboursés`); loadDestin(); continue; }
     if (c.product === "destin_gain"){ const [k, who] = String(c.buyer).split("|"); toast(`✨ Vœu de ${esc(who)} exaucé (${dsW(k).e} ${dsW(k).label}) : +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); continue; }
     if (c.product === "destin_ok"){ const [k, who] = String(c.buyer).split("|"); toast(`✨ Le Destin a exaucé ton vœu : ${dsW(k).e} ${dsW(k).label}${who ? ` sur ${esc(who)}` : ""} !`, "gold"); sound("up"); loadDestin(); continue; }
+    if (c.product === "destin_hit" && +c.qty === 1){ const [k, who, arg] = String(c.buyer).split("|"), w = dsW(k), bad = POW_BAD.includes(k);
+      toast(`⚡ ${esc(who)}, le Destin, ${bad ? "te frappe" : "agit sur toi"} : ${w.e} ${w.label}${k === "titre" && arg ? ` « ${esc(arg)} »` : ""}. ${w.txt}`, bad ? "err" : "gold"); buzz(bad ? [60, 40, 60, 40, 120] : [30, 30, 60]); loadDestin(); continue; }
+    if (c.product === "destin_jug"){ const [sg, who] = String(c.buyer).split("|"); toast(+c.qty === 1 ? `⚖️ Le Jugement du Destin : ${esc(who)} te donne ${COIN}${fmtN(c.coins)} !` : `⚖️ Le Jugement du Destin : tu donnes ${COIN}${fmtN(-c.coins)} à ${esc(who)}.`, +c.qty === 1 ? "gold" : "err"); continue; }
+    if (c.product === "destin_or"){ toast(`🌠 Prodige du Destin : une pluie d'or ! +${COIN}${fmtN(c.coins)}`, "gold"); sound("coin"); continue; }
+    if (c.product === "destin_counter"){ const [k, pr] = String(c.buyer).split("|"); toast(`💬 Le Destin veut ${COIN}${fmtN(+pr || 0)} pour ton vœu ${dsW(k).e}. Va au Destin pour accepter ou refuser.`, "gold"); loadDestin(); continue; }
+    if (c.product === "destin_rev"){ const [k, who] = String(c.buyer).split("|"); toast(`😈 Le Destin a exaucé ton vœu… à l'envers : ${dsW(k).e} ${dsW(k).label}${who ? ` sur ${esc(who)}` : ""} !`, "err"); loadDestin(); continue; }
     if (c.product === "destin_hit"){ const [k, who] = String(c.buyer).split("|"), w = dsW(k); toast(`${w.e} ${esc(who)} a fait un vœu au Destin : ${w.label} sur toi ! ${w.txt}`, k === "soleil" ? "gold" : "err"); buzz([40, 30, 40]); loadDestin(); continue; }
     if (c.product === "gift_farm"){ giftFarm2(); continue; }
     if (c.product === "tribut"){ toast(`👑 Le Tribut du matin : +${COIN}${fmtN(c.coins)} versés par les patrons de la ville`, "gold"); sound("coin"); continue; }
@@ -1980,7 +1997,7 @@ function draw(){
   if (view === "chat"){
     if (main.dataset.v !== "chat"){ main.innerHTML = chatHTML(); main.dataset.v = "chat"; chScroll(true); } else chList();
   } else {
-  const html = view === "farm" ? farmHTML() : view === "barn" ? barnHTML() : view === "atelier" ? atelierHTML() : view === "market" ? marketHTML() : view === "casino" ? casinoHTML() : view === "port" ? portHTML() : view === "lotto" ? lottoHTML() : view === "eggs" ? eggsHTML() : villageHTML();
+  const html = view === "farm" ? farmHTML() : view === "barn" ? barnHTML() : view === "atelier" ? atelierHTML() : view === "market" ? marketHTML() : view === "casino" ? (godExiled() ? exileHTML() : casinoHTML()) : view === "port" ? portHTML() : view === "lotto" ? lottoHTML() : view === "eggs" ? eggsHTML() : villageHTML();
   main.innerHTML = html; main.dataset.v = view; main.scrollTop = keep;
   }
   wrapEl.querySelector("#b2-dock").innerHTML = view === "farm" ? dockHTML() : "";
@@ -2125,7 +2142,7 @@ function farmHTML(){
     </div></div>`;
   } else plots += `<div class="b2-locked"><span class="lock">${LOCK}</span>
     <button class="b2-btn gold" data-a="unlock" data-cc="${nc.coins}" data-cw="${nc.wood}">${price(nc)}</button></div>`;
-  return `<div class="b2-farm"><div class="b2-col">${wxBanner(["gel", "soleil", "pluie"]).replace('class="ds-band"', 'class="ds-band fl"')}
+  return `<div class="b2-farm"><div class="b2-col">${wxBanner(["gel", "soleil", "pluie", "fleau", "beni", "prodige"]).replace('class="ds-band"', 'class="ds-band fl"')}
     <div class="b2-sky">
       <div class="sun"></div><div class="b2-cloud" style="top:92px;width:58px;animation-duration:70s;animation-delay:-20s"></div><div class="b2-cloud" style="top:120px;width:44px;animation-duration:95s;animation-delay:-60s"></div>
       <svg class="b2-hills" viewBox="0 0 400 70" preserveAspectRatio="none" aria-hidden="true"><path d="M0 50 Q60 10 130 38 T260 30 T400 34 V70 H0Z" fill="#A9D47D"/><path d="M0 60 Q90 34 180 54 T400 50 V70 H0Z" fill="#94C66A"/></svg>
@@ -2868,7 +2885,7 @@ function villageHTML(){
     <div class="b2-notes">${notes}</div>
     ${top ? `<div class="b2-baron"><span class="crown">${CROWN}</span><div class="sp"><small>Le Baron du moment</small><b>${esc(top.id === ME.id ? "C'est toi !" : top.name)}</b><span class="f">${top.id === ME.id ? "" : "≈ "}${COIN}${fmtN(top.stats?.fortune || 0)} · ${P[top.specialty]?.e || ""} ${esc(P[top.specialty]?.label || "")}</span></div></div>` : ""}
     <div class="b2-paper b2-rank"><h2 class="b2-h2">Classement<small>Fortune : argent, stock et la moitié de ce que tu as construit.</small></h2>
-      ${players.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}${totTag(p.id)}${p.stats?.pio ? " 🎖️" : ""}<small>${esc(P[p.specialty]?.label || "")}${p.stats?.farms && p.stats.farms.length > 1 ? " + " + p.stats.farms.filter(x => x !== p.specialty).map(x => P[x]?.e).join("") : ""} · ${fmtN(p.stats?.prod || 0, 1)} pièces/s</small></span><span class="f">${p.id === ME.id ? "" : "≈ "}${COIN}${fmtN(p.stats?.fortune || 0)}</span></div>`).join("")}
+      ${players.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}${godTag(p.id)}${totTag(p.id)}${p.stats?.pio ? " 🎖️" : ""}<small>${esc(P[p.specialty]?.label || "")}${p.stats?.farms && p.stats.farms.length > 1 ? " + " + p.stats.farms.filter(x => x !== p.specialty).map(x => P[x]?.e).join("") : ""} · ${fmtN(p.stats?.prod || 0, 1)} pièces/s</small></span><span class="f">${p.id === ME.id ? "" : "≈ "}${COIN}${fmtN(p.stats?.fortune || 0)}</span></div>`).join("")}
     </div>
     <div class="b2-titles">${best("prod", "Gros producteur", "🏭")}${best("traded", "Meilleur trader", "📈")}${best("baked", "Pâtissier", "🧁")}${best("orders", "Ami du village", "📦")}</div>
   </div></div>`;
@@ -3764,7 +3781,7 @@ function dsSky(){
 function dsLog(){
   const L = (DS.info && DS.info.log) || [];
   if (!L.length) return "";
-  return `<div class="cz-feed"><h3>Derniers vœux</h3>${L.map(w => `<div class="cz-row"><span class="ds-ic">${dsW(w.kind).e}</span><span class="sp">${esc(w.from)} · ${dsW(w.kind).label}${w.tname ? ` sur ${esc(w.tname)}` : ""}<small>${fmtAgo(new Date(w.done_at).getTime())}</small></span><b class="${w.status === "done" ? "up" : "dn"}">${w.status === "done" ? "Exaucé" : "Refusé"}</b></div>`).join("")}</div>`;
+  return `<div class="cz-feed"><h3>Derniers vœux</h3>${L.map(w => `<div class="cz-row"><span class="ds-ic">${dsW(w.kind).e}</span><span class="sp">${w.power ? "⚡ " : ""}${esc(w.from)} · ${dsW(w.kind).label}${w.power && w.arg && P[w.arg] ? " " + P[w.arg].e : w.arg === "rev" ? " (à l'envers)" : ""}${w.tname ? ` sur ${esc(w.tname)}` : ""}<small>${fmtAgo(new Date(w.done_at).getTime())}</small></span><b class="${w.status === "done" ? "up" : "dn"}">${w.status === "done" ? "Exaucé" : "Refusé"}</b></div>`).join("")}</div>`;
 }
 function dsPriceOf(k){
   const I = DS.info; if (!I) return 0;
@@ -3786,19 +3803,22 @@ function destinHTML(){
       return `<div class="ds-ask"><div class="ln-who"><b>${esc(a.from)}</b> souhaite ${w.e} <b>${w.label}</b>${a.tname ? ` sur <b>${esc(a.target === ME.id ? "toi" : a.tname)}</b>` : " pour tout le village"}
         <small>${w.txt} · tu gagnes ${COIN}${fmtN(Math.floor(+a.price * .7))}</small></div>
         ${safe ? `<small class="ln-poor">${esc(a.tname)} est protégé encore ${fmtMin(new Date(a.safe).getTime() - t)} : tu ne peux que refuser.</small>` : ""}
-        <div class="ds-yn"><button class="b2-btn gold" data-a="ds-yes" data-id="${a.id}" data-y="1" ${DS.busy || full || safe ? "disabled" : ""}>Exaucer</button><button class="b2-btn ghost" data-a="ds-yes" data-id="${a.id}" data-y="0" ${DS.busy ? "disabled" : ""}>Refuser</button></div></div>`; }).join("")
+        ${a.status === "counter" ? `<small class="ln-poor ct">Tu as proposé ${COIN}${fmtN(+a.counter)} : ${esc(a.from)} réfléchit.</small>` : `<div class="ds-yn four"><button class="b2-btn gold" data-a="ds-rep" data-id="${a.id}" data-m="yes" ${DS.busy || full || safe ? "disabled" : ""}>Exaucer</button><button class="b2-btn" data-a="ds-rep" data-id="${a.id}" data-m="rev" ${DS.busy || full || !REV[a.kind] || +I.foudre < 5 ? "disabled" : ""}>😈 À l'envers <small>⚡5</small></button><button class="b2-btn ghost" data-a="ds-cp" data-id="${a.id}" ${DS.busy ? "disabled" : ""}>Autre prix</button><button class="b2-btn ghost" data-a="ds-rep" data-id="${a.id}" data-m="no" ${DS.busy ? "disabled" : ""}>Refuser</button></div>`}</div>`; }).join("")
       : `<p class="cz-empty">Personne ne fait de vœu pour l'instant.</p>`;
     return `${head}<div class="cz-bank"><h3>Tu es le Destin</h3>
       <div class="cz-sum"><span>Gains sur 24 h</span><b class="up">+${COIN}${fmtN(+I.gains)}</b></div>
-      <p>Les joueurs paient leurs vœux. Tu choisis ceux que tu exauces${full ? ". Tu as exaucé tes 10 vœux du jour : reviens demain." : ", 10 par jour au maximum."}</p></div>
-      <div class="cz-feed"><h3>Vœux en attente</h3>${asks}</div>${sky}${dsLog()}${rule}`;
+      <p>Tu es le dieu du village. Ta Foudre te permet de frapper qui tu veux, quand tu veux. Les joueurs paient leurs vœux : tu les exauces, tu les refuses, tu proposes un autre prix… ou tu les exauces à l'envers${full ? ". Tu as exaucé tes 10 vœux du jour : reviens demain." : " (10 vœux par jour au maximum)."}</p></div>
+      <div class="cz-feed"><h3>Vœux en attente</h3>${asks}</div>${godPanel()}${sky}${dsLog()}${rule}`;
   }
   const m = I.mine;
   let box = "";
   if (m && m.status === "ask") box = `<div class="cz-bank"><h3>Vœu envoyé</h3><p>${dsW(m.kind).e} ${dsW(m.kind).label}${m.tname ? ` sur ${esc(m.tname)}` : ""}, payé ${COIN}${fmtN(+m.price)}. ${own ? esc(own.name) : "Le Destin"} a 1 h pour l'exaucer, sinon tu es remboursé.</p><button class="b2-btn ghost" data-a="ds-cancel" ${DS.busy ? "disabled" : ""}>Retirer mon vœu</button></div>`;
+  else if (m && m.status === "counter") box = `<div class="cz-bank"><h3>💬 Le Destin propose un autre prix</h3><p>Pour ${dsW(m.kind).e} ${dsW(m.kind).label}${m.tname ? ` sur ${esc(m.tname)}` : ""}, tu as payé ${COIN}${fmtN(+m.price)}. Le Destin veut <b>${COIN}${fmtN(+m.counter)}</b>${+m.counter > +m.price ? ` (encore ${COIN}${fmtN(+m.counter - +m.price)} à payer)` : ` (on te rend ${COIN}${fmtN(+m.price - +m.counter)})`}.</p>
+    <div class="ds-yn"><button class="b2-btn gold" data-a="ds-ct" data-y="1" ${DS.busy || +m.counter - +m.price > S.coins ? "disabled" : ""}>Accepter</button><button class="b2-btn ghost" data-a="ds-ct" data-y="0" ${DS.busy ? "disabled" : ""}>Refuser (remboursé)</button></div></div>`;
+  else if (m && m.status === "done" && m.rev) box = `<p class="ln-res dn">😈 Le Destin a exaucé ton vœu… à l'envers : ${dsW(m.kind).e} ${dsW(m.kind).label}.</p>`;
   else if (m && m.status === "done") box = `<p class="ln-res up">✨ Ton dernier vœu a été exaucé.</p>`;
   else if (m && m.status === "refused") box = `<p class="ln-res dn">Le Destin a refusé ton dernier vœu. Tu as été remboursé.</p>`;
-  const pending = m && m.status === "ask", off = !own || pending || full;
+  const pending = m && (m.status === "ask" || m.status === "counter"), off = !own || pending || full;
   const why = !own ? "Le Destin n'a pas encore de maître : les vœux ouvriront bientôt." : full ? "Le Destin a exaucé ses 10 vœux du jour. Reviens demain." : pending ? "Un vœu à la fois." : "";
   const list = keys => keys.map(k => { const w = WISH[k], p = dsPriceOf(k);
     return `<button class="ds-w" data-a="ds-pick" data-k="${k}" ${off ? "disabled" : ""}><span class="ds-ic">${w.e}</span><span class="sp"><b>${w.label}</b><small>${w.txt}</small></span><span class="pr">${w.target ? "dès " : ""}${COIN}${fmtN(p)}</span></button>`; }).join("");
@@ -3861,16 +3881,198 @@ async function dsYes(id, yes){
 }
 function dsTick(){
   if (!wrapEl) return;
+  try{ godTick(); }catch(e){}
   wrapEl.querySelectorAll("[data-ds-end]").forEach(el => { const l = +el.dataset.dsEnd - now(); el.textContent = l > 0 ? fmtT(l) : "fini"; });
   // le ciel a changé (un vœu commence ou se termine) : on redessine l'écran concerné
   const sig = BX.wxActive(now()).map(x => x.id).join(",");
   if (sig !== DS.sig){ DS.sig = sig; if ((view === "farm" || view === "market" || view === "port" || (view === "casino" && CZ.game === "destin")) && !sheetOpen && !gestOpen) draw(); }
 }
+/* =================== Le Destin, dieu du village (16 nov. 2026) ===================
+   La Foudre (+100 par jour, plafond 150, +5 par vœu exaucé) : le Destin la dépense quand il veut, sur qui il veut. */
+const POW = {
+  gel:4, soleil:4, brouillard:4, vent:4, fleau:12, beni:10, main_ok:15, main_ko:15, naufrage:12, ventfav:12, exil:30, titre:5,
+  pluie:6, tempete:6, mer:6, saison:6, fete:20, cara_storm:12, cara_safe:12, krach:25, miracle:25, jugement:40, msg:5, ciel:5, prodige:0
+};
+const POW_T = ["gel", "soleil", "brouillard", "vent", "fleau", "beni", "main_ok", "main_ko", "naufrage", "ventfav", "exil", "titre"];
+const POW_V = ["pluie", "tempete", "mer", "saison", "fete", "cara_storm", "cara_safe", "krach", "miracle", "jugement", "msg", "ciel", "prodige"];
+const POW_BAD = ["gel", "brouillard", "vent", "fleau", "main_ko", "naufrage", "exil"];
+const SKY = { pluie:{ e:"🌧️", label:"Pluie" }, neige:{ e:"❄️", label:"Neige" }, orage:{ e:"⛈️", label:"Orage" }, or:{ e:"✨", label:"Pluie d'or" }, nuit:{ e:"🌑", label:"Nuit noire" } };
+const PRODIGE = { or:{ e:"💰", label:"Pluie d'or", txt:"Chaque joueur reçoit 1 % de la fortune moyenne du village." }, recolte:{ e:"🌾", label:"Récolte divine", txt:"Toutes les fermes produisent ×3 pendant 30 min." } };
+Object.assign(WISH, {
+  fleau:      { e:"🦗", label:"Fléau",               txt:"Sa ferme ne produit plus rien pendant 10 min.", target:true, bad:true },
+  beni:       { e:"🌟", label:"Bénédiction",         txt:"Sa ferme produit 2× plus pendant 15 min.", target:true },
+  main_ok:    { e:"🍀", label:"Main du Destin",      txt:"Tous ses paris en cours gagnent : sa mise est doublée.", target:true },
+  main_ko:    { e:"💀", label:"Main du Destin",      txt:"Tous ses paris en cours sont perdus.", target:true, bad:true },
+  naufrage:   { e:"⚓", label:"Naufrage",            txt:"Tous ses bateaux en mer feront naufrage.", target:true, bad:true },
+  ventfav:    { e:"⛵", label:"Vent favorable",      txt:"Ses bateaux arrivent 2× plus vite, sans tempête.", target:true },
+  exil:       { e:"🚫", label:"Exil",                txt:"Il ne peut plus aller sur La Place pendant 1 h.", target:true, bad:true },
+  titre:      { e:"🏷️", label:"Titre",               txt:"Un surnom affiché au classement pendant 24 h.", target:true },
+  fete:       { e:"🎉", label:"Jour de fête",        txt:"Les primes des commandes sont doublées pendant 20 min." },
+  cara_storm: { e:"⚔️", label:"Pillards",            txt:"La caravane sera pillée à sa prochaine étape." },
+  cara_safe:  { e:"🛡️", label:"Caravane bénie",      txt:"Rien ne peut arriver à la caravane à sa prochaine étape." },
+  krach:      { e:"📉", label:"Krach",               txt:"Le cours d'un produit s'effondre, puis se remet en 45 min." },
+  miracle:    { e:"📈", label:"Miracle",             txt:"Le cours d'un produit s'envole 20 min… puis la bulle éclate." },
+  jugement:   { e:"⚖️", label:"Le Jugement",         txt:"2 % de la fortune du plus riche vont au plus pauvre. Une fois par jour." },
+  msg:        { e:"📜", label:"Message du ciel",     txt:"Ton message s'affiche en grand chez tout le monde." },
+  ciel:       { e:"🌌", label:"Ciel du village",     txt:"Le ciel de tout le monde change pendant 30 min." },
+  prodige:    { e:"🌠", label:"Prodige",             txt:"Un miracle pour tout le village. Une fois par semaine, gratuit." }
+});
+const godFx = () => ((DS.info && DS.info.fx) || []);
+const godOn = (kind, t) => godFx().filter(x => x.kind === kind && t >= +x.start && t < +x.end);
+const godExiled = () => godOn("exil", now()).some(x => x.target === ME.id);
+const godFete = () => godOn("fete", now()).length > 0;
+function godTag(pid){
+  const x = godOn("titre", now()).filter(y => y.target === pid).pop();
+  return x && x.arg ? ` <i class="god-t">« ${esc(x.arg)} »</i>` : "";
+}
+function godPanel(){
+  const I = DS.info, f = +I.foudre || 0, mx = +I.foudre_max || 150;
+  const card = k => { const w = dsW(k), c = POW[k], dis = DS.busy || f < c || (k === "jugement" && !I.jug_ok) || (k === "prodige" && !I.prodige_ok);
+    return `<button class="ds-w god-p" data-a="gp-pick" data-k="${k}" ${dis ? "disabled" : ""}><span class="ds-ic">${w.e}</span><span class="sp"><b>${w.label}${k === "main_ok" ? " · chance" : k === "main_ko" ? " · malheur" : ""}</b><small>${w.txt}</small></span><span class="pr">${k === "prodige" ? (I.prodige_ok ? "gratuit" : "semaine pro.") : k === "jugement" && !I.jug_ok ? "demain" : `⚡${c}`}</span></button>`; };
+  return `<div class="god-gauge"><div class="god-bolt">⚡</div><div class="sp"><b>${f} / ${mx} de Foudre</b><div class="god-bar"><i style="width:${Math.round(100 * f / mx)}%"></i></div><small>+100 par jour, +5 à chaque vœu exaucé</small></div></div>
+    <div class="cz-feed"><h3>⚡ Frapper un joueur</h3>${POW_T.map(card).join("")}</div>
+    <div class="cz-feed"><h3>⚡ Agir sur le village</h3>${POW_V.map(card).join("")}</div>`;
+}
+function gpSheet(k){
+  const w = dsW(k), I = DS.info; if (!I || POW[k] == null) return;
+  sheetCtx = null; DS.pw = DS.pw && DS.pw.k === k ? DS.pw : { k, t:null, a:null };
+  const G = DS.pw, t = now();
+  let body = "";
+  if (POW_T.includes(k)){
+    const bad = POW_BAD.includes(k);
+    body += `<h4 class="lb-gh">Sur qui ?</h4><div class="cv-chips row">${(I.players || []).filter(p => !(bad && p.id === ME.id)).map(p => { const safe = bad && p.psafe && new Date(p.psafe).getTime() > t;
+      return `<button class="cv-chip ${G.t === p.id ? "on" : ""}" data-a="gp-t" data-t="${esc(p.id)}" ${safe ? "disabled" : ""}>${esc(p.id === ME.id ? "Toi" : p.name)}${safe ? ` <small>abrité ${fmtMin(new Date(p.psafe).getTime() - t)}</small>` : ""}</button>`; }).join("")}</div>`;
+  }
+  if (k === "krach" || k === "miracle") body += `<h4 class="lb-gh">Quel produit ?</h4><div class="cv-chips row">${BX.RAW.concat(BX.CRAFT).map(x => `<button class="cv-chip ${G.a === x ? "on" : ""}" data-a="gp-a" data-v="${x}">${P[x].e}</button>`).join("")}</div>`;
+  if (k === "ciel") body += `<h4 class="lb-gh">Quel ciel ?</h4><div class="cv-chips row">${Object.keys(SKY).map(x => `<button class="cv-chip ${G.a === x ? "on" : ""}" data-a="gp-a" data-v="${x}">${SKY[x].e} ${SKY[x].label}</button>`).join("")}</div>`;
+  if (k === "prodige") body += `<h4 class="lb-gh">Quel prodige ?</h4><div class="cv-chips">${Object.keys(PRODIGE).map(x => `<button class="cv-chip ${G.a === x ? "on" : ""}" data-a="gp-a" data-v="${x}">${PRODIGE[x].e} ${PRODIGE[x].label}<small>${PRODIGE[x].txt}</small></button>`).join("")}</div>`;
+  if (k === "msg" || k === "titre") body += `<h4 class="lb-gh">${k === "msg" ? "Ton message" : "Le titre"}</h4><input class="ch-in" id="gp-txt" maxlength="${k === "msg" ? 140 : 24}" style="width:100%" placeholder="${k === "msg" ? "Tremblez, mortels…" : "Le Maudit"}" value="${esc(G.txt || "")}">`;
+  const need = POW_T.includes(k) && !G.t || ["krach", "miracle", "ciel", "prodige"].includes(k) && !G.a;
+  sheet(`<div class="ds-big">${w.e}</div><h3 style="text-align:center">${w.label}</h3><p style="text-align:center">${w.txt}${POW[k] ? ` Coût : ⚡${POW[k]}.` : ""}</p>${body}
+    <button class="b2-btn gold big" style="margin-top:12px" data-a="gp-go" ${need ? "disabled" : ""}>⚡ Frapper</button>`);
+}
+async function gpGo(){
+  const G = DS.pw; if (!G || DS.busy) return;
+  const k = G.k; let arg = G.a;
+  if (k === "msg" || k === "titre"){ arg = String((document.getElementById("gp-txt") || {}).value || "").trim(); if (!arg){ toast("Écris quelque chose.", "err"); return; } }
+  DS.busy = true; closeSheet();
+  try{
+    const r = await rpc("baron2_destin_power", { p_token: getToken(), p_kind: k, p_target: G.t || null, p_arg: arg || null });
+    DS.info = r; BX.setWeather(r, ME.id); DS.pw = null; (r.fx || []).forEach(x => godSeen.add(x.id));
+    sound("up"); buzz([40, 30, 80]); toast(`⚡ ${dsW(k).e} ${dsW(k).label}${G.t ? ` sur ${esc(((r.players || []).find(p => p.id === G.t) || {}).name || "")}` : ""} !`, "gold");
+  }catch(e){
+    const m = String(e && e.message || "");
+    toast(m.includes("foudre") ? "Pas assez de Foudre." : m.includes("protégé") ? "Ce joueur vient d'être frappé : il est à l'abri 30 min." : m.includes("déjà jugé") ? "Un seul Jugement par jour." : m.includes("prodige") ? "Un seul Prodige par semaine." : errText(e), "err");
+    loadDestin();
+  }
+  DS.busy = false; draw();
+}
+// répondre à un vœu : oui, à l'envers, contre-proposition, non
+const REV = { soleil:"gel", gel:"soleil", tempete:"mer", mer:"tempete" };
+async function dsReply(id, mode, price){
+  const a = DS.info && DS.info.asks.find(x => String(x.id) === String(id)); if (!a || DS.busy) return;
+  DS.busy = true; draw();
+  try{
+    const r = await queue(() => rpc("baron2_destin_reply", { p_token: getToken(), p_state: S, p_id: +id, p_mode: mode, p_price: price || null }));
+    DS.info = r; BX.setWeather(r, ME.id); if (r.credits) applyCredits(r.credits);
+    if (mode === "yes" || mode === "rev"){ sound("up"); buzz([30, 30, 60]); }
+    toast(mode === "no" ? `Tu as refusé le vœu de ${esc(a.from)}. Il est remboursé.` : mode === "counter" ? `Contre-proposition envoyée à ${esc(a.from)}.` : mode === "rev" ? `😈 Vœu exaucé… à l'envers : ${dsW(REV[a.kind]).e} ${dsW(REV[a.kind]).label} !` : `✨ Vœu de ${esc(a.from)} exaucé.`, mode === "rev" ? "gold" : "");
+  }catch(e){
+    const m = String(e && e.message || "");
+    toast(m.includes("expiré") ? "Ce vœu n'est plus valable." : m.includes("protégé") ? "Ce joueur est encore protégé." : m.includes("plus de vœux") ? "Tu as déjà exaucé 10 vœux aujourd'hui." : m.includes("foudre") ? "Pas assez de Foudre." : errText(e), "err");
+    loadDestin();
+  }
+  DS.busy = false; draw();
+}
+function dsCounterSheet(id){
+  const a = DS.info && DS.info.asks.find(x => String(x.id) === String(id)); if (!a) return;
+  sheetCtx = null; DS.cid = id;
+  sheet(`<div class="ds-big">💬</div><h3 style="text-align:center">Contre-proposer</h3><p style="text-align:center">${esc(a.from)} propose ${COIN}${fmtN(+a.price)} pour ${dsW(a.kind).e} ${dsW(a.kind).label}. Ton prix ? Il a 1 h pour accepter, sinon il est remboursé.</p>
+    <input class="ch-in" id="ds-cp" inputmode="decimal" style="width:100%" placeholder="ex. ${fmtN(+a.price * 2)}">
+    <button class="b2-btn gold big" style="margin-top:12px" data-a="ds-cp-go">Envoyer</button>`);
+}
+async function dsCounter(yes){
+  const m = DS.info && DS.info.mine; if (!m || m.status !== "counter" || DS.busy) return;
+  const diff = +m.counter - +m.price;
+  if (yes && diff > S.coins){ toast("Pas assez de pièces.", "err"); return; }
+  DS.busy = true; if (yes){ S.coins -= diff; dirty = true; }
+  try{
+    const r = await queue(() => rpc("baron2_destin_counter", { p_token: getToken(), p_state: S, p_yes: !!yes }));
+    DS.info = r; BX.setWeather(r, ME.id); if (r.credits) applyCredits(r.credits);
+    if (yes){ sound("up"); toast("✨ Marché conclu : ton vœu est exaucé.", "gold"); }
+  }catch(e){ if (yes) S.coins += diff; toast(errText(e), "err"); loadDestin(); }
+  DS.busy = false; draw();
+}
+// ce que le ciel fait sur ce téléphone : main du Destin, messages, annonces
+const godSeen = new Set(); let godInit = false, godMsgOpen = false;
+function godTick(){
+  if (!S || !DS.info) return;
+  const t = now(), fx = godFx();
+  if (!godInit){ godInit = true; fx.forEach(x => { if (x.kind !== "msg") godSeen.add(x.id); }); }
+  S.fxDone = S.fxDone || [];
+  for (const x of fx){
+    if ((x.kind === "main_ok" || x.kind === "main_ko") && x.target === ME.id && !S.fxDone.includes(x.id)){
+      S.fxDone = S.fxDone.concat(x.id).slice(-40);
+      const bets = S.bets || [];
+      if (bets.length){
+        const g = x.kind === "main_ok" ? bets.reduce((a, b) => a + 2 * b.m, 0) : 0;
+        S.coins += g; S.stats.betOut = (S.stats.betOut || 0) + g; S.bets = [];
+        toast(x.kind === "main_ok" ? `🍀 La main du Destin : tes paris gagnent, +${COIN}${fmtN(g)} !` : `💀 La main du Destin : tes ${bets.length} paris sont perdus.`, x.kind === "main_ok" ? "gold" : "err");
+      }
+      dirty = true; save(true);
+    }
+    if (godSeen.has(x.id)) continue;
+    godSeen.add(x.id);
+    if (x.kind === "msg" && t < +x.end && !S.fxDone.includes(x.id)){ S.fxDone = S.fxDone.concat(x.id).slice(-40); dirty = true; godMsg(x); }
+    else if (x.power && !x.target && t < +x.end && x.kind !== "ciel"){ const w = dsW(x.kind); toast(`⚡ Le Destin : ${w.e} ${w.label}${x.arg && P[x.arg] ? ` sur ${P[x.arg].e} ${esc(P[x.arg].label.toLowerCase())}` : x.kind === "prodige" && PRODIGE[x.arg] ? ` · ${PRODIGE[x.arg].label}` : ""}. ${w.txt}`, "gold"); }
+  }
+  // le ciel du village
+  const sky = godOn("ciel", t).pop(), cls = sky && SKY[sky.arg] ? "god-sky-" + sky.arg : "";
+  if (wrapEl && wrapEl.dataset.sky !== cls){
+    wrapEl.dataset.sky = cls; let el = wrapEl.querySelector(".god-sky"); if (el) el.remove();
+    if (cls){ el = document.createElement("div"); el.className = "god-sky " + cls; el.innerHTML = Array.from({ length: 40 }, (_, i) => `<i style="left:${(i * 37) % 100}%;animation-delay:${(i * 0.23) % 3}s;animation-duration:${1.2 + (i % 5) * 0.3}s"></i>`).join(""); wrapEl.appendChild(el); }
+  }
+  if (view === "casino" && godExiled() && !sheetOpen && !(wrapEl && wrapEl.querySelector(".god-exil"))) draw();
+}
+function godMsg(x){
+  if (!wrapEl || godMsgOpen) return;
+  godMsgOpen = true; sound("up"); buzz([80, 40, 80, 40, 160]);
+  const el = document.createElement("div"); el.className = "god-msg";
+  el.innerHTML = `<div class="god-msg-in"><div class="god-msg-bolt">⚡</div><small>Message du Destin</small><p>${esc(x.arg || "")}</p><b>— ${esc(x.from)}</b><button class="b2-btn gold">J'ai compris</button></div>`;
+  el.querySelector("button").onclick = () => { el.remove(); godMsgOpen = false; };
+  wrapEl.appendChild(el);
+}
+function exileHTML(){
+  const x = godOn("exil", now()).filter(y => y.target === ME.id).pop();
+  return `<div class="b2-board ds-fog god-exil"><div class="b2-col b2-pad"><div class="ds-big">🚫</div><h2>Tu es exilé de La Place</h2>
+    <p>${x ? esc(x.from) : "Le Destin"} t'a banni de la Roulette, du Port, de l'Aérodrome et des autres lieux. Tu pourras revenir dans <b data-ds-end="${x ? x.end : 0}">${x ? fmtT(+x.end - now()) : ""}</b>.</p></div></div>`;
+}
+const GOD_STYLE = `
+.god-gauge{display:flex;gap:12px;align-items:center;margin:0 0 14px;padding:14px;border-radius:16px;background:linear-gradient(135deg,#2B2370,#120E3A);border:2px solid #8F86FF;color:#EDEBFF}
+.god-bolt{font-size:34px;filter:drop-shadow(0 0 10px #FFE066)}.god-gauge .sp{flex:1}.god-gauge b{font:900 16px var(--round)}.god-gauge small{font:700 11px var(--round);opacity:.75}
+.god-bar{height:12px;border-radius:8px;background:rgba(255,255,255,.12);margin:6px 0 4px;overflow:hidden}.god-bar i{display:block;height:100%;background:linear-gradient(90deg,#FFE066,#FFB703);box-shadow:0 0 10px #FFD60A}
+.god-t{font-style:normal;font:800 11px var(--round);color:#7A4FD6;margin-left:4px}
+.god-msg{position:absolute;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;padding:24px;background:radial-gradient(circle at 50% 40%,rgba(60,50,140,.92),rgba(5,4,20,.97));animation:god-flash .6s ease}
+@keyframes god-flash{0%{background:#fff}20%{background:rgba(255,255,255,.6)}}
+.god-msg-in{text-align:center;color:#F4F1FF;max-width:340px}.god-msg-bolt{font-size:64px;filter:drop-shadow(0 0 20px #FFE066)}.god-msg-in small{display:block;font:800 12px var(--round);letter-spacing:.12em;text-transform:uppercase;opacity:.7;margin:6px 0}
+.god-msg-in p{font:italic 700 24px/1.3 Georgia,serif;margin:8px 0 12px}.god-msg-in b{display:block;margin-bottom:18px;opacity:.8}
+.god-sky{position:absolute;inset:0;pointer-events:none;z-index:60;overflow:hidden}
+.god-sky i{position:absolute;top:-10%;width:2px;height:16px;background:rgba(170,200,255,.7);animation:god-fall linear infinite}
+@keyframes god-fall{to{transform:translateY(120vh)}}
+.god-sky-neige i{width:6px;height:6px;border-radius:50%;background:#fff;opacity:.9}
+.god-sky-or i{width:6px;height:6px;border-radius:50%;background:#FFD60A;box-shadow:0 0 6px #FFD60A}
+.god-sky-orage{background:rgba(20,20,50,.25);animation:god-storm 4s infinite}.god-sky-orage i{background:rgba(150,170,255,.8)}
+@keyframes god-storm{0%,92%,100%{background:rgba(20,20,50,.25)}94%{background:rgba(255,255,255,.55)}96%{background:rgba(20,20,50,.25)}97%{background:rgba(255,255,255,.4)}}
+.god-sky-nuit{background:rgba(5,5,25,.45)}.god-sky-nuit i{display:none}
+.ds-yn.four{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.ds-ask .ln-poor.ct{color:#B07D10}
+`;
+try{ const gs = document.createElement("style"); gs.id = "god-style"; gs.textContent = GOD_STYLE; document.head.appendChild(gs); }catch(e){}
 // un petit bandeau quand le ciel du Destin touche l'écran (ferme, port)
 function wxBanner(kinds){
   const t = now(), on = BX.wxActive(t).filter(x => kinds.includes(x.kind));
   if (!on.length) return "";
-  return `<div class="ds-band">${on.map(x => `<span>${dsW(x.kind).e} <b>${dsW(x.kind).label}</b> · <i data-ds-end="${x.end}">${fmtT(+x.end - t)}</i></span>`).join("")}</div>`;
+  return `<div class="ds-band">${on.filter(x => x.kind !== "prodige" || x.arg === "recolte").map(x => `<span>${dsW(x.kind).e} <b>${x.kind === "prodige" ? "Récolte divine ×3" : dsW(x.kind).label}</b> · <i data-ds-end="${x.end}">${fmtT(+x.end - t)}</i></span>`).join("")}</div>`;
 }
 function fogHTML(){
   const x = BX.wxActive(now()).find(y => y.kind === "brouillard");
@@ -5420,8 +5622,8 @@ async function claimOrder(c){
     if (r && r.won){
       if (!S.wonIds.includes(c.id)){
         S.wonIds = S.wonIds.concat(c.id).slice(-60);
-        const g = +r.bonus || 0; S.coins += g; S.stats.earned += g; S.stats.orders++;
-        toast(`🏆 Premier ! La prime de ${COIN}${fmtN(g)} est pour toi`, "gold"); sound("done"); buzz(30);
+        const g = (+r.bonus || 0) * (godFete() ? 2 : 1); S.coins += g; S.stats.earned += g; S.stats.orders++;
+        toast(`🏆 Premier ! La prime de ${COIN}${fmtN(g)} est pour toi${godFete() ? " (jour de fête : ×2 🎉)" : ""}`, "gold"); sound("done"); buzz(30);
       }
     } else toast(r && r.name ? `Trop tard : ${esc(r.name)} a eu la prime${o ? " (" + fmtN(o.bonus) + ")" : ""}` : "Trop tard : la commande est terminée", "err");
     dirty = true; save(true); await loadOrders(); if (wrapEl && view === "village") draw();
@@ -5458,7 +5660,7 @@ function rankSheet(){
   sheet(`<div class="b2-throne"><span class="c">${CROWN}</span><small>Le Baron du moment</small><b>${esc(top.id === ME.id ? "Toi !" : top.name)}</b>
       <span class="f">${top.id === ME.id ? "" : "≈ "}${COIN}${fmtN(f(top))} ${P[top.specialty]?.e || ""}</span></div>
     ${above ? `<div class="b2-chase">Encore ≈ ${COIN}<b>${fmtN(Math.max(0, gap))}</b> pour dépasser ${esc(above.name)}</div>` : `<div class="b2-chase win">Garde ta couronne !</div>`}
-    <div class="b2-rank">${pl.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}${totTag(p.id)}${p.stats?.pio ? " 🎖️" : ""}</span><span class="f">${p.id === ME.id ? "" : "≈ "}${COIN}${fmtN(f(p))}</span></div>`).join("")}</div>
+    <div class="b2-rank">${pl.map((p, i) => `<div class="b2-rk ${p.id === ME.id ? "me" : ""}"><span class="n">${i === 0 ? CROWN : i + 1}</span><span class="ic">${P[p.specialty]?.e || ""}</span><span class="sp">${esc(p.id === ME.id ? "Toi" : p.name)}${godTag(p.id)}${totTag(p.id)}${p.stats?.pio ? " 🎖️" : ""}</span><span class="f">${p.id === ME.id ? "" : "≈ "}${COIN}${fmtN(f(p))}</span></div>`).join("")}</div>
     <p class="b2-note" style="text-align:center">Fortune = pièces + stock + la moitié de ce que tu as construit. Celles des autres sont arrondies : seul un dossier d'espion donne la vraie.</p>`);
 }
 
@@ -5747,6 +5949,14 @@ function onClick(e){
     case "ds-go": dsGo(b.dataset.k, b.dataset.t); return;
     case "ds-cancel": dsCancel(); return;
     case "ds-yes": dsYes(b.dataset.id, b.dataset.y === "1"); return;
+    case "ds-rep": dsReply(b.dataset.id, b.dataset.m); return;
+    case "ds-cp": sound("tap"); dsCounterSheet(b.dataset.id); return;
+    case "ds-cp-go": { const v = parseAmt((document.getElementById("ds-cp") || {}).value); if (!(v >= 1)){ toast("Indique un prix.", "err"); return; } closeSheet(); dsReply(DS.cid, "counter", v); return; }
+    case "ds-ct": dsCounter(b.dataset.y === "1"); return;
+    case "gp-pick": sound("tap"); DS.pw = null; gpSheet(b.dataset.k); return;
+    case "gp-t": DS.pw.t = b.dataset.t; DS.pw.txt = (document.getElementById("gp-txt") || {}).value; gpSheet(DS.pw.k); return;
+    case "gp-a": DS.pw.a = b.dataset.v; gpSheet(DS.pw.k); return;
+    case "gp-go": gpGo(); return;
     case "lb-page": sound("tap"); lbPage(b.dataset.k); return;
     case "lb-name": lbName(b.dataset.k); return;
     case "lb-found": sound("tap"); lbFoundSheet(lbRec(b.dataset.k), "found"); return;
