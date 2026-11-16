@@ -1873,12 +1873,12 @@ function loop(){
       if (avg > 0 && BX.fortune(S) >= avg){ delete S.catchup; dirty = true; toast("🚀 Tu as rattrapé la moyenne du village : fin du coup de pouce. À toi de jouer !", "gold"); draw(); }
     }
     if (n % 40 === 24) loadLoans();
-    if (n % 40 === 16 || (n % 12 === 4 && view === "casino" && CZ.game === "destin")) loadDestin();
+    if (n % 240 === 16 || (n % 16 === 4 && view === "casino" && CZ.game === "destin")) loadDestin();
     if (n % 4 === 1) dsTick();
-    if (n % 40 === 20 || (n % 16 === 6 && view === "casino" && CZ.game === "labo")) loadLabo();
-    if (n % 40 === 28 || (n % 16 === 10 && view === "casino" && CZ.game === "cara")) loadCara();
-    if (n % 40 === 36 || (n % 16 === 14 && view === "casino" && CZ.game === "spy")) loadSpy();
-    if (n % 40 === 38 || (n % 16 === 2 && view === "casino" && (CZ.game === "choix" || CZ.game === "lobby"))) loadChoix();
+    if (n % 240 === 60 || (n % 40 === 6 && view === "casino" && CZ.game === "labo")) loadLabo();
+    if (n % 240 === 100 || (n % 24 === 10 && view === "casino" && CZ.game === "cara")) loadCara();
+    if (n % 240 === 140 || (n % 40 === 14 && view === "casino" && CZ.game === "spy")) loadSpy();
+    if (n % 240 === 180 || (n % 32 === 2 && view === "casino" && (CZ.game === "choix" || CZ.game === "lobby"))) loadChoix();
     if (n % 4 === 3) lbTick();
     if (n % 40 === 32 && (view === "port" || view === "casino")) loadCad().then(() => { if ((view === "port" || (view === "casino" && CZ.game === "envol" && !FL.f)) && !sheetOpen) draw(); });
     if (view === "casino" && CZ.game === "bureau") lnTick();
