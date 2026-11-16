@@ -143,3 +143,10 @@ ne sont volontairement pas écrits ici : les demander à Naim.
 - Proposer ou prototyper (artefact jouable) avant de mettre en ligne une nouveauté.
 - Ne rien casser côté Romane. Ne jamais partager le lien de Romane dans le groupe des amis.
 - Donner des liens directs et cliquables avec les étapes.
+
+## 16 nov. 2026 (après-midi) : lieux plus désirables (baron2_35, client v56)
+- Espions : paie horaire (0,08 % fortune moy., si joué < 24 h), chantage (3/jour, 1 h pour payer sinon fuite publique), fausse rumeur 1/jour (remplace l'affichage de la nouvelle du créneau suivant, `W.rumors`, `newsShown`), abonnement commandes 24 h (`baron2_spy_subs`).
+- Caravane : étapes 20/40/60 min (voyages 1 h/2 h/4 h), départ auto 1 h ; bonus = commission du voyageur sur ses lots ; comptoir `baron2_cara_rare` (café, vanille / cacao, coco / thé, cannelle selon la route, 3 % des unités chargées, min 10), prix fixé par le voyageur, stocké côté joueur dans `S.rare`. Jamais au marché ni dans les commandes.
+- Labo : prime au chercheur à chaque découverte (0,5 % fortune moy.), il cuisine toutes les recettes trouvées + échoppe (vente immédiate au prix de base), cagnotte de la pièce montée (2 % + chaque raté), recettes exotiques n°39 à 47 (3 matières par case).
+- Sauvegarde : drapeau `v7` (refus des anciens clients qui effaceraient `S.rare`).
+- Charges : + spy_pay, spy_black, cara_rare, labo_prime.
